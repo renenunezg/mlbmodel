@@ -42,5 +42,45 @@ bullpen = Table('bullpen', metadata,
     Column('WHIP', String),
 )
 
+# Define the team_batting_vs_lhp table
+team_batting_vs_lhp = Table('team_batting_vs_lhp', metadata,
+    Column('team', String, primary_key=True),
+    Column('PA', String),
+    Column('BB%', String),
+    Column('K%', String),
+    Column('BB/K', String),
+    Column('SB', String),
+    Column('OBP', String),
+    Column('SLG', String),
+    Column('OPS', String),
+    Column('ISO', String),
+    Column('Spd', String),
+    Column('BABIP', String),
+    Column('wRC', String),
+    Column('wRAA', String),
+    Column('wOBA', String),
+    Column('wRC+', String),
+)
+
+# Define the team_batting_vs_rhp table
+team_batting_vs_rhp = Table('team_batting_vs_rhp', metadata,
+    Column('team', String, primary_key=True),
+    Column('PA', String),
+    Column('BB%', String),
+    Column('K%', String),
+    Column('BB/K', String),
+    Column('SB', String),
+    Column('OBP', String),
+    Column('SLG', String),
+    Column('OPS', String),
+    Column('ISO', String),
+    Column('Spd', String),
+    Column('BABIP', String),
+    Column('wRC', String),
+    Column('wRAA', String),
+    Column('wOBA', String),
+    Column('wRC+', String),
+)
+
 # Create the table in the database
 metadata.create_all(engine)
