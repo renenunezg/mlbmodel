@@ -82,5 +82,42 @@ team_batting_vs_rhp = Table('team_batting_vs_rhp', metadata,
     Column('wRC+', String),
 )
 
+# Define the odds table
+odds = Table('odds', metadata,
+    Column('id', Integer, primary_key=True, autoincrement=True),
+    Column('game_id', Integer),
+    Column('global_game_id', Integer),
+    Column('date', String),
+    Column('team', String),
+    Column('open', String),
+    Column('bet365_ml', String),
+    Column('total', String),
+    Column('run_line', String),
+)
+
+# Define the park_factors table
+park_factors = Table('park_factors', metadata,
+    Column('rank', Integer),
+    Column('team', String, primary_key=True),
+    Column('venue', String),
+    Column('year_range', String),
+    Column('park_factor', Integer),
+    Column('wobacon', Integer),
+    Column('xwobacon', Integer),
+    Column('bacon', Integer),
+    Column('xbacon', Integer),
+    Column('hardhit', Integer),
+    Column('r', Integer),
+    Column('obp', Integer),
+    Column('h', Integer),
+    Column('_1b', Integer),
+    Column('_2b', Integer),
+    Column('_3b', Integer),
+    Column('hr', Integer),
+    Column('bb', Integer),
+    Column('so', Integer),
+    Column('pa', Integer),
+)
+
 # Create the table in the database
 metadata.create_all(engine)
