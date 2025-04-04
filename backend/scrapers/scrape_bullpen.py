@@ -6,13 +6,15 @@ import time
 from sqlalchemy import MetaData, insert
 from sqlalchemy.orm import Session
 from backend.db import engine
+from datetime import datetime
 
-url = "https://www.fangraphs.com/leaders-legacy.aspx?pos=all&stats=rel&lg=all&qual=10&type=1&season=2025&month=2&season1=2025&ind=0&team=0,ts&rost=0&age=0&filter=&players=0"
+today = datetime.today()
+year = today.year
+url = f"https://www.fangraphs.com/leaders-legacy.aspx?pos=all&stats=rel&lg=all&qual=10&type=1&season={year}&month=2&season1={year}&ind=0&team=0,ts&rost=0&age=0&filter=&players=0"
 
 headers = {"User-Agent": "Mozilla/5.0"}
 response = requests.get(url, headers=headers)
 time.sleep(1)
-
 soup = BeautifulSoup(response.text, "html.parser")
 tables = soup.find_all("table", class_="rgMasterTable")
 

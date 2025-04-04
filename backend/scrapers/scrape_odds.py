@@ -13,8 +13,10 @@ def clean_odds(value):
         # Replace "even" or "even +" with "+100"
         if value.lower() in ['even', 'even +']:
             return '+100'
-        # Remove any trailing extra plus signs (a space followed by a plus at the end)
+        value = value.replace("even +", "+100").replace("even", "+100")
+        # Remove extra trailing pluses (e.g., "+110 +")
         value = re.sub(r'\s+\+$', '', value)
+        value = re.sub(r'\s+\+\s*$', '', value)
     return value
 
 def split_and_clean(value):
@@ -33,10 +35,10 @@ try:
     df = tables[0]
 
     # Drop unnecessary rows
-    df = df[df['Time'].astype(str).str.contains(r'\d+\s+.+?\s+[A-Z][a-z]+\s+\([LR]\)')]
+    df = df[df['Time'].astype(str).str.contains(r'\d+\s+.+?\s+[A-Z][a-z]+\s+\([LR]?\)', na=False)]
 
     df = df.copy()
-    df['Team_Info'] = df['Time'].str.extract(r'^\d+\s+(.*?)\s+[A-Za-z]+\s+\([LR]\)')[0].str.strip()
+    df['Team_Info'] = df['Time'].str.extract(r'^\d+\s+(.*?)\s+[A-Za-z]+\s+\(\w*\)')[0].str.strip()
 
     def map_team(name):
         if not isinstance(name, str):
@@ -107,8 +109,8 @@ try:
     ml_df.rename(columns={"Bet365": "Bet365_ML"}, inplace=True)
     ml_df['Bet365_ML'] = ml_df['Bet365_ML'].apply(clean_odds)
     ml_df['Open'] = ml_df['Open'].apply(clean_odds)
-    ml_df['Total'] = ml_df['Total'].apply(split_and_clean)
-    ml_df['RunLine'] = ml_df['RunLine'].apply(split_and_clean)
+    ml_df['Total'] = ml_df['Total'].apply(clean_odds)
+    ml_df['RunLine'] = ml_df['RunLine'].apply(clean_odds)
 
     ml_df.rename(columns={
         "Team": "team",
