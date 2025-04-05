@@ -2,6 +2,7 @@ import pandas as pd
 from sqlalchemy import insert, MetaData
 from backend.db import engine
 from sqlalchemy.orm import Session
+from backend.team_mappings import TEAM_NAME_MAP
 
 # Scrape
 url = "https://www.cbssports.com/fantasy/baseball/probable-pitchers/"
@@ -20,7 +21,7 @@ for table in tables:
                 full_name = parts[3] if len(parts) > 3 else short_name
                 rows.append({
                     "game_id": game_id,
-                    "team_abbr": team_abbr.strip(),
+                    "team": TEAM_NAME_MAP.get(team_abbr.strip(), team_abbr.strip()),
                     "pitcher_name": full_name.strip(),
                     "handedness": handedness.strip().replace("HP", "")
                 })

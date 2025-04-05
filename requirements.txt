@@ -13,3 +13,8 @@ beautifulsoup4==4.12.3
 lxml==5.2.1
 selenium
 html5lib
+pymc
+pybaseball
+ratelimit
+xgboost
+scikit-learn

@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String
+from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float
 from sqlalchemy import insert
 from backend.db import engine
 import pandas as pd
@@ -117,6 +117,34 @@ park_factors = Table('park_factors', metadata,
     Column('bb', Integer),
     Column('so', Integer),
     Column('pa', Integer),
+)
+
+# Define the model_outputs table
+model_outputs = Table('model_outputs', metadata,
+    Column('team', String, primary_key=True),
+    Column('expected_runs', Float)
+)
+
+# Define the game_results table
+game_results = Table('game_results', metadata,
+    Column('game_id', String, primary_key=True),
+    Column('date', String),
+    Column('away', String),
+    Column('away_runs', Integer),
+    Column('home', String),
+    Column('home_runs', Integer),
+)
+
+# Define the runs_per_game table
+runs_per_game = Table('runs_per_game', metadata,
+    Column('rank', Integer),
+    Column('team', String, primary_key=True),
+    Column('_2025', Float),
+    Column('last_3', Float),
+    Column('last_1', Float),
+    Column('home', Float),
+    Column('away', Float),
+    Column('_2024', Float),
 )
 
 # Create the table in the database
