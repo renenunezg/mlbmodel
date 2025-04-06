@@ -51,6 +51,9 @@ try:
     if missing:
         print("⚠️ Missing expected columns:", missing)
     df = df.loc[:, [col for col in desired_columns if col in df.columns]]
+    
+    # Rename the 'Team' column to lowercase 'team'
+    df = df.rename(columns={"Team": "team"})
 
     # Load environment variables for DB connection
     load_dotenv()

@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 from sqlalchemy import create_engine
 import xgboost as xgb
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # Set the DATABASE_URL using the provided parameters
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost:5432/mlbmodel")
@@ -72,6 +74,7 @@ def preprocess_data(df):
     df['batting_wrc_plus'] = pd.to_numeric(df['batting_wrc_plus'], errors='coerce')
     df['xFIP'] = pd.to_numeric(df['xFIP'], errors='coerce')
     df['park_factor'] = pd.to_numeric(df['park_factor'], errors='coerce')
+    df['xFIP_bullpen'] = pd.to_numeric(df['xFIP_bullpen'], errors='coerce')
     return df
 
 def train_model(X, y):
@@ -104,18 +107,20 @@ def compute_predictions(df, model):
     Use the trained model to predict expected runs (xR) for each team,
     then compute win probabilities and simulated American odds for each game.
     """
-    X = df[['batting_wrc_plus', 'xFIP', 'park_factor']].copy()
-    X['adj_pitch_factor'] = X['xFIP'] * X['park_factor']
-    df['xR'] = model.predict(X)
+    X = df[['batting_wrc_plus', 'park_factor', 'xFIP_bullpen']].copy()
+    X['adj_pitch_factor'] = (df['xFIP'] * df['park_factor']) / df['park_factor'].mean()
+    df['xR'] = model.predict(X[['batting_wrc_plus', 'adj_pitch_factor', 'xFIP_bullpen']])
+    df['xR'] = df['xR'].round(2)
     
     def compute_game_stats(group):
         total_xR = group['xR'].sum()
         group['win_prob'] = group['xR'] / total_xR if total_xR > 0 else 1.0 / len(group)
         group['win_prob'] = group['win_prob'].clip(upper=0.999, lower=0.001)
+        group['win_prob'] = group['win_prob'].round(2)
         group['our_odds'] = group['win_prob'].apply(convert_to_odds)
         return group
 
-    df = df.groupby('game_id').apply(compute_game_stats).reset_index(drop=True)
+    df = df.groupby('game_id', group_keys=False).apply(compute_game_stats).reset_index(drop=True)
     df['team_count'] = df.groupby('game_id')['team'].transform('count')
     return df
 
@@ -125,8 +130,9 @@ def main():
     df = df.replace([np.inf, -np.inf], np.nan)
     df = df.dropna(subset=["expected_runs"])
     
-    X = df[['batting_wrc_plus', 'xFIP', 'park_factor']].copy()
-    X['adj_pitch_factor'] = X['xFIP'] * X['park_factor']
+    X = df[['batting_wrc_plus', 'park_factor', 'xFIP_bullpen']].copy()
+    X['adj_pitch_factor'] = (df['xFIP'] * df['park_factor']) / df['park_factor'].mean()
+    X = X[['batting_wrc_plus', 'adj_pitch_factor', 'xFIP_bullpen']]
     y = pd.to_numeric(df['expected_runs'], errors='coerce')
     
     model = train_model(X, y)
@@ -140,6 +146,12 @@ def main():
     final_output = predictions.sort_values(['game_id', 'team']).reset_index(drop=True)[['game_id', 'team', 'starter', 'xR', 'win_prob', 'our_odds']]
     
     print("\nFinal simulated predictions:")
+    print(final_output)
+    
+    odds_df = pd.read_sql_table("odds", con=engine)
+    odds_df = odds_df.drop_duplicates(subset=["team"], keep="first")
+    final_output = pd.merge(final_output, odds_df[["team", "bet365_ml", "total", "run_line"]], on="team", how="left")
+    print("\nMerged predictions with odds:")
     print(final_output)
 
 if __name__ == "__main__":

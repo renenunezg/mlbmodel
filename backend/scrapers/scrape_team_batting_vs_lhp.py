@@ -51,7 +51,9 @@ try:
 
     desired_columns = ['Team', 'PA', 'BB%', 'K%', 'BB/K', 'SB', 'OBP', 'SLG', 'OPS', 'ISO', 'Spd', 'BABIP', 'wRC', 'wRAA', 'wOBA', 'wRC+']
     df = df[[col for col in desired_columns if col in df.columns]]
-
+        # Rename the 'Team' column to lowercase 'team'
+    df = df.rename(columns={"Team": "team"})
+    
     # Load environment variables for DB connection
     from dotenv import load_dotenv
     load_dotenv()
