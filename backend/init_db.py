@@ -145,12 +145,12 @@ model_outputs = Table('model_outputs', metadata,
 
 # Define the game_results table
 game_results = Table('game_results', metadata,
-    Column('game_id', String, primary_key=True),
+    Column('id', Integer, primary_key=True, autoincrement=True),
     Column('date', String),
-    Column('away', String),
-    Column('away_runs', Integer),
-    Column('home', String),
-    Column('home_runs', Integer),
+    Column('away_team', String),
+    Column('away_score', Integer),
+    Column('home_team', String),
+    Column('home_score', Integer),
 )
 
 # Define the runs_per_game table
