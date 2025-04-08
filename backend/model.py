@@ -102,6 +102,30 @@ def convert_to_odds(p):
     else:
         return 100  # even odds
 
+def american_to_prob(odds):
+    if odds > 0:
+        return 100 / (odds + 100)
+    else:
+        return abs(odds) / (abs(odds) + 100)
+
+def flag_ev(row, threshold=0.03):
+    try:
+        our_prob = american_to_prob(row['our_odds'])
+        book_prob = american_to_prob(pd.to_numeric(row['bet365_ml'], errors='coerce'))
+        edge = our_prob - book_prob
+        return row['team'] if edge >= threshold else "No Play"
+    except:
+        return "No Play"
+
+def flag_runline_ev(row, threshold=0.03):
+    try:
+        book_prob = american_to_prob(row['run_line_odds'])
+        model_prob = max(row['win_prob'] - 0.10, 0)  # crude discount to estimate cover chance
+        edge = model_prob - book_prob
+        return row['team'] if edge >= threshold else "No Play"
+    except:
+        return "No Play"
+
 def compute_predictions(df, model):
     """
     Use the trained model to predict expected runs (xR) for each team,
@@ -145,14 +169,48 @@ def main():
     predictions = compute_predictions(df, model)
     final_output = predictions.sort_values(['game_id', 'team']).reset_index(drop=True)[['game_id', 'team', 'starter', 'xR', 'win_prob', 'our_odds']]
     
-    print("\nFinal simulated predictions:")
-    print(final_output)
-    
     odds_df = pd.read_sql_table("odds", con=engine)
     odds_df = odds_df.drop_duplicates(subset=["team"], keep="first")
-    final_output = pd.merge(final_output, odds_df[["team", "bet365_ml", "total", "run_line"]], on="team", how="left")
-    print("\nMerged predictions with odds:")
+    final_output = pd.merge(final_output, odds_df[["team", "bet365_ml", "total", "run_line", "run_line_raw"]], on="team", how="left")
+    
+    final_output["run_line_odds"] = final_output["run_line_raw"].str.extract(r'[\+\-]\d+\.\d+\s+([\+\-]?\d+)')
+    final_output["run_line_odds"] = pd.to_numeric(final_output["run_line_odds"], errors="coerce")
+
+    # Compute additional columns
+    our_totals = final_output.groupby('game_id')['xR'].sum().round(2).rename("our_total")
+    final_output = final_output.merge(our_totals, on='game_id', how='left')
+    final_output['total'] = pd.to_numeric(final_output['total'], errors='coerce')
+    final_output['total_diff'] = (final_output['our_total'] - final_output['total']).round(2)
+
+    def flag_total_play(row):
+        if row['total_diff'] >= 1:
+            return 'Over'
+        elif row['total_diff'] <= -1:
+            return 'Under'
+        else:
+            return 'No Play'
+
+    final_output['total_play'] = final_output.apply(flag_total_play, axis=1)
+    final_output['ev_flag'] = final_output.apply(flag_ev, axis=1)
+    final_output['run_line_ev_flag'] = final_output.apply(flag_runline_ev, axis=1)
+
+    final_output['ml_confidence'] = final_output.apply(
+        lambda row: round(row['win_prob'] - american_to_prob(pd.to_numeric(row['bet365_ml'], errors='coerce')), 3),
+        axis=1
+    )
+
+    final_output['run_line_confidence'] = final_output.apply(
+        lambda row: round(max(row['win_prob'] - 0.10, 0) - american_to_prob(row['run_line_odds']), 3),
+        axis=1
+    )
+
+    print("\nFinal output with flags:")
     print(final_output)
+    
+    # Insert into model_outputs table
+    final_output = final_output.rename(columns={"xR": "expected_runs"})
+    final_output.to_sql("model_outputs", con=engine, if_exists="replace", index=False)
+    print("\n✅ model_outputs table updated.")
 
 if __name__ == "__main__":
     main()
