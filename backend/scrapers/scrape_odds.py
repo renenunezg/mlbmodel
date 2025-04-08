@@ -105,23 +105,32 @@ try:
     # Now drop rows that only had totals and runlines
     ml_df = ml_df[ml_df['Team'].notna()].reset_index(drop=True)
 
-    # Rename columns and clean odds
-    ml_df.rename(columns={"Bet365": "Bet365_ML"}, inplace=True)
-    ml_df['Bet365_ML'] = ml_df['Bet365_ML'].apply(clean_odds)
-    ml_df['Open'] = ml_df['Open'].apply(clean_odds)
+    # Rename and clean the total column
     ml_df['Total'] = ml_df['Total'].apply(clean_odds)
-    ml_df['RunLine'] = ml_df['RunLine'].apply(clean_odds)
+    ml_df.rename(columns={"Total": "total_raw"}, inplace=True)
+    
+    # Extract numeric part of total_raw and create clean 'total' column
+    ml_df['total'] = ml_df['total_raw'].str.extract(r'(\d+\.?\d*)')
+    ml_df['total'] = pd.to_numeric(ml_df['total'], errors="coerce")
 
+    # Rename columns and clean odds
     ml_df.rename(columns={
         "Team": "team",
         "Open": "open",
-        "Bet365_ML": "bet365_ml",
-        "Total": "total",
-        "RunLine": "run_line"
+        "Bet365": "bet365_ml",
+        "RunLine": "run_line_raw"
     }, inplace=True)
     
+    ml_df['bet365_ml'] = ml_df['bet365_ml'].apply(clean_odds)
+    ml_df['open'] = ml_df['open'].apply(clean_odds)
+    ml_df['run_line_raw'] = ml_df['run_line_raw'].apply(clean_odds)
+
+    # Extract numeric part of run_line_raw and create clean 'run_line' column
+    ml_df["run_line"] = ml_df["run_line_raw"].str.extract(r'([\+\-]\d+\.\d+)')
+    ml_df["run_line"] = pd.to_numeric(ml_df["run_line"], errors="coerce")
+
     # Final DataFrame: we assume ml_df now has exactly 2 rows per game.
-    ml_df = ml_df[['global_game_id', 'game_id', 'date', 'team', 'open', 'bet365_ml', 'total', 'run_line']]
+    ml_df = ml_df[['global_game_id', 'game_id', 'date', 'team', 'open', 'bet365_ml', 'total_raw', 'total', 'run_line_raw', 'run_line']]
     print(ml_df)
 
     with engine.connect() as connection:
