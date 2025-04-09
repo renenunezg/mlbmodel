@@ -23,58 +23,76 @@ def load_training_data():
     # Merge in bullpen xFIP
     bullpen = pd.read_sql_table("bullpen", con=engine)
     starters = pd.merge(starters, bullpen[["team", "xFIP"]], on="team", how="left", suffixes=("", "_bullpen"))
-    starters = starters.rename(columns={"xFIP_bullpen": "xFIP_bullpen"})
     
     # Load batting splits
     vs_r = pd.read_sql_table("team_batting_vs_rhp", con=engine)[["team", "wRC+", "wOBA"]].rename(columns={"wRC+": "wRC+_vs_r", "wOBA": "wOBA_vs_r"})
     vs_l = pd.read_sql_table("team_batting_vs_lhp", con=engine)[["team", "wRC+", "wOBA"]].rename(columns={"wRC+": "wRC+_vs_l", "wOBA": "wOBA_vs_l"})
-    
-    # Merge batting splits for both RHP and LHP
     starters = pd.merge(starters, vs_r, on="team", how="left")
     starters = pd.merge(starters, vs_l, on="team", how="left")
-    
-    # Load runs per game
-    runs = pd.read_sql_table("runs_per_game", con=engine)[["team", "home", "away"]]
-    starters = pd.merge(starters, runs, on="team", how="left")
     
     # Self merge to get opponent handedness
     opp = starters[["game_id", "team", "handedness"]].rename(columns={"team": "opp_team", "handedness": "opp_handedness"})
     starters = pd.merge(starters, opp, on="game_id")
     starters = starters[starters["team"] != starters["opp_team"]]
     
-    # Select correct wRC+ based on opponent handedness
+    # Select correct batting wRC+ based on opponent handedness
     starters["batting_wrc_plus"] = np.where(
         starters["opp_handedness"] == "R", starters["wRC+_vs_r"], starters["wRC+_vs_l"]
     )
     
-    # Load park factors
+    # Load park factors and merge them in based on home team
     parks = pd.read_sql_table("park_factors", con=engine)
-    home_teams = starters.groupby("game_id", group_keys=False).apply(lambda x: x.iloc[1:2])[["game_id", "team"]].rename(columns={"team": "home_team"})
+    home_teams = starters[starters["is_home"] == True][["game_id", "team"]].rename(columns={"team": "home_team"})
     starters = pd.merge(starters, home_teams, on="game_id", how="left")
     home_parks = pd.merge(home_teams, parks, left_on="home_team", right_on="team", how="left")[["game_id", "park_factor"]]
     starters = pd.merge(starters, home_parks, on="game_id", how="left")
     
+    # Load actual game results, filtering out games without scores
+    game_results = pd.read_sql_table("game_results", con=engine)
+    game_results = game_results.dropna(subset=["away_score", "home_score"])
+    
+    # Merge game results into starters to obtain game date and scores
+    starters = pd.merge(starters, game_results[['game_id', 'date', 'away_team', 'away_score', 'home_team', 'home_score']], on="game_id", how="left")
+    
+    # Set expected_runs based on whether the team is home or away
+    starters["expected_runs"] = np.where(
+        starters["is_home"] == True,
+        starters["home_score"],
+        starters["away_score"]
+    )
+    
+    # Compute rolling averages (last 5 and last 10 games) for each team using historical game results
+    game_results['date'] = pd.to_datetime(game_results['date'])
+    starters['date'] = pd.to_datetime(starters['date'])
+    
+    home_games = game_results[['date', 'home_team', 'home_score']].rename(columns={'home_team': 'team', 'home_score': 'runs'})
+    away_games = game_results[['date', 'away_team', 'away_score']].rename(columns={'away_team': 'team', 'away_score': 'runs'})
+    team_games = pd.concat([home_games, away_games]).sort_values(['team', 'date']).reset_index(drop=True)
+    
+    def get_rolling_averages(team, current_date):
+        games = team_games[(team_games['team'] == team) & (team_games['date'] < current_date)]
+        last5 = games.tail(5)['runs'].mean() if not games.empty else np.nan
+        last10 = games.tail(10)['runs'].mean() if not games.empty else np.nan
+        return pd.Series({'avg_last5': last5, 'avg_last10': last10})
+    
+    starters[['avg_last5', 'avg_last10']] = starters.apply(lambda row: get_rolling_averages(row['team'], row['date']), axis=1)
+    
     # Filter for games with exactly 2 teams
     starters = starters.groupby("game_id").filter(lambda x: len(x) == 2)
     
-    # Sort values and compute expected runs
-    starters = starters.sort_values(["game_id", "team"]).reset_index(drop=True)
-    starters["expected_runs"] = np.where(
-        starters["team"] == starters["home_team"],
-        starters["home"],
-        starters["away"]
-    )
+    # Sort values by game_id and is_home to preserve correct home/away order
+    starters = starters.sort_values(["game_id", "is_home"]).reset_index(drop=True)
     
-    return starters[["game_id", "team", "pitcher_name", "xFIP", "opp_handedness", "park_factor", "batting_wrc_plus", "xFIP_bullpen", "expected_runs"]].rename(columns={"pitcher_name": "starter"})
+    return starters[["game_id", "team", "pitcher_name", "is_home", "xFIP", "batting_wrc_plus", "park_factor", "xFIP_bullpen", "expected_runs", "avg_last5", "avg_last10"]].rename(columns={"pitcher_name": "starter"})
 
 def preprocess_data(df):
     """
     Convert columns to numeric.
     """
-    df['batting_wrc_plus'] = pd.to_numeric(df['batting_wrc_plus'], errors='coerce')
     df['xFIP'] = pd.to_numeric(df['xFIP'], errors='coerce')
-    df['park_factor'] = pd.to_numeric(df['park_factor'], errors='coerce')
     df['xFIP_bullpen'] = pd.to_numeric(df['xFIP_bullpen'], errors='coerce')
+    df['avg_last5'] = pd.to_numeric(df['avg_last5'], errors='coerce')
+    df['avg_last10'] = pd.to_numeric(df['avg_last10'], errors='coerce')
     return df
 
 def train_model(X, y):
@@ -131,9 +149,9 @@ def compute_predictions(df, model):
     Use the trained model to predict expected runs (xR) for each team,
     then compute win probabilities and simulated American odds for each game.
     """
-    X = df[['batting_wrc_plus', 'park_factor', 'xFIP_bullpen']].copy()
-    X['adj_pitch_factor'] = (df['xFIP'] * df['park_factor']) / df['park_factor'].mean()
-    df['xR'] = model.predict(X[['batting_wrc_plus', 'adj_pitch_factor', 'xFIP_bullpen']])
+    X = df[['xFIP', 'xFIP_bullpen', 'avg_last5', 'avg_last10']].copy()
+    X['adj_pitch_factor'] = df['xFIP']
+    df['xR'] = model.predict(X[['xFIP', 'adj_pitch_factor', 'xFIP_bullpen', 'avg_last5', 'avg_last10']])
     df['xR'] = df['xR'].round(2)
     
     def compute_game_stats(group):
@@ -145,7 +163,6 @@ def compute_predictions(df, model):
         return group
 
     df = df.groupby('game_id', group_keys=False).apply(compute_game_stats).reset_index(drop=True)
-    df['team_count'] = df.groupby('game_id')['team'].transform('count')
     return df
 
 def main():
@@ -154,9 +171,9 @@ def main():
     df = df.replace([np.inf, -np.inf], np.nan)
     df = df.dropna(subset=["expected_runs"])
     
-    X = df[['batting_wrc_plus', 'park_factor', 'xFIP_bullpen']].copy()
-    X['adj_pitch_factor'] = (df['xFIP'] * df['park_factor']) / df['park_factor'].mean()
-    X = X[['batting_wrc_plus', 'adj_pitch_factor', 'xFIP_bullpen']]
+    X = df[['xFIP', 'xFIP_bullpen', 'avg_last5', 'avg_last10']].copy()
+    X['adj_pitch_factor'] = df['xFIP']
+    X = X[['xFIP', 'adj_pitch_factor', 'xFIP_bullpen', 'avg_last5', 'avg_last10']]
     y = pd.to_numeric(df['expected_runs'], errors='coerce')
     
     model = train_model(X, y)
@@ -167,7 +184,7 @@ def main():
     print(df['expected_runs'].describe())
     
     predictions = compute_predictions(df, model)
-    final_output = predictions.sort_values(['game_id', 'team']).reset_index(drop=True)[['game_id', 'team', 'starter', 'xR', 'win_prob', 'our_odds']]
+    final_output = predictions.sort_values(['game_id', 'is_home'], ascending=[True, True]).reset_index(drop=True)[['game_id', 'team', 'starter', 'xR', 'win_prob', 'our_odds']]
     
     odds_df = pd.read_sql_table("odds", con=engine)
     odds_df = odds_df.drop_duplicates(subset=["team"], keep="first")
