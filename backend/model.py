@@ -71,11 +71,14 @@ def load_training_data():
     
     def get_rolling_averages(team, current_date):
         games = team_games[(team_games['team'] == team) & (team_games['date'] < current_date)]
-        last5 = games.tail(5)['runs'].mean() if not games.empty else np.nan
-        last10 = games.tail(10)['runs'].mean() if not games.empty else np.nan
-        return pd.Series({'avg_last5': last5, 'avg_last10': last10})
+        last5 = games.tail(5)['runs']
+        return pd.Series({
+            'avg_last5': last5.mean() if not last5.empty else np.nan,
+            'avg_last10': games.tail(10)['runs'].mean() if not games.empty else np.nan,
+            'std_last5': last5.std() if not last5.empty else np.nan
+        })
     
-    starters[['avg_last5', 'avg_last10']] = starters.apply(lambda row: get_rolling_averages(row['team'], row['date']), axis=1)
+    starters[['avg_last5', 'avg_last10', 'std_last5']] = starters.apply(lambda row: get_rolling_averages(row['team'], row['date']), axis=1)
     
     # Filter for games with exactly 2 teams
     starters = starters.groupby("game_id").filter(lambda x: len(x) == 2)
@@ -83,7 +86,7 @@ def load_training_data():
     # Sort values by game_id and is_home to preserve correct home/away order
     starters = starters.sort_values(["game_id", "is_home"]).reset_index(drop=True)
     
-    return starters[["game_id", "date", "team", "pitcher_name", "is_home", "xFIP", "batting_wrc_plus", "park_factor", "xFIP_bullpen", "expected_runs", "avg_last5", "avg_last10"]].rename(columns={"pitcher_name": "starter"})
+    return starters[["game_id", "date", "team", "pitcher_name", "is_home", "xFIP", "batting_wrc_plus", "park_factor", "xFIP_bullpen", "expected_runs", "avg_last5", "avg_last10", "std_last5"]].rename(columns={"pitcher_name": "starter"})
 
 def preprocess_data(df):
     """
@@ -93,6 +96,8 @@ def preprocess_data(df):
     df['xFIP_bullpen'] = pd.to_numeric(df['xFIP_bullpen'], errors='coerce')
     df['avg_last5'] = pd.to_numeric(df['avg_last5'], errors='coerce')
     df['avg_last10'] = pd.to_numeric(df['avg_last10'], errors='coerce')
+    df['std_last5'] = pd.to_numeric(df['std_last5'], errors='coerce')
+    df['batting_wrc_plus'] = pd.to_numeric(df['batting_wrc_plus'], errors='coerce')
     return df
 
 def train_model(X, y):
@@ -149,9 +154,10 @@ def compute_predictions(df, model):
     Use the trained model to predict expected runs (xR) for each team,
     then compute win probabilities and simulated American odds for each game.
     """
-    X = df[['xFIP', 'xFIP_bullpen', 'avg_last5', 'avg_last10']].copy()
-    X['adj_pitch_factor'] = df['xFIP']
-    df['xR'] = model.predict(X[['xFIP', 'adj_pitch_factor', 'xFIP_bullpen', 'avg_last5', 'avg_last10']])
+    X = df[['xFIP_bullpen', 'avg_last5', 'avg_last10', 'batting_wrc_plus']].copy()
+    df["adj_pitch_factor"] = df["xFIP"] * (df["park_factor"] / 100)
+    X['adj_pitch_factor'] = df['xFIP'] * (df['park_factor'] / 100)
+    df['xR'] = model.predict(X[['adj_pitch_factor', 'xFIP_bullpen', 'avg_last5', 'avg_last10', 'batting_wrc_plus']])
     df['xR'] = df['xR'].round(2)
     
     def compute_game_stats(group):
@@ -171,9 +177,8 @@ def main():
     df = df.replace([np.inf, -np.inf], np.nan)
     df = df.dropna(subset=["expected_runs"])
     
-    X = df[['xFIP', 'xFIP_bullpen', 'avg_last5', 'avg_last10']].copy()
-    X['adj_pitch_factor'] = df['xFIP']
-    X = X[['xFIP', 'adj_pitch_factor', 'xFIP_bullpen', 'avg_last5', 'avg_last10']]
+    df["adj_pitch_factor"] = df["xFIP"] * (df["park_factor"] / 100)
+    X = df[['adj_pitch_factor', 'xFIP_bullpen', 'avg_last5', 'avg_last10', 'batting_wrc_plus']].copy()
     y = pd.to_numeric(df['expected_runs'], errors='coerce')
     
     model = train_model(X, y)
@@ -221,12 +226,25 @@ def main():
         axis=1
     )
 
+    final_output["high_variance_flag"] = predictions["std_last5"].apply(lambda x: "Yes" if x > 4.0 else "No")
+
     print("\nFinal output with flags:")
     print(final_output)
     
     # Insert into model_outputs table
     final_output = final_output.rename(columns={"xR": "expected_runs"})
     final_output.to_sql("model_outputs", con=engine, if_exists="replace", index=False)
+    
+    # Also append to model_outputs_season for evaluation
+    # Round float columns to 2 decimals using the same method as model_outputs table
+    float_cols_to_format = ["expected_runs", "win_prob", "our_total"]
+    for col in float_cols_to_format:
+        if col in final_output.columns:
+            final_output[col] = final_output[col].map(lambda x: round(x, 2) if pd.notnull(x) else x)
+
+    final_output = final_output.round(2)
+    final_output.to_sql("model_outputs_season", con=engine, if_exists="append", index=False)
+
     print("\n✅ model_outputs table updated.")
 
 if __name__ == "__main__":

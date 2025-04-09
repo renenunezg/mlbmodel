@@ -1,6 +1,6 @@
 import re
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from backend.team_mappings import TEAM_NAME_MAP
@@ -41,7 +41,7 @@ def extract_games_for_date(date_str, games_text):
                     home_team = normalize_team(home_team_raw)
 
                     games.append({
-                        'date': (datetime.strptime(date_str, "%A, %B %d, %Y") + pd.Timedelta(days=1)).date(),
+                        'date': datetime.strptime(date_str, "%A, %B %d, %Y").date(),
                         'away_team': away_team,
                         'away_score': None,
                         'home_team': home_team,
@@ -65,7 +65,7 @@ def extract_games_for_date(date_str, games_text):
                     away_team = normalize_team(team1.strip())
                     home_team = normalize_team(team2.strip())
                     games.append({
-                        'date': (datetime.strptime(date_str, "%A, %B %d, %Y") + pd.Timedelta(days=1)).date(),
+                        'date': datetime.strptime(date_str, "%A, %B %d, %Y").date(),
                         'away_team': away_team,
                         'away_score': None,
                         'home_team': home_team,
@@ -80,7 +80,7 @@ def extract_games_for_date(date_str, games_text):
             home_score = int(score2)
 
             games.append({
-                'date': (datetime.strptime(date_str, "%A, %B %d, %Y") + pd.Timedelta(days=1)).date(),
+                'date': datetime.strptime(date_str, "%A, %B %d, %Y").date(),
                 'away_team': away_team,
                 'away_score': away_score,
                 'home_team': home_team,
@@ -101,14 +101,16 @@ def scrape_season_schedule():
     text = driver.find_element("tag name", "body").text
     driver.quit()
 
-    # Use regex to capture blocks starting with a full date.
-    date_game_blocks = re.findall(
+    date_game_blocks = []
+    game_data = []
+
+    # Existing dated blocks
+    date_game_blocks += re.findall(
         r"((?:Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday),\s+[A-Za-z]+\s+\d{1,2},\s+2025)(.*?)(?=(?:Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday),\s+[A-Za-z]+\s+\d{1,2},\s+2025|$)",
         text,
         re.DOTALL
     )
 
-    game_data = []
     for date_str, games_text in date_game_blocks:
         if "Boxscore" not in games_text:
             continue
@@ -122,6 +124,44 @@ def scrape_season_schedule():
             print(f"Skipping block due to error: {e}")
             continue
 
+    parsed_dates = [datetime.strptime(d, "%A, %B %d, %Y") for d, _ in date_game_blocks]
+
+    today_pattern = re.search(r"Today's Games(.*?)(?=(?:Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday),\s+[A-Za-z]+\s+\d{1,2},\s+2025|$)", text, re.DOTALL)
+    if today_pattern:
+        today_games_text = today_pattern.group(1)
+        today_lines = today_games_text.strip().splitlines()
+        current_date_obj = datetime.now().date()
+        print(f"🛠 DEBUG: Detected 'Today's Games' section. Assigning date: {current_date_obj}")
+
+        for line in today_lines:
+            try:
+                time_match = re.search(r"(\d{1,2}:\d{2} [ap]m)", line)
+                teams_match = re.search(r"[ap]m (.+?) @ (.+?) Preview", line)
+                if time_match and teams_match:
+                    time_str = time_match.group(1)
+                    away_team_raw = teams_match.group(1).strip()
+                    home_team_raw = teams_match.group(2).strip()
+
+                    away_team = normalize_team(away_team_raw)
+                    home_team = normalize_team(home_team_raw)
+
+                    game_data.append({
+                        'date': current_date_obj,
+                        'away_team': away_team,
+                        'away_score': None,
+                        'home_team': home_team,
+                        'home_score': None,
+                        'time': time_str
+                    })
+                else:
+                    extracted = extract_games_for_date(datetime.now().strftime("%A, %B %d, %Y"), line)
+                    for game in extracted:
+                        game["date"] = current_date_obj
+                        game_data.append(game)
+            except Exception as e:
+                print(f"Skipping today's game line due to error: {e}")
+                continue
+
     df = pd.DataFrame(game_data)
     df['away_team'] = df['away_team'].apply(normalize_team)
     df['home_team'] = df['home_team'].apply(normalize_team)
@@ -129,6 +169,11 @@ def scrape_season_schedule():
     if 'time' in df.columns:
         cols.append('time')
     df = df[cols]
+    
+    # Override date for unplayed games: if both scores are None, set the date to today's date.
+    unplayed_mask = df['away_score'].isnull() & df['home_score'].isnull()
+    df.loc[unplayed_mask, 'date'] = datetime.now().date()
+
     return df
 
 def insert_into_db(df):
