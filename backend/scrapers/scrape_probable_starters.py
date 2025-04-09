@@ -3,6 +3,7 @@ from sqlalchemy import insert, MetaData
 from backend.db import engine
 from sqlalchemy.orm import Session
 from backend.team_mappings import TEAM_NAME_MAP
+from datetime import datetime
 
 # Scrape
 url = "https://www.cbssports.com/fantasy/baseball/probable-pitchers/"
@@ -17,11 +18,12 @@ for table in tables:
             player_col = row["players"]
             parts = player_col.split("  ")
             if len(parts) >= 3:
-                short_name, team_abbr, handedness = parts[0:3]
+                short_name, team, handedness = parts[0:3]
                 full_name = parts[3] if len(parts) > 3 else short_name
                 rows.append({
                     "game_id": game_id,
-                    "team": TEAM_NAME_MAP.get(team_abbr.strip(), team_abbr.strip()),
+                    "date": datetime.today().date(),
+                    "team": TEAM_NAME_MAP.get(team.strip(), team.strip()),
                     "pitcher_name": full_name.strip(),
                     "handedness": handedness.strip().replace("HP", ""),
                     "is_home": (i % 2 == 1)

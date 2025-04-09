@@ -52,7 +52,7 @@ def load_training_data():
     game_results = game_results.dropna(subset=["away_score", "home_score"])
     
     # Merge game results into starters to obtain game date and scores
-    starters = pd.merge(starters, game_results[['game_id', 'date', 'away_team', 'away_score', 'home_team', 'home_score']], on="game_id", how="left")
+    starters = pd.merge(starters, game_results[['game_id', 'away_team', 'away_score', 'home_team', 'home_score']], on="game_id", how="left")
     
     # Set expected_runs based on whether the team is home or away
     starters["expected_runs"] = np.where(
@@ -83,7 +83,7 @@ def load_training_data():
     # Sort values by game_id and is_home to preserve correct home/away order
     starters = starters.sort_values(["game_id", "is_home"]).reset_index(drop=True)
     
-    return starters[["game_id", "team", "pitcher_name", "is_home", "xFIP", "batting_wrc_plus", "park_factor", "xFIP_bullpen", "expected_runs", "avg_last5", "avg_last10"]].rename(columns={"pitcher_name": "starter"})
+    return starters[["game_id", "date", "team", "pitcher_name", "is_home", "xFIP", "batting_wrc_plus", "park_factor", "xFIP_bullpen", "expected_runs", "avg_last5", "avg_last10"]].rename(columns={"pitcher_name": "starter"})
 
 def preprocess_data(df):
     """
@@ -184,7 +184,7 @@ def main():
     print(df['expected_runs'].describe())
     
     predictions = compute_predictions(df, model)
-    final_output = predictions.sort_values(['game_id', 'is_home'], ascending=[True, True]).reset_index(drop=True)[['game_id', 'team', 'starter', 'xR', 'win_prob', 'our_odds']]
+    final_output = predictions.sort_values(['game_id', 'is_home'], ascending=[True, True]).reset_index(drop=True)[['game_id', 'date', 'team', 'starter', 'xR', 'win_prob', 'our_odds']]
     
     odds_df = pd.read_sql_table("odds", con=engine)
     odds_df = odds_df.drop_duplicates(subset=["team"], keep="first")

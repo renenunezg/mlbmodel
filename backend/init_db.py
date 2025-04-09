@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, Boolean
+from sqlalchemy import create_engine, MetaData, Table, Column, Integer, String, Float, Boolean, Date
 from sqlalchemy import insert
 from backend.db import engine
 import pandas as pd
@@ -10,7 +10,8 @@ metadata = MetaData()
 probable_starters = Table('probable_starters', metadata,
     Column('id', Integer, primary_key=True),
     Column('game_id', Integer),
-    Column('team_abbr', String),
+    Column('date', Date),
+    Column('team', String),
     Column('pitcher_name', String),
     Column('handedness', String),
     Column('is_home', Boolean),
@@ -125,6 +126,7 @@ park_factors = Table('park_factors', metadata,
 # Define the model_outputs table
 model_outputs = Table('model_outputs', metadata,
     Column('game_id', Integer),
+    Column('date', Date),
     Column('team', String),
     Column('starter', String),
     Column('expected_runs', Float),
@@ -142,7 +144,7 @@ model_outputs = Table('model_outputs', metadata,
     Column('run_line_ev_flag', String),
     Column('ml_confidence', Float),
     Column('run_line_confidence', Float),
-    Column('high_variance_flag', String)
+    Column('high_variance_flag', String),
 )
 
 # Define the game_results table
