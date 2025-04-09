@@ -23,7 +23,8 @@ for table in tables:
                     "game_id": game_id,
                     "team": TEAM_NAME_MAP.get(team_abbr.strip(), team_abbr.strip()),
                     "pitcher_name": full_name.strip(),
-                    "handedness": handedness.strip().replace("HP", "")
+                    "handedness": handedness.strip().replace("HP", ""),
+                    "is_home": (i % 2 == 1)
                 })
                 if i % 2 == 1:
                     game_id += 1

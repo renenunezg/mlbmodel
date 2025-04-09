@@ -127,5 +127,6 @@ TEAM_NAME_MAP = {
     "Houston": "HOU",
     "Colorado": "COL",
     "WAS": "WSN",
-    "Arizona D'Backs": "ARI"
+    "Arizona D'Backs": "ARI",
+    "Oriols": "BAL"
 }
