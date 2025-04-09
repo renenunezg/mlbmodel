@@ -147,6 +147,30 @@ model_outputs = Table('model_outputs', metadata,
     Column('high_variance_flag', String),
 )
 
+# Define the model_outputs_season table
+model_outputs_season = Table('model_outputs_season', metadata,
+    Column('game_id', Integer),
+    Column('date', Date),
+    Column('team', String),
+    Column('starter', String),
+    Column('expected_runs', Float),
+    Column('win_prob', Float),
+    Column('our_odds', Integer),
+    Column('bet365_ml', String),
+    Column('total', String),
+    Column('run_line', Float),
+    Column('run_line_raw', String),
+    Column('run_line_odds', Float),
+    Column('our_total', Float),
+    Column('total_diff', Float),
+    Column('total_play', String),
+    Column('ev_flag', String),
+    Column('run_line_ev_flag', String),
+    Column('ml_confidence', Float),
+    Column('run_line_confidence', Float),
+    Column('high_variance_flag', String),
+)
+
 # Define the game_results table
 game_results = Table('game_results', metadata,
     Column('game_id', Integer, primary_key=True, autoincrement=True),
