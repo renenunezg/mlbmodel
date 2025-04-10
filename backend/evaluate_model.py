@@ -108,9 +108,9 @@ def calc_run_line_pick(row):
     # For negative run_line (e.g., -1.5): pick wins if actual_margin is at least 2 runs.
     if run_line_value < 0:
         return 1 if margin >= 2 else 0
-    # For positive run_line (e.g., +1.5): pick wins if the team won or lost by exactly 1 run.
+    # For positive run_line (e.g., +1.5): pick wins if the team won or lost by at least 1 run.
     elif run_line_value > 0:
-        return 1 if (row["actual_win"] == 1 or margin == 1) else 0
+        return 1 if (row["actual_win"] == 1 or margin >= -1) else 0
     else:
         return np.nan
 
@@ -183,3 +183,58 @@ unders_accuracy = unders_correct / unders_total if unders_total > 0 else np.nan
 
 print(f"Totals Over Pick Accuracy: {overs_correct}/{overs_total} ({overs_accuracy:.2%})")
 print(f"Totals Under Pick Accuracy: {unders_correct}/{unders_total} ({unders_accuracy:.2%})")
+from sqlalchemy import Table, MetaData
+from sqlalchemy.dialects.postgresql import insert
+
+metadata = MetaData()
+metadata.reflect(bind=engine)
+model_evaluation = metadata.tables["model_evaluation"]
+
+today = pd.to_datetime(eval_df["date"].max()).date()
+
+# Daily totals
+daily_total_predictions = eval_df.shape[0]
+daily_total_correct = (eval_df["pred_win"] == eval_df["actual_win"]).sum()
+daily_total_accuracy = daily_total_correct / daily_total_predictions
+
+# Daily averages
+average_total_diff = abs(eval_df["expected_runs"] - eval_df["actual_runs"]).mean()
+average_win_prob = eval_df["win_prob"].mean()
+
+# Insert or update daily evaluation
+with engine.begin() as conn:
+    conn.execute(
+        insert(model_evaluation).values(
+            date=today,
+            total_correct=int(daily_total_correct),
+            total_predictions=int(daily_total_predictions),
+            total_accuracy=round(float(daily_total_accuracy), 2),
+            ml_correct=int(ml_correct),
+            ml_predictions=int(ml_total),
+            ml_accuracy=round(float(ml_accuracy), 2),
+            run_line_correct=int(rl_correct),
+            run_line_predictions=int(rl_total),
+            run_line_accuracy=round(float(run_line_accuracy), 2),
+            average_total_diff=round(float(average_total_diff), 2),
+            average_win_prob=round(float(average_win_prob), 2),
+        ).on_conflict_do_update(
+            index_elements=["date"],
+            set_={
+                "total_correct": int(daily_total_correct),
+                "total_predictions": int(daily_total_predictions),
+                "total_accuracy": round(float(daily_total_accuracy), 2),
+                "ml_correct": int(ml_correct),
+                "ml_predictions": int(ml_total),
+                "ml_accuracy": round(float(ml_accuracy), 2),
+                "run_line_correct": int(rl_correct),
+                "run_line_predictions": int(rl_total),
+                "run_line_accuracy": round(float(run_line_accuracy), 2),
+                "average_total_diff": round(float(average_total_diff), 2),
+                "average_win_prob": round(float(average_win_prob), 2),
+            }
+        )
+    )
+    # Fetch and display the inserted row to confirm
+    result = conn.execute(model_evaluation.select().where(model_evaluation.c.date == today)).fetchone()
+    print("\n🔎 Retrieved from DB:")
+    print(dict(result._mapping))

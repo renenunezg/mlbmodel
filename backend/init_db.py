@@ -194,5 +194,21 @@ runs_per_game = Table('runs_per_game', metadata,
     Column('_2024', Float),
 )
 
+# Define the model_evaluation table
+model_evaluation = Table('model_evaluation', metadata,
+    Column('date', Date, primary_key=True),
+    Column('total_correct', Integer),
+    Column('total_predictions', Integer),
+    Column('total_accuracy', Float),
+    Column('ml_correct', Integer),
+    Column('ml_predictions', Integer),
+    Column('ml_accuracy', Float),
+    Column('run_line_correct', Integer),
+    Column('run_line_predictions', Integer),
+    Column('run_line_accuracy', Float),
+    Column('average_total_diff', Float),
+    Column('average_win_prob', Float),
+)
+
 # Create the table in the database
 metadata.create_all(engine)
