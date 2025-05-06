@@ -18,3 +18,5 @@ pybaseball
 ratelimit
 xgboost
 scikit-learn
+streamlit
+watchdog
