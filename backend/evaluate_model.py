@@ -1,240 +1,169 @@
+"""
+Evaluate model predictions against actual game results.
+
+Computes accuracy metrics for moneyline, run line, and totals picks,
+then upserts a summary row into the model_evaluation table.
+
+Usage:
+    from backend.evaluate_model import main
+    main()
+"""
+
 import pandas as pd
 import numpy as np
-from sqlalchemy import create_engine
-import os
-from dotenv import load_dotenv
+from sqlalchemy import MetaData
+from sqlalchemy.dialects.postgresql import insert
 
-# Load environment variables
-load_dotenv()
-DATABASE_URL = os.getenv("DATABASE_URL")
-engine = create_engine(DATABASE_URL)
+from backend.db import engine
 
-# Load model outputs and game results
-model_df = pd.read_sql_table("model_outputs_season", con=engine)
-results_df = pd.read_sql_table("game_results", con=engine)
 
-results_df = results_df.dropna(subset=["home_score", "away_score"])
-results_df["winning_team"] = np.where(results_df["home_score"] > results_df["away_score"],
-                                       results_df["home_team"],
-                                       results_df["away_team"])
-
-# Reshape game_results into one row per team
-home_df = results_df.rename(columns={"home_team": "team", "home_score": "actual_runs"})[["date", "game_id", "team", "actual_runs", "winning_team"]]
-away_df = results_df.rename(columns={"away_team": "team", "away_score": "actual_runs"})[["date", "game_id", "team", "actual_runs", "winning_team"]]
-home_df["actual_margin"] = results_df["home_score"] - results_df["away_score"]
-away_df["actual_margin"] = results_df["away_score"] - results_df["home_score"]
-all_results = pd.concat([home_df, away_df], ignore_index=True)
-
-# Merge model predictions with actual results
-eval_df = pd.merge(model_df, all_results[["game_id", "date", "team", "actual_runs", "winning_team", "actual_margin"]], on=["date", "team"], how="inner")
-
-# Skip any rows where the actual result isn't available
-eval_df = eval_df.dropna(subset=["actual_runs"])
-
-# If no games have been played yet, exit with notice
-if eval_df.empty:
-    print("🚫 No games with completed scores to evaluate yet.")
-    exit()
-
-# Add actual_win column (1 if team won, 0 if lost)
-eval_df["actual_win"] = (eval_df["team"] == eval_df["winning_team"]).astype(int)
-print("DEBUG: actual_win assignment:")
-print(eval_df[["date", "team", "actual_runs", "winning_team", "actual_win"]].drop_duplicates())
-
-# Create a binary prediction column based on win probability
-eval_df["pred_win"] = (eval_df["win_prob"] > 0.5).astype(int)
-
-# Compute evaluation metrics
-eval_df["abs_error"] = abs(eval_df["expected_runs"] - eval_df["actual_runs"])
-eval_df["squared_error"] = (eval_df["expected_runs"] - eval_df["actual_runs"]) ** 2
-eval_df["sMAPE"] = 100 * abs(eval_df["expected_runs"] - eval_df["actual_runs"]) / ((abs(eval_df["expected_runs"]) + abs(eval_df["actual_runs"])) / 2)
-
-# Compute favorite win rate (based on win_prob > 0.5)
-favorite_accuracy = (eval_df["pred_win"] == eval_df["actual_win"]).mean()
-print(f"Favorite Accuracy (win_prob > 0.5): {favorite_accuracy:.2%}")
-
-# Group by team for per-team accuracy
-team_accuracy = eval_df.groupby("team").apply(lambda df: (df["pred_win"] == df["actual_win"]).mean()).reset_index(name="accuracy")
-print("\n📈 Per-Team Win Prediction Accuracy:")
-print(team_accuracy.sort_values("accuracy", ascending=False).head(10))
-
-# Print evaluation summary
-print("\n📊 Model Evaluation Metrics:")
-print(f"MAE: {eval_df['abs_error'].mean():.3f}")
-print(f"MSE: {eval_df['squared_error'].mean():.3f}")
-print(f"sMAPE: {eval_df['sMAPE'].mean():.2f}%")
-
-# Optional: show a few rows
-print("\n🔍 Sample comparison:")
-print(eval_df[["team", "expected_runs", "actual_runs", "abs_error", "sMAPE"]].head())
-
-print(f"\n✅ Total rows evaluated: {len(eval_df)}")
-
-# Moneyline pick accuracy
-print("DEBUG: Complete eval_df 'ev_flag' value counts:", eval_df["ev_flag"].value_counts())
-ml_plays_all = eval_df[eval_df["ev_flag"] != "No Play"]
-print("DEBUG: After filtering ev_flag != 'No Play', count =", len(ml_plays_all))
-print("DEBUG: Unique 'ev_flag' values in ml_plays_all:", ml_plays_all["ev_flag"].unique())
-ml_plays = ml_plays_all[ml_plays_all["ev_flag"] == ml_plays_all["team"]]
-print("DEBUG: After filtering ev_flag == team, count =", len(ml_plays))
-print("DEBUG: ml_plays ev_flag value counts:", ml_plays["ev_flag"].value_counts())
-if "game_id" in ml_plays.columns:
-    ml_plays = ml_plays.drop_duplicates(subset=["game_id"])
-else:
-    ml_plays = ml_plays.drop_duplicates(subset=["date", "team", "ev_flag"])
-
-ml_correct = ml_plays[ml_plays["actual_win"] == 1].shape[0]
-ml_incorrect = ml_plays[ml_plays["actual_win"] == 0].shape[0]
-ml_total = ml_correct + ml_incorrect
-ml_accuracy = ml_correct / ml_total if ml_total > 0 else np.nan
-print(f"\nMoneyline Pick Accuracy: {ml_correct}/{ml_total} ({ml_accuracy:.2%})")
-
-print("\n🔎 Moneyline Picks Evaluated:")
-print(ml_plays[["date", "team", "ev_flag", "actual_win", "win_prob"]])
-
-# Evaluate Run Line Picks:
-# Define a function to determine if a run line pick is correct.
-# Logic:
-#   - If run_line is negative (e.g., -1.5): pick wins if actual_margin is at least 2 runs.
-#   - If run_line is positive (e.g., +1.5): pick wins if the team won or lost by exactly 1 run.
-def calc_run_line_pick(row):
+def _calc_run_line_pick(row):
     try:
-        run_line_value = float(row["run_line"])
-    except:
+        spread_value = float(row["spread"])
+    except Exception:
         return np.nan
     margin = row.get("actual_margin", np.nan)
     if pd.isna(margin):
         return np.nan
-    # For negative run_line (e.g., -1.5): pick wins if actual_margin is at least 2 runs.
-    if run_line_value < 0:
-        return 1 if margin >= 2 else 0
-    # For positive run_line (e.g., +1.5): pick wins if the team won or lost by at least 1 run.
-    elif run_line_value > 0:
-        return 1 if (row["actual_win"] == 1 or margin >= -1) else 0
-    else:
-        return np.nan
+    if spread_value < 0:
+        return 1 if margin >= abs(spread_value) else 0
+    elif spread_value > 0:
+        return 1 if (row["actual_win"] == 1 or margin >= -spread_value) else 0
+    return np.nan
 
-if "game_id" in eval_df.columns:
-    runline_plays = eval_df[eval_df["run_line_ev_flag"] != "No Play"].groupby("game_id").first().reset_index()
-else:
-    runline_plays = eval_df[eval_df["run_line_ev_flag"] != "No Play"].drop_duplicates(subset=["date", "team", "run_line_ev_flag"]).copy()
-runline_plays = runline_plays[runline_plays["run_line_ev_flag"] == runline_plays["team"]]
-runline_plays["run_line_correct"] = runline_plays.apply(calc_run_line_pick, axis=1)
-rl_correct = runline_plays[runline_plays["run_line_correct"] == 1].shape[0]
-rl_incorrect = runline_plays[runline_plays["run_line_correct"] == 0].shape[0]
-rl_total = rl_correct + rl_incorrect
-run_line_accuracy = rl_correct / rl_total if rl_total > 0 else np.nan
-print(f"Run Line Pick Accuracy: {rl_correct}/{rl_total} ({run_line_accuracy:.2%})")
 
-# Evaluate Totals Picks:
-# Compute game total using results_df (one row per game)
-results_df["game_total"] = results_df["home_score"] + results_df["away_score"]
-
-if "game_id" in eval_df.columns:
-    # Group by game_id, total, and total_play to ensure one totals pick per game.
-    totals_eval = eval_df[eval_df["total_play"].isin(["Over", "Under"])].groupby(["game_id", "total", "total_play"]).first().reset_index()
-    # Merge game_total from results_df using game_id
-    totals_eval = totals_eval.merge(results_df[["game_id", "game_total"]].drop_duplicates(subset=["game_id"]), on="game_id", how="left")
-else:
-    # Fallback: if game_id is not available, deduplicate using a combination of date, team, total, and total_play,
-    # and merge on date.
-    totals_eval = eval_df[eval_df["total_play"].isin(["Over", "Under"])].drop_duplicates(subset=["date", "team", "total", "total_play"]).copy()
-    totals_eval = totals_eval.merge(results_df[["date", "game_total"]].drop_duplicates(subset=["date"]), on="date", how="left")
-
-def calc_total_pick_row(row):
+def _calc_total_pick(row):
     try:
-        model_total = float(row["total"])
-    except:
+        line = float(row["total"])
+    except Exception:
         return np.nan
-    game_total = row["game_total"]
-    if pd.isna(game_total):
+    actual = row["game_total"]
+    if pd.isna(actual):
         return np.nan
-    if row["total_play"].strip().lower() == "over":
-        if game_total > model_total:
-            return 1
-        elif game_total == model_total:
-            return np.nan  # push
-        else:
-            return 0
-    elif row["total_play"].strip().lower() == "under":
-        if game_total < model_total:
-            return 1
-        elif game_total == model_total:
-            return np.nan  # push
-        else:
-            return 0
-    else:
-        return np.nan
+    direction = row["total_play"].strip().lower()
+    if direction == "over":
+        return 1 if actual > line else (np.nan if actual == line else 0)
+    elif direction == "under":
+        return 1 if actual < line else (np.nan if actual == line else 0)
+    return np.nan
 
-totals_eval["total_pick_correct"] = totals_eval.apply(calc_total_pick_row, axis=1)
 
-# Separate overs and unders
-overs_eval = totals_eval[totals_eval["total_play"].str.strip().str.lower() == "over"].copy()
-unders_eval = totals_eval[totals_eval["total_play"].str.strip().str.lower() == "under"].copy()
-overs_eval = overs_eval.dropna(subset=["total_pick_correct"])
-unders_eval = unders_eval.dropna(subset=["total_pick_correct"])
+def main():
+    """Run full evaluation and write results to model_evaluation table."""
+    model_df = pd.read_sql_table("model_outputs_season", con=engine)
+    games_df = pd.read_sql_table("games", con=engine)
 
-overs_total = len(overs_eval)
-unders_total = len(unders_eval)
-overs_correct = overs_eval["total_pick_correct"].sum()
-unders_correct = unders_eval["total_pick_correct"].sum()
-overs_accuracy = overs_correct / overs_total if overs_total > 0 else np.nan
-unders_accuracy = unders_correct / unders_total if unders_total > 0 else np.nan
+    games_df = games_df[games_df["status"] == "Final"].dropna(subset=["home_score", "away_score"])
+    if games_df.empty:
+        print("  No completed games to evaluate against.")
+        return
 
-print(f"Totals Over Pick Accuracy: {overs_correct}/{overs_total} ({overs_accuracy:.2%})")
-print(f"Totals Under Pick Accuracy: {unders_correct}/{unders_total} ({unders_accuracy:.2%})")
-from sqlalchemy import Table, MetaData
-from sqlalchemy.dialects.postgresql import insert
-
-metadata = MetaData()
-metadata.reflect(bind=engine)
-model_evaluation = metadata.tables["model_evaluation"]
-
-today = pd.to_datetime(eval_df["date"].max()).date()
-
-# Daily totals
-daily_total_predictions = eval_df.shape[0]
-daily_total_correct = (eval_df["pred_win"] == eval_df["actual_win"]).sum()
-daily_total_accuracy = daily_total_correct / daily_total_predictions
-
-# Daily averages
-average_total_diff = abs(eval_df["expected_runs"] - eval_df["actual_runs"]).mean()
-average_win_prob = eval_df["win_prob"].mean()
-
-# Insert or update daily evaluation
-with engine.begin() as conn:
-    conn.execute(
-        insert(model_evaluation).values(
-            date=today,
-            total_correct=int(daily_total_correct),
-            total_predictions=int(daily_total_predictions),
-            total_accuracy=round(float(daily_total_accuracy), 2),
-            ml_correct=int(ml_correct),
-            ml_predictions=int(ml_total),
-            ml_accuracy=round(float(ml_accuracy), 2),
-            run_line_correct=int(rl_correct),
-            run_line_predictions=int(rl_total),
-            run_line_accuracy=round(float(run_line_accuracy), 2),
-            average_total_diff=round(float(average_total_diff), 2),
-            average_win_prob=round(float(average_win_prob), 2),
-        ).on_conflict_do_update(
-            index_elements=["date"],
-            set_={
-                "total_correct": int(daily_total_correct),
-                "total_predictions": int(daily_total_predictions),
-                "total_accuracy": round(float(daily_total_accuracy), 2),
-                "ml_correct": int(ml_correct),
-                "ml_predictions": int(ml_total),
-                "ml_accuracy": round(float(ml_accuracy), 2),
-                "run_line_correct": int(rl_correct),
-                "run_line_predictions": int(rl_total),
-                "run_line_accuracy": round(float(run_line_accuracy), 2),
-                "average_total_diff": round(float(average_total_diff), 2),
-                "average_win_prob": round(float(average_win_prob), 2),
-            }
-        )
+    games_df["winning_team"] = np.where(
+        games_df["home_score"] > games_df["away_score"],
+        games_df["home_team"],
+        games_df["away_team"],
     )
-    # Fetch and display the inserted row to confirm
-    result = conn.execute(model_evaluation.select().where(model_evaluation.c.date == today)).fetchone()
-    print("\n🔎 Retrieved from DB:")
-    print(dict(result._mapping))
+
+    # Reshape games: one row per team
+    home_df = games_df.rename(columns={"home_team": "team", "home_score": "actual_runs"})[
+        ["game_date", "game_pk", "team", "actual_runs", "winning_team"]
+    ]
+    away_df = games_df.rename(columns={"away_team": "team", "away_score": "actual_runs"})[
+        ["game_date", "game_pk", "team", "actual_runs", "winning_team"]
+    ]
+    home_df["actual_margin"] = games_df["home_score"].values - games_df["away_score"].values
+    away_df["actual_margin"] = games_df["away_score"].values - games_df["home_score"].values
+    all_results = pd.concat([home_df, away_df], ignore_index=True)
+
+    # Merge predictions with results
+    eval_df = pd.merge(
+        model_df,
+        all_results[["game_pk", "game_date", "team", "actual_runs", "winning_team", "actual_margin"]],
+        on=["game_pk", "team"],
+        how="inner",
+    ).dropna(subset=["actual_runs"])
+
+    if eval_df.empty:
+        print("  No predictions matched to completed games yet.")
+        return
+
+    # Win prediction accuracy
+    eval_df["actual_win"] = (eval_df["team"] == eval_df["winning_team"]).astype(int)
+    eval_df["pred_win"] = (eval_df["win_prob"] > 0.5).astype(int)
+
+    accuracy = (eval_df["pred_win"] == eval_df["actual_win"]).mean()
+    mae = abs(eval_df["expected_runs"] - eval_df["actual_runs"]).mean()
+    print(f"  Win accuracy: {accuracy:.2%} | Runs MAE: {mae:.3f} | {len(eval_df)} predictions evaluated")
+
+    # Moneyline picks
+    ml_plays = eval_df[eval_df["ev_flag"] == eval_df["team"]].drop_duplicates(subset=["game_pk"])
+    ml_correct = (ml_plays["actual_win"] == 1).sum()
+    ml_total = len(ml_plays)
+    ml_accuracy = ml_correct / ml_total if ml_total > 0 else np.nan
+    print(f"  ML picks: {ml_correct}/{ml_total} ({ml_accuracy:.2%})" if ml_total > 0 else "  ML picks: none")
+
+    # Run line picks
+    rl_plays = eval_df[eval_df["run_line_ev_flag"] == eval_df["team"]].drop_duplicates(subset=["game_pk"])
+    rl_plays["run_line_correct"] = rl_plays.apply(_calc_run_line_pick, axis=1)
+    rl_correct = int(rl_plays["run_line_correct"].sum()) if not rl_plays.empty else 0
+    rl_total = int(rl_plays["run_line_correct"].notna().sum())
+    rl_accuracy = rl_correct / rl_total if rl_total > 0 else np.nan
+    print(f"  RL picks: {rl_correct}/{rl_total} ({rl_accuracy:.2%})" if rl_total > 0 else "  RL picks: none")
+
+    # Totals picks
+    games_df["game_total"] = games_df["home_score"] + games_df["away_score"]
+    totals_eval = (
+        eval_df[eval_df["total_play"].isin(["Over", "Under"])]
+        .groupby(["game_pk", "total", "total_play"])
+        .first()
+        .reset_index()
+    )
+    totals_eval = totals_eval.merge(
+        games_df[["game_pk", "game_total"]].drop_duplicates(subset=["game_pk"]),
+        on="game_pk",
+        how="left",
+    )
+    totals_eval["total_pick_correct"] = totals_eval.apply(_calc_total_pick, axis=1)
+    totals_correct = int(totals_eval["total_pick_correct"].sum())
+    totals_total = int(totals_eval["total_pick_correct"].notna().sum())
+    totals_accuracy = totals_correct / totals_total if totals_total > 0 else np.nan
+    print(f"  Totals picks: {totals_correct}/{totals_total} ({totals_accuracy:.2%})" if totals_total > 0 else "  Totals picks: none")
+
+    # Upsert into model_evaluation
+    metadata = MetaData()
+    metadata.reflect(bind=engine)
+    model_evaluation = metadata.tables["model_evaluation"]
+
+    eval_date = pd.to_datetime(eval_df["game_date"].max()).date()
+    total_correct = int((eval_df["pred_win"] == eval_df["actual_win"]).sum())
+    total_predictions = len(eval_df)
+
+    row = {
+        "date": eval_date,
+        "total_correct": total_correct,
+        "total_predictions": total_predictions,
+        "total_accuracy": round(total_correct / total_predictions, 2),
+        "ml_correct": int(ml_correct),
+        "ml_predictions": int(ml_total),
+        "ml_accuracy": round(float(ml_accuracy), 2) if pd.notna(ml_accuracy) else 0.0,
+        "run_line_correct": int(rl_correct),
+        "run_line_predictions": int(rl_total),
+        "run_line_accuracy": round(float(rl_accuracy), 2) if pd.notna(rl_accuracy) else 0.0,
+        "average_total_diff": round(float(mae), 2),
+        "average_win_prob": round(float(eval_df["win_prob"].mean()), 2),
+    }
+
+    update_cols = {k: v for k, v in row.items() if k != "date"}
+
+    with engine.begin() as conn:
+        conn.execute(
+            insert(model_evaluation)
+            .values(**row)
+            .on_conflict_do_update(index_elements=["date"], set_=update_cols)
+        )
+
+    print(f"  Evaluation written for {eval_date}")
+
+
+if __name__ == "__main__":
+    main()
