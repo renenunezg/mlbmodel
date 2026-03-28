@@ -77,6 +77,7 @@ def fetch_schedule(game_date: date = None) -> pd.DataFrame:
     params = {
         "sportId": 1,
         "date": date_str,
+        "gameType": "R",  # Regular season only (excludes spring training)
         "hydrate": "probablePitcher(note),venue,team",
     }
     resp = requests.get(f"{BASE_URL}/schedule", params=params)
