@@ -265,6 +265,10 @@ def fetch_and_load_odds():
     if "scraped_at" not in insert_df.columns:
         insert_df["scraped_at"] = pd.Timestamp.utcnow()
 
+    # Drop duplicate (game_pk, team, book) rows — keep last (most recent)
+    key_cols = [c for c in ["game_pk", "team", "book"] if c in insert_df.columns]
+    insert_df = insert_df.drop_duplicates(subset=key_cols, keep="last")
+
     game_pks = insert_df["game_pk"].unique().tolist()
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM odds WHERE game_pk = ANY(:pks)"), {"pks": game_pks})
