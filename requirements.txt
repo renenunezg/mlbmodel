@@ -11,4 +11,5 @@ lxml
 MLB-StatsAPI
 xgboost
 scikit-learn
+pybaseball
 streamlit

@@ -321,9 +321,14 @@ def main():
     print(f"\n{'=' * 50}")
     if failed:
         print(f"Pipeline finished in {elapsed:.0f}s with {len(failed)} error(s): {', '.join(failed)}")
+        return failed
     else:
         print(f"Pipeline finished in {elapsed:.0f}s — all steps OK")
+        return []
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    failed = main()
+    if failed:
+        sys.exit(1)
