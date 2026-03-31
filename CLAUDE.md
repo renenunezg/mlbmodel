@@ -11,8 +11,8 @@ Predict expected runs per team per MLB game, compare to sportsbook odds, and ide
   - Baseball Savant — park factors (static fallback if scraping fails)
   - The Odds API (`the-odds-api.com`) — betting odds
 - **Model**: XGBoost regressor (11 features) with Poisson-based win probabilities
-- **Frontend**: Streamlit (to be replaced with Next.js + Supabase REST API)
-- **Language**: Python 3.13
+- **Frontend**: Next.js 16 (App Router) + Tailwind CSS + shadcn/ui + Supabase JS client
+- **Language**: Python 3.13 (backend), TypeScript (frontend)
 
 ## Project Structure
 ```
@@ -28,8 +28,18 @@ backend/
   team_mappings.py      # Team name normalization (3-letter codes)
   model.py              # XGBoost model: 11 features, TimeSeriesSplit CV, Poisson win probs
   evaluate_model.py     # Post-game evaluation metrics
-frontend/
-  app.py                # Streamlit dashboard (to be replaced)
+frontend/                 # Next.js app (TypeScript, Tailwind, shadcn/ui)
+  src/
+    app/
+      page.tsx            #   Today's Picks — game cards with +EV flags
+      history/page.tsx    #   Season History — filtered table with pagination
+      performance/page.tsx #  Model Performance — accuracy charts + KPIs
+      layout.tsx          #   Root layout with dark theme + nav
+    components/           #   Game cards, badges, filters, charts
+    lib/
+      supabase.ts         #   Supabase client (reads NEXT_PUBLIC_SUPABASE_*)
+      types.ts            #   TypeScript interfaces for DB rows
+      utils.ts            #   Formatting helpers
 ```
 
 ## Model Features (11)
@@ -64,7 +74,7 @@ pip install -r requirements.txt
 python pipeline.py
 
 # Run frontend
-streamlit run frontend/app.py
+cd frontend && npm run dev
 ```
 
 ## Database
@@ -85,10 +95,11 @@ All tables in Supabase use `game_pk` as the universal join key. Schema managed v
 - **Phase 2 — Database**: Supabase schema with 10 tables, all joined on `game_pk`.
 - **Phase 3 — Model improvements**: Expanded to 11 features, TimeSeriesSplit CV with GridSearchCV, Poisson-based win probabilities, early-season fallbacks. Replaced FanGraphs scraping with Statcast-computed stats (FanGraphs blocked by Cloudflare).
 - **Phase 4 — Pipeline**: Consolidated 9-step daily_runner.py into 6-step pipeline.py with timing, batch DB ops, and proper error handling.
+- **Phase 5 — Frontend**: Migrated from Streamlit to Next.js 16 with App Router, Tailwind, shadcn/ui. Three pages: Today's Picks (game cards with +EV badges), Season History (filtered/paginated table), Model Performance (Recharts accuracy charts + KPIs). Data fetched via Supabase JS client in server components with 5-min revalidation.
 
 ## Known Issues
 - **Doubleheader odds matching**: The Odds API doesn't return `game_pk`, so odds are matched by team name. For doubleheaders, this can't distinguish Game 1 vs Game 2 — needs start time matching or Odds API event ID correlation.
+- **Supabase RLS**: Before public deploy, enable Row Level Security on frontend-facing tables with SELECT-only policies for the `anon` role.
 
 ## Next Steps
-- **Phase 5 — Frontend**: Migrate from Streamlit to Next.js + Supabase REST API
 - **Phase 6 — Validation**: Backtest with 2024-2025 data, dry run, monitor opening week
