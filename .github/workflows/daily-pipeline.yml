@@ -2,8 +2,8 @@ name: Daily MLB Pipeline
 
 on:
   schedule:
-    # Run at 9:00 AM ET (13:00 UTC) daily during MLB season
-    - cron: "0 13 * * *"
+    # Run at 9:00 AM PST (17:00 UTC) daily
+    - cron: "0 17 * * *"
   workflow_dispatch: # Allow manual trigger
 
 jobs:
@@ -19,14 +19,6 @@ jobs:
         with:
           python-version: "3.13"
           cache: "pip"
-
-      - name: Enable IPv6 on runner
-        run: |
-          sudo sysctl -w net.ipv6.conf.all.disable_ipv6=0
-          sudo sysctl -w net.ipv6.conf.default.disable_ipv6=0
-          sudo sysctl -w net.ipv6.conf.lo.disable_ipv6=0
-          # Verify IPv6 connectivity
-          curl -6 --max-time 5 https://ifconfig.co/ip || echo "IPv6 not available on this runner"
 
       - name: Install dependencies
         run: pip install -r requirements.txt
