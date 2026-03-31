@@ -2,8 +2,8 @@ name: Daily MLB Pipeline
 
 on:
   schedule:
-    # Run at 9:00 AM ET (13:00 UTC) daily during MLB season
-    - cron: "0 13 * * *"
+    # Run at 9:00 AM PST (17:00 UTC) daily
+    - cron: "0 17 * * *"
   workflow_dispatch: # Allow manual trigger
 
 jobs:

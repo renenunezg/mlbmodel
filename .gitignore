@@ -3,4 +3,5 @@ env/
 __pycache__/
 .env
 CLAUDE.md
+AGENTS.md
 .claude/
