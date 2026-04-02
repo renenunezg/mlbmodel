@@ -1,7 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import type { ModelEvaluation } from "@/lib/types";
 import { AccuracyChart } from "@/components/accuracy-chart";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -29,7 +28,7 @@ export default async function PerformancePage() {
   if (rows.length === 0) {
     return (
       <main className="mx-auto max-w-5xl px-4 py-8">
-        <h1 className="text-2xl font-bold tracking-tight">
+        <h1 className="font-heading text-2xl tracking-tight">
           Model Performance
         </h1>
         <p className="mt-4 text-muted-foreground">
@@ -43,108 +42,76 @@ export default async function PerformancePage() {
   const latest = rows[rows.length - 1];
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-8">
-      <h1 className="mb-6 text-2xl font-bold tracking-tight">
+    <main className="mx-auto max-w-5xl px-4 py-8 space-y-8">
+      <h1 className="font-heading text-2xl tracking-tight">
         Model Performance
       </h1>
 
-      {/* KPI cards */}
-      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm text-muted-foreground">
-              ML Accuracy
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-[#198754]">
-              {pct(latest.ml_accuracy)}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm text-muted-foreground">
-              Run Line Accuracy
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-[#3b82f6]">
-              {pct(latest.run_line_accuracy)}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm text-muted-foreground">
-              Overall Accuracy
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-[#f59e0b]">
-              {pct(latest.total_accuracy)}
-            </p>
-          </CardContent>
-        </Card>
+      {/* KPI inline metrics */}
+      <div className="flex items-baseline gap-8 font-mono text-sm">
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-xs uppercase tracking-wider text-muted-foreground">ML Accuracy</span>
+          <span className="font-bold tabular-nums">{pct(latest.ml_accuracy)}</span>
+        </div>
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-xs uppercase tracking-wider text-muted-foreground">Run Line</span>
+          <span className="font-bold tabular-nums">{pct(latest.run_line_accuracy)}</span>
+        </div>
+        <div className="flex items-baseline gap-1.5">
+          <span className="text-xs uppercase tracking-wider text-muted-foreground">Overall</span>
+          <span className="font-bold tabular-nums">{pct(latest.total_accuracy)}</span>
+        </div>
       </div>
 
       {/* Chart */}
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>Accuracy Over Time</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <AccuracyChart data={rows} />
-        </CardContent>
-      </Card>
+      <div className="border-t border-border pt-6">
+        <h2 className="font-heading text-lg mb-4">Accuracy Over Time</h2>
+        <AccuracyChart data={rows} />
+      </div>
 
       {/* Stats table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Evaluation History</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Overall</TableHead>
-                <TableHead>ML</TableHead>
-                <TableHead>Run Line</TableHead>
-                <TableHead className="text-right">Avg Total Diff</TableHead>
+      <div className="border-t border-border pt-6">
+        <h2 className="font-heading text-lg mb-4">Evaluation History</h2>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date</TableHead>
+              <TableHead>Overall</TableHead>
+              <TableHead>ML</TableHead>
+              <TableHead>Run Line</TableHead>
+              <TableHead className="text-right">Avg Total Diff</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {[...rows].reverse().map((row) => (
+              <TableRow key={row.date}>
+                <TableCell className="font-medium">{row.date}</TableCell>
+                <TableCell>
+                  {row.total_correct}/{row.total_predictions}{" "}
+                  <span className="text-muted-foreground">
+                    ({pct(row.total_accuracy)})
+                  </span>
+                </TableCell>
+                <TableCell>
+                  {row.ml_correct}/{row.ml_predictions}{" "}
+                  <span className="text-muted-foreground">
+                    ({pct(row.ml_accuracy)})
+                  </span>
+                </TableCell>
+                <TableCell>
+                  {row.run_line_correct}/{row.run_line_predictions}{" "}
+                  <span className="text-muted-foreground">
+                    ({pct(row.run_line_accuracy)})
+                  </span>
+                </TableCell>
+                <TableCell className="text-right">
+                  {row.average_total_diff?.toFixed(2) ?? "\u2014"}
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {[...rows].reverse().map((row) => (
-                <TableRow key={row.date}>
-                  <TableCell className="font-medium">{row.date}</TableCell>
-                  <TableCell>
-                    {row.total_correct}/{row.total_predictions}{" "}
-                    <span className="text-muted-foreground">
-                      ({pct(row.total_accuracy)})
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    {row.ml_correct}/{row.ml_predictions}{" "}
-                    <span className="text-muted-foreground">
-                      ({pct(row.ml_accuracy)})
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    {row.run_line_correct}/{row.run_line_predictions}{" "}
-                    <span className="text-muted-foreground">
-                      ({pct(row.run_line_accuracy)})
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {row.average_total_diff?.toFixed(2) ?? "\u2014"}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </main>
   );
 }
