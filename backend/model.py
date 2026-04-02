@@ -446,8 +446,8 @@ def fit_calibrator(df):
             outcomes.append((rows.index[0], 0.5))  # tie
             outcomes.append((rows.index[1], 0.5))
 
-    if len(outcomes) < 50:
-        print(f"  Only {len(outcomes)} outcomes — skipping calibration (need >= 50)")
+    if len(outcomes) < 400:
+        print(f"  Only {len(outcomes)} outcomes — skipping calibration (need >= 400)")
         return None
 
     idx, y_true = zip(*outcomes)
