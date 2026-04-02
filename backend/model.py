@@ -402,7 +402,7 @@ def compute_predictions(df, model, calibrator=None):
         df.loc[group.index[group["is_home"] == 1], "win_prob"] = round(p_home, 3)
         df.loc[group.index[group["is_home"] == 0], "win_prob"] = round(p_away, 3)
 
-    df["win_prob"] = df["win_prob"].clip(0.001, 0.999)
+    df["win_prob"] = df["win_prob"].clip(0.05, 0.95)
 
     if calibrator is not None:
         df["win_prob"] = calibrator.predict(df["win_prob"].values)
@@ -412,7 +412,7 @@ def compute_predictions(df, model, calibrator=None):
                 total = df.loc[group.index, "win_prob"].sum()
                 if total > 0:
                     df.loc[group.index, "win_prob"] = df.loc[group.index, "win_prob"] / total
-        df["win_prob"] = df["win_prob"].clip(0.001, 0.999)
+        df["win_prob"] = df["win_prob"].clip(0.05, 0.95)
 
     df["our_odds"] = df["win_prob"].apply(convert_to_odds)
     return df
@@ -454,7 +454,7 @@ def fit_calibrator(df):
     y_pred = df.loc[list(idx), "win_prob"].values
     y_true = np.array(y_true)
 
-    calibrator = IsotonicRegression(y_min=0.001, y_max=0.999, out_of_bounds="clip")
+    calibrator = IsotonicRegression(y_min=0.05, y_max=0.95, out_of_bounds="clip")
     calibrator.fit(y_pred, y_true)
     print(f"  Isotonic calibrator fit on {len(y_true)} outcomes ({len(y_true) // 2} games)")
     return calibrator
@@ -518,6 +518,7 @@ def main():
         )
     today_pks = set(today_pks_df["game_pk"].tolist())
     today_df = df[df["game_pk"].isin(today_pks)].copy()
+    today_df["game_date"] = today_str  # upcoming games have NaT; set explicitly
 
     if today_df.empty:
         print(f"  No games found for today ({today_str}). Nothing to predict.")

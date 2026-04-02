@@ -66,7 +66,7 @@ def main():
         ).fetchone()
         if wp_range and wp_range[0] is not None:
             check(f"win_prob range [{wp_range[0]:.3f}, {wp_range[1]:.3f}]",
-                  wp_range[0] >= 0.01 and wp_range[1] <= 0.99)
+                  wp_range[0] >= 0.05 and wp_range[1] <= 0.95)
         else:
             check("win_prob exist", False)
 
