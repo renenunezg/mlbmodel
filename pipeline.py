@@ -142,17 +142,20 @@ def update_scores_and_schedule():
         print("  No starters matched to games in DB")
         return
 
+    # Deduplicate — keep last entry per (game_pk, team) to avoid unique constraint violations
+    starters = starters.drop_duplicates(subset=["game_pk", "team"], keep="last")
+
     with engine.begin() as conn:
-        game_pks = starters["game_pk"].unique().tolist()
-        conn.execute(
-            text("DELETE FROM probable_starters WHERE game_pk = ANY(:pks)"),
-            {"pks": game_pks},
-        )
         for _, s in starters.iterrows():
             conn.execute(
                 text("""
                     INSERT INTO probable_starters (game_pk, team, pitcher_name, pitcher_id, handedness, is_home)
                     VALUES (:game_pk, :team, :pitcher_name, :pitcher_id, :handedness, :is_home)
+                    ON CONFLICT (game_pk, team) DO UPDATE SET
+                        pitcher_name = EXCLUDED.pitcher_name,
+                        pitcher_id = EXCLUDED.pitcher_id,
+                        handedness = EXCLUDED.handedness,
+                        is_home = EXCLUDED.is_home
                 """),
                 {
                     "game_pk": int(s["game_pk"]),
@@ -234,7 +237,7 @@ def fetch_and_load_odds():
 
     with engine.connect() as conn:
         games = pd.read_sql(
-            text("SELECT game_pk, game_date, home_team, away_team FROM games WHERE game_date IN (:d1, :d2)"),
+            text("SELECT game_pk, game_date, home_team, away_team, start_time FROM games WHERE game_date IN (:d1, :d2)"),
             conn,
             params={"d1": str(today), "d2": str(tomorrow)},
         )
@@ -243,13 +246,38 @@ def fetch_and_load_odds():
         print("  No games in DB to match odds against")
         return
 
-    # Simple team -> game_pk lookup
-    team_to_game = {}
+    # Build team -> [(game_pk, start_time), ...] for time-aware matching
+    from collections import defaultdict
+    team_games = defaultdict(list)
     for _, g in games.iterrows():
-        team_to_game[g["home_team"]] = int(g["game_pk"])
-        team_to_game[g["away_team"]] = int(g["game_pk"])
+        entry = (int(g["game_pk"]), g.get("start_time"))
+        team_games[g["home_team"]].append(entry)
+        team_games[g["away_team"]].append(entry)
 
-    odds["game_pk"] = odds["team"].map(team_to_game)
+    def _match_game_pk(team, commence_time):
+        """Match odds to game_pk by team, using nearest start_time for doubleheaders."""
+        candidates = team_games.get(team, [])
+        if not candidates:
+            return None
+        if len(candidates) == 1:
+            return candidates[0][0]
+        # Multiple games (doubleheader) — pick closest by start time
+        if pd.notna(commence_time):
+            ct = pd.to_datetime(commence_time)
+            best_pk, best_diff = None, None
+            for pk, st in candidates:
+                if pd.notna(st):
+                    diff = abs((pd.to_datetime(st) - ct).total_seconds())
+                    if best_diff is None or diff < best_diff:
+                        best_pk, best_diff = pk, diff
+            if best_pk is not None:
+                return best_pk
+        # Fallback: return last game_pk
+        return candidates[-1][0]
+
+    odds["game_pk"] = odds.apply(
+        lambda row: _match_game_pk(row["team"], row.get("commence_time")), axis=1
+    )
 
     matched = odds.dropna(subset=["game_pk"])
     if matched.empty:
