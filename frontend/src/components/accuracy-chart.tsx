@@ -32,56 +32,58 @@ export function AccuracyChart({ data }: AccuracyChartProps) {
         data={data}
         margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
       >
-        <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+        <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
         <XAxis
           dataKey="date"
           tickFormatter={formatDateLabel}
-          tick={{ fill: "#a1a1aa", fontSize: 12 }}
-          stroke="#555"
+          tick={{ fill: "#52525b", fontSize: 11, fontFamily: "var(--font-geist-mono)" }}
+          stroke="#d4d4d8"
         />
         <YAxis
           domain={[0, 1]}
           tickFormatter={formatPercent}
-          tick={{ fill: "#a1a1aa", fontSize: 12 }}
-          stroke="#555"
+          tick={{ fill: "#52525b", fontSize: 11, fontFamily: "var(--font-geist-mono)" }}
+          stroke="#d4d4d8"
         />
         <Tooltip
           formatter={(value) => formatPercent(Number(value))}
           labelFormatter={(label) => formatDateLabel(String(label))}
           contentStyle={{
-            backgroundColor: "#1c1c1e",
-            border: "1px solid #333",
-            borderRadius: "8px",
-            color: "#e4e4e7",
+            backgroundColor: "#ffffff",
+            border: "1px solid #d4d4d8",
+            borderRadius: "2px",
+            color: "#18181b",
+            fontFamily: "var(--font-geist-mono)",
+            fontSize: "12px",
           }}
         />
-        <Legend />
+        <Legend wrapperStyle={{ fontFamily: "var(--font-geist-mono)", fontSize: "11px" }} />
         <Line
           type="monotone"
           dataKey="ml_accuracy"
           name="ML Accuracy"
-          stroke="#198754"
-          strokeWidth={2}
+          stroke="#2d7a4f"
+          strokeWidth={1.5}
           dot={false}
-          activeDot={{ r: 4 }}
+          activeDot={{ r: 3 }}
         />
         <Line
           type="monotone"
           dataKey="run_line_accuracy"
-          name="Run Line Accuracy"
-          stroke="#3b82f6"
-          strokeWidth={2}
+          name="Run Line"
+          stroke="#4a6fa5"
+          strokeWidth={1.5}
           dot={false}
-          activeDot={{ r: 4 }}
+          activeDot={{ r: 3 }}
         />
         <Line
           type="monotone"
           dataKey="total_accuracy"
-          name="Overall Accuracy"
-          stroke="#f59e0b"
-          strokeWidth={2}
+          name="Overall"
+          stroke="#b08a30"
+          strokeWidth={1.5}
           dot={false}
-          activeDot={{ r: 4 }}
+          activeDot={{ r: 3 }}
         />
       </LineChart>
     </ResponsiveContainer>
