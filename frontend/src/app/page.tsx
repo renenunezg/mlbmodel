@@ -6,9 +6,14 @@ import { SummaryStats } from "@/components/summary-stats";
 export const revalidate = 300;
 
 export default async function Page() {
+  const today = new Date().toLocaleDateString("en-CA", {
+    timeZone: "America/Los_Angeles",
+  }); // "YYYY-MM-DD"
+
   const { data: predictions } = await supabase
     .from("model_outputs")
     .select("*")
+    .eq("date", today)
     .order("game_pk");
 
   if (!predictions || predictions.length === 0) {
