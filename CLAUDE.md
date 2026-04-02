@@ -17,6 +17,8 @@ Predict expected runs per team per MLB game, compare to sportsbook odds, and ide
 ## Project Structure
 ```
 pipeline.py             # Daily pipeline: fetch data, update DB, train model, evaluate
+verify_pipeline.py      # Post-pipeline sanity checks (10 checks, exits 0/1)
+backtest.py             # Walk-forward backtesting on historical seasons
 requirements.txt
 backend/
   data/                 # Data fetchers
@@ -73,6 +75,12 @@ pip install -r requirements.txt
 # Run daily pipeline (fetches data, updates scores, trains model, evaluates)
 python pipeline.py
 
+# Verify pipeline output
+python verify_pipeline.py
+
+# Run backtest on historical season
+python backtest.py --season 2025
+
 # Run frontend
 cd frontend && npm run dev
 ```
@@ -86,7 +94,7 @@ All tables in Supabase use `game_pk` as the universal join key. Schema managed v
 1. **Schedule & scores** — Fetch last 3 days + today + tomorrow schedules, upsert games, finalize scores, refresh probable starters
 2. **Statcast stats** — Compute pitcher xFIP/WHIP/K9, bullpen stats, and team batting splits from Statcast pitch data (single cached fetch)
 3. **Park factors** — Load from Baseball Savant if not already cached in DB
-4. **Odds** — Fetch today's lines from The Odds API, match to `game_pk` by team+date, upsert
+4. **Odds** — Fetch today's lines from The Odds API, match to `game_pk` by team + nearest start time (handles doubleheaders), upsert
 5. **Model** — Train XGBoost (TimeSeriesSplit CV), predict expected runs, Poisson win probs, write to `model_outputs` + `model_outputs_season`
 6. **Evaluation** — Compare predictions to actual results, write accuracy metrics to `model_evaluation`
 
@@ -96,10 +104,21 @@ All tables in Supabase use `game_pk` as the universal join key. Schema managed v
 - **Phase 3 — Model improvements**: Expanded to 11 features, TimeSeriesSplit CV with GridSearchCV, Poisson-based win probabilities, early-season fallbacks. Replaced FanGraphs scraping with Statcast-computed stats (FanGraphs blocked by Cloudflare).
 - **Phase 4 — Pipeline**: Consolidated 9-step daily_runner.py into 6-step pipeline.py with timing, batch DB ops, and proper error handling.
 - **Phase 5 — Frontend**: Migrated from Streamlit to Next.js 16 with App Router, Tailwind, shadcn/ui. Three pages: Today's Picks (game cards with +EV badges), Season History (filtered/paginated table), Model Performance (Recharts accuracy charts + KPIs). Data fetched via Supabase JS client in server components with 5-min revalidation.
+- **Phase 6 — Validation & Monitoring**:
+  - Doubleheader odds matching fixed (time-aware matching via `commence_time` + `start_time`)
+  - First-start pitcher fallback: prior-season Statcast stats cached to parquet, used when current-season data unavailable
+  - Pipeline verification script (`verify_pipeline.py`) with 10 sanity checks, added to GitHub Actions
+  - Walk-forward backtesting script (`backtest.py`) for historical season validation
+  - Frontend: game cards show final scores, sorted by start time, improved mobile layout
+  - Frontend: history page shows actual scores and W/L results with color-coded accuracy
+  - Frontend: filter team abbreviations fixed to match DB codes
+  - Frontend: nav shows today's date
 
 ## Known Issues
-- **Doubleheader odds matching**: The Odds API doesn't return `game_pk`, so odds are matched by team name. For doubleheaders, this can't distinguish Game 1 vs Game 2 — needs start time matching or Odds API event ID correlation.
 - **Supabase RLS**: Before public deploy, enable Row Level Security on frontend-facing tables with SELECT-only policies for the `anon` role.
+- **First-start pitcher cache**: Prior-season Statcast fetch takes ~30 min on first run. Cached to `cache/` directory after that.
+- **Statcast availability**: Baseball Savant data may be delayed 1-2 days at season start. Pipeline handles empty data gracefully.
 
 ## Next Steps
-- **Phase 6 — Validation**: Backtest with 2024-2025 data, dry run, monitor opening week
+- **Phase 7 — Production hardening**: Enable Supabase RLS, add error alerting (email/Slack on pipeline failure), monitor model accuracy through first month
+- **Phase 8 — Model iteration**: Add features (weather, umpire, rest days), tune hyperparameters based on backtest results, consider ensemble methods

@@ -40,3 +40,10 @@ jobs:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
           PYTHONPATH: "."
         run: python pipeline.py
+
+      - name: Verify pipeline output
+        if: always()
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PYTHONPATH: "."
+        run: python verify_pipeline.py

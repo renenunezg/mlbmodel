@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import { ModelOutput, GameInfo } from "@/lib/types";
-import { formatDate, formatOdds, formatRuns, formatPct } from "@/lib/utils";
+import { cn, formatDate, formatOdds, formatRuns, formatPct } from "@/lib/utils";
 import Filters from "@/components/filters";
 import {
   Table,
@@ -105,6 +105,8 @@ export default async function HistoryPage({
                 <TableHead className="text-right">Win Prob</TableHead>
                 <TableHead className="text-right">Model Odds</TableHead>
                 <TableHead className="text-right">Book ML</TableHead>
+                <TableHead className="text-right">Score</TableHead>
+                <TableHead className="text-center">Result</TableHead>
                 <TableHead className="text-center">+EV</TableHead>
                 <TableHead className="text-center">RL +EV</TableHead>
                 <TableHead className="text-center">Total Play</TableHead>
@@ -120,6 +122,41 @@ export default async function HistoryPage({
                   <TableCell className="text-right">{formatPct(row.win_prob)}</TableCell>
                   <TableCell className="text-right">{formatOdds(row.our_odds)}</TableCell>
                   <TableCell className="text-right">{formatOdds(row.moneyline)}</TableCell>
+                  {(() => {
+                    const game = gamesMap[row.game_pk];
+                    const isFinal = game?.status === "Final";
+                    const isHome = game?.home_team === row.team;
+                    const teamScore = isHome ? game?.home_score : game?.away_score;
+                    const oppScore = isHome ? game?.away_score : game?.home_score;
+                    const won = teamScore != null && oppScore != null ? teamScore > oppScore : null;
+                    const predictedWin = row.win_prob > 0.5;
+                    const correctPick = won != null ? won === predictedWin : null;
+                    return (
+                      <>
+                        <TableCell className="text-right tabular-nums">
+                          {isFinal && teamScore != null && oppScore != null
+                            ? `${teamScore}-${oppScore}`
+                            : "—"}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {won != null ? (
+                            <span
+                              className={cn(
+                                "font-semibold",
+                                correctPick
+                                  ? "text-green-600 dark:text-green-400"
+                                  : "text-red-600 dark:text-red-400"
+                              )}
+                            >
+                              {won ? "W" : "L"}
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </TableCell>
+                      </>
+                    );
+                  })()}
                   <TableCell className="text-center">
                     <span
                       className={
