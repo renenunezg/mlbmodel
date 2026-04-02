@@ -1,5 +1,4 @@
 import type { GameMatchup } from "@/lib/types";
-import { Card, CardContent } from "@/components/ui/card";
 
 interface SummaryStatsProps {
   matchups: GameMatchup[];
@@ -27,14 +26,14 @@ export function SummaryStats({ matchups }: SummaryStatsProps) {
   ];
 
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="flex items-baseline gap-6 font-mono text-sm">
       {stats.map((stat) => (
-        <Card key={stat.label} size="sm">
-          <CardContent className="flex flex-col items-center py-2">
-            <span className="text-2xl font-bold tabular-nums">{stat.value}</span>
-            <span className="text-xs text-muted-foreground">{stat.label}</span>
-          </CardContent>
-        </Card>
+        <div key={stat.label} className="flex items-baseline gap-1.5">
+          <span className="text-xs uppercase tracking-wider text-muted-foreground">
+            {stat.label}
+          </span>
+          <span className="font-bold tabular-nums">{stat.value}</span>
+        </div>
       ))}
     </div>
   );

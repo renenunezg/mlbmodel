@@ -38,11 +38,11 @@ export default function Filters() {
   }, [router, pathname]);
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
+    <div className="flex flex-wrap items-center gap-3 font-mono text-xs">
       <select
         value={team}
         onChange={(e) => updateParam("team", e.target.value)}
-        className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+        className="h-8 border border-input bg-transparent px-2"
       >
         <option value="">All Teams</option>
         {MLB_TEAMS.map((t) => (
@@ -52,30 +52,30 @@ export default function Filters() {
         ))}
       </select>
 
-      <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
+      <label className="flex items-center gap-1.5 text-muted-foreground">
         From
         <input
           type="date"
           value={from}
           onChange={(e) => updateParam("from", e.target.value)}
-          className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+          className="h-8 border border-input bg-transparent px-2"
         />
       </label>
 
-      <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
+      <label className="flex items-center gap-1.5 text-muted-foreground">
         To
         <input
           type="date"
           value={to}
           onChange={(e) => updateParam("to", e.target.value)}
-          className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+          className="h-8 border border-input bg-transparent px-2"
         />
       </label>
 
       {(team || from || to) && (
         <button
           onClick={clearAll}
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm text-muted-foreground hover:bg-muted transition-colors"
+          className="text-muted-foreground underline hover:text-foreground transition-colors"
         >
           Clear
         </button>

@@ -81,7 +81,7 @@ export default async function HistoryPage({
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight">Season History</h1>
+      <h1 className="font-heading text-2xl tracking-tight">Season History</h1>
 
       <Filters />
 
@@ -144,8 +144,8 @@ export default async function HistoryPage({
                               className={cn(
                                 "font-semibold",
                                 correctPick
-                                  ? "text-green-600 dark:text-green-400"
-                                  : "text-red-600 dark:text-red-400"
+                                  ? "text-positive"
+                                  : "text-negative"
                               )}
                             >
                               {won ? "W" : "L"}
@@ -161,7 +161,7 @@ export default async function HistoryPage({
                     <span
                       className={
                         row.ev_flag !== "No Play"
-                          ? "text-green-600 dark:text-green-400 font-semibold"
+                          ? "text-positive font-semibold"
                           : "text-muted-foreground"
                       }
                     >
@@ -172,7 +172,7 @@ export default async function HistoryPage({
                     <span
                       className={
                         row.run_line_ev_flag !== "No Play"
-                          ? "text-blue-600 dark:text-blue-400 font-semibold"
+                          ? "text-accent-blue font-semibold"
                           : "text-muted-foreground"
                       }
                     >
@@ -195,12 +195,12 @@ export default async function HistoryPage({
               {page > 1 ? (
                 <Link
                   href={pageUrl(page - 1)}
-                  className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-3 text-sm hover:bg-muted transition-colors"
+                  className="inline-flex h-9 items-center justify-center border border-input bg-background px-3 font-mono text-xs hover:bg-muted transition-colors"
                 >
                   Previous
                 </Link>
               ) : (
-                <span className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-3 text-sm text-muted-foreground opacity-50">
+                <span className="inline-flex h-9 items-center justify-center border border-input bg-background px-3 font-mono text-xs text-muted-foreground opacity-50">
                   Previous
                 </span>
               )}
@@ -210,12 +210,12 @@ export default async function HistoryPage({
               {page < totalPages ? (
                 <Link
                   href={pageUrl(page + 1)}
-                  className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-3 text-sm hover:bg-muted transition-colors"
+                  className="inline-flex h-9 items-center justify-center border border-input bg-background px-3 font-mono text-xs hover:bg-muted transition-colors"
                 >
                   Next
                 </Link>
               ) : (
-                <span className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-3 text-sm text-muted-foreground opacity-50">
+                <span className="inline-flex h-9 items-center justify-center border border-input bg-background px-3 font-mono text-xs text-muted-foreground opacity-50">
                   Next
                 </span>
               )}

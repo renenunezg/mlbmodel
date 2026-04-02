@@ -1,4 +1,4 @@
-import { cn, formatDate, formatRuns, formatPct, formatOdds, formatConfidence } from "@/lib/utils";
+import { cn, formatRuns, formatPct, formatOdds, formatConfidence } from "@/lib/utils";
 import type { GameMatchup, ModelOutput } from "@/lib/types";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { EvBadge } from "@/components/ev-badge";
@@ -9,7 +9,6 @@ interface GameCardProps {
 
 function TeamRow({
   prediction,
-  isHome,
   score,
 }: {
   prediction: ModelOutput;
@@ -22,30 +21,30 @@ function TeamRow({
   const isFinal = score != null;
 
   return (
-    <div className="flex items-center gap-3 py-2">
+    <div className="flex items-center gap-3 py-1.5 font-mono text-sm">
       {/* Team + Starter */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span
             className={cn(
-              "text-sm font-bold tracking-wide",
-              hasEvPlay && "text-green-600 dark:text-green-400"
+              "font-bold tracking-wide",
+              hasEvPlay && "text-positive"
             )}
           >
             {prediction.team}
           </span>
           {isFinal && (
-            <span className="text-sm font-bold tabular-nums">{score}</span>
+            <span className="font-bold tabular-nums">{score}</span>
           )}
         </div>
-        <span className="block truncate text-xs text-muted-foreground">
+        <span className="block truncate text-xs text-muted-foreground font-sans">
           {prediction.starter ?? "TBD"}
         </span>
       </div>
 
       {/* xR */}
       <div className="text-center">
-        <div className="text-sm font-medium tabular-nums">
+        <div className="font-medium tabular-nums">
           {formatRuns(prediction.expected_runs)}
         </div>
         <div className="text-[10px] text-muted-foreground">xR</div>
@@ -53,7 +52,7 @@ function TeamRow({
 
       {/* Win% */}
       <div className="text-center">
-        <div className="text-sm font-medium tabular-nums">
+        <div className="font-medium tabular-nums">
           {formatPct(prediction.win_prob)}
         </div>
         <div className="text-[10px] text-muted-foreground">Win</div>
@@ -63,11 +62,11 @@ function TeamRow({
       <div className="text-center">
         <div
           className={cn(
-            "text-sm font-semibold tabular-nums",
+            "font-semibold tabular-nums",
             isPositiveEdge
-              ? "text-green-600 dark:text-green-400"
+              ? "text-positive"
               : confidence != null
-                ? "text-red-600 dark:text-red-400"
+                ? "text-negative"
                 : "text-muted-foreground"
           )}
         >
@@ -78,7 +77,7 @@ function TeamRow({
 
       {/* Odds: Model / Book */}
       <div className="hidden text-center sm:block">
-        <div className="text-sm tabular-nums">
+        <div className="tabular-nums">
           <span>{formatOdds(prediction.our_odds)}</span>
           <span className="text-muted-foreground mx-0.5">/</span>
           <span className="text-muted-foreground">
@@ -115,21 +114,21 @@ export function GameCard({ matchup }: GameCardProps) {
   return (
     <Card
       size="sm"
-      className={cn(hasEvPlay && "ring-green-500/40 dark:ring-green-400/30")}
+      className={cn(hasEvPlay && "border-l-2 border-l-positive")}
     >
       <CardHeader className="border-b pb-2">
         <div className="flex items-baseline justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold">
+            <span className="font-mono text-sm font-semibold">
               {matchup.away_team} @ {matchup.home_team}
             </span>
             {isFinal && (
-              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              <span className="bg-muted px-1.5 py-0.5 text-[10px] font-mono font-medium text-muted-foreground">
                 Final
               </span>
             )}
           </div>
-          <span className="text-xs text-muted-foreground">
+          <span className="text-xs text-muted-foreground font-mono">
             {matchup.venue && <>{matchup.venue} &middot; </>}
             {startTime && <>{startTime}</>}
           </span>
