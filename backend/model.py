@@ -1,11 +1,15 @@
 import os
+import datetime
+import pytz
 import pandas as pd
 import numpy as np
 from sqlalchemy import create_engine, text
 import xgboost as xgb
+import joblib
 from scipy.stats import poisson
 from sklearn.model_selection import TimeSeriesSplit, GridSearchCV
 from sklearn.metrics import mean_absolute_error, mean_squared_error
+from sklearn.isotonic import IsotonicRegression
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -369,9 +373,12 @@ def flag_runline_ev(row, threshold=0.03):
         return "No Play"
 
 
-def compute_predictions(df, model):
-    """Predict expected runs and compute Poisson-based win probabilities."""
+def compute_predictions(df, model, calibrator=None):
+    """Predict expected runs and compute Poisson-based win probabilities.
 
+    If calibrator is provided, applies isotonic regression to calibrate
+    win probabilities after the Poisson step, then renormalizes per game.
+    """
     df = df.copy()
     df["is_home"] = df["is_home"].astype(int)
 
@@ -396,8 +403,61 @@ def compute_predictions(df, model):
         df.loc[group.index[group["is_home"] == 0], "win_prob"] = round(p_away, 3)
 
     df["win_prob"] = df["win_prob"].clip(0.001, 0.999)
+
+    if calibrator is not None:
+        df["win_prob"] = calibrator.predict(df["win_prob"].values)
+        # Renormalize per game so complementary probs sum to 1
+        for game_pk, group in df.groupby("game_pk"):
+            if len(group) == 2:
+                total = df.loc[group.index, "win_prob"].sum()
+                if total > 0:
+                    df.loc[group.index, "win_prob"] = df.loc[group.index, "win_prob"] / total
+        df["win_prob"] = df["win_prob"].clip(0.001, 0.999)
+
     df["our_odds"] = df["win_prob"].apply(convert_to_odds)
     return df
+
+
+def fit_calibrator(df):
+    """Fit isotonic regression on Poisson win probs vs actual outcomes.
+
+    Args:
+        df: DataFrame with win_prob and actual_runs columns (completed games only).
+
+    Returns:
+        Fitted IsotonicRegression, or None if fewer than 50 outcomes available.
+    """
+    outcomes = []
+    for game_pk, group in df.groupby("game_pk"):
+        if len(group) != 2:
+            continue
+        rows = group.sort_values("is_home")
+        away_runs = rows.iloc[0]["actual_runs"]
+        home_runs = rows.iloc[1]["actual_runs"]
+        if pd.isna(away_runs) or pd.isna(home_runs):
+            continue
+        if home_runs > away_runs:
+            outcomes.append((rows.index[0], 0.0))  # away lost
+            outcomes.append((rows.index[1], 1.0))  # home won
+        elif away_runs > home_runs:
+            outcomes.append((rows.index[0], 1.0))  # away won
+            outcomes.append((rows.index[1], 0.0))  # home lost
+        else:
+            outcomes.append((rows.index[0], 0.5))  # tie
+            outcomes.append((rows.index[1], 0.5))
+
+    if len(outcomes) < 50:
+        print(f"  Only {len(outcomes)} outcomes — skipping calibration (need >= 50)")
+        return None
+
+    idx, y_true = zip(*outcomes)
+    y_pred = df.loc[list(idx), "win_prob"].values
+    y_true = np.array(y_true)
+
+    calibrator = IsotonicRegression(y_min=0.001, y_max=0.999, out_of_bounds="clip")
+    calibrator.fit(y_pred, y_true)
+    print(f"  Isotonic calibrator fit on {len(y_true)} outcomes ({len(y_true) // 2} games)")
+    return calibrator
 
 
 def _upsert_season_outputs(df):
@@ -440,9 +500,17 @@ def main():
     df = preprocess_data(df)
     df = df.replace([np.inf, -np.inf], np.nan)
 
-    # Split: rows with actual results (for training) vs upcoming games (for prediction only)
+    # Split: rows with actual results (for training) vs upcoming games
     train_df = df.dropna(subset=["actual_runs"]).copy()
-    upcoming_df = df[df["actual_runs"].isna()].copy()
+
+    # Predict only on today's games — past games are training data only,
+    # re-predicting them would be cheating and skew output
+    # Use Pacific timezone to match user location
+    pst = pytz.timezone("America/Los_Angeles")
+    today_str = datetime.datetime.now(pst).date().isoformat()
+    today_df = df[df["game_date"].astype(str).str.startswith(today_str)].copy()
+    if today_df.empty:
+        print(f"  No games found for today ({today_str}). Nothing to predict.")
 
     if train_df.empty:
         print("No completed games to train on yet. Using league-average model.")
@@ -475,13 +543,22 @@ def main():
         else:
             model, cv_metrics = train_model_cv(X, y)
 
-    # Save model if we trained one
+    # Save model and fit calibrator if we trained one
+    calibrator = None
     if model is not None:
         model.save_model("xgb_model.json")
         print("Model trained and saved to xgb_model.json")
 
-    # Produce predictions on all data (trained games + upcoming)
-    predict_df = df.copy()
+        # Fit isotonic calibrator on training data predictions vs actuals
+        print("\nFitting isotonic calibrator...")
+        train_preds = compute_predictions(train_df, model, calibrator=None)
+        calibrator = fit_calibrator(train_preds)
+        if calibrator is not None:
+            joblib.dump(calibrator, "isotonic_calibrator.pkl")
+            print("  Calibrator saved to isotonic_calibrator.pkl")
+
+    # Predict only on today's games
+    predict_df = today_df.copy()
     predict_df = preprocess_data(predict_df)
     predict_df = predict_df.replace([np.inf, -np.inf], np.nan)
 
@@ -491,10 +568,9 @@ def main():
             predict_df[col] = predict_df[col].fillna(fallback)
 
     if model is not None:
-        predictions = compute_predictions(predict_df, model)
+        predictions = compute_predictions(predict_df, model, calibrator=calibrator)
     else:
-        # No trained model — use league-average xR and Poisson for win probs
-        predict_df = predict_df.copy()
+        # No trained model — use league-average xR and home-field win prob
         predict_df["is_home"] = predict_df["is_home"].astype(int)
         predict_df["xR"] = LEAGUE_AVG["avg_last5"]
         predict_df["win_prob"] = np.where(predict_df["is_home"] == 1, 0.54, 0.46)
