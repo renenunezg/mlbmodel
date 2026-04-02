@@ -15,9 +15,18 @@ export function Nav() {
   return (
     <nav className="border-b border-border bg-card">
       <div className="mx-auto flex max-w-7xl flex-col items-start gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-0">
-        <Link href="/" className="text-lg font-semibold tracking-tight">
-          MLB Predictions
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/" className="text-lg font-semibold tracking-tight">
+            MLB Predictions
+          </Link>
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {new Date().toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            })}
+          </span>
+        </div>
         <div className="flex gap-1">
           {links.map((link) => {
             const isActive =
