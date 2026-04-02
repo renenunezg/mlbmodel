@@ -5,3 +5,6 @@ __pycache__/
 CLAUDE.md
 AGENTS.md
 .claude/
+cache/
+backtest_cache/
+node_modules/
