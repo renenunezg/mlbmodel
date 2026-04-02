@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const links = [
-  { href: "/", label: "Today's Picks" },
+  { href: "/", label: "Picks" },
   { href: "/history", label: "History" },
   { href: "/performance", label: "Performance" },
 ];
@@ -13,13 +13,13 @@ export function Nav() {
   const pathname = usePathname();
 
   return (
-    <nav className="border-b border-border bg-card">
+    <nav className="border-b border-border bg-background">
       <div className="mx-auto flex max-w-7xl flex-col items-start gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-0">
-        <div className="flex items-center gap-3">
-          <Link href="/" className="text-lg font-semibold tracking-tight">
+        <div className="flex items-baseline gap-3">
+          <Link href="/" className="font-heading text-lg tracking-tight">
             MLB Predictions
           </Link>
-          <span className="text-xs text-muted-foreground tabular-nums">
+          <span className="font-mono text-xs text-muted-foreground tabular-nums">
             {new Date().toLocaleDateString("en-US", {
               month: "short",
               day: "numeric",
@@ -27,7 +27,7 @@ export function Nav() {
             })}
           </span>
         </div>
-        <div className="flex gap-1">
+        <div className="flex gap-0">
           {links.map((link) => {
             const isActive =
               link.href === "/"
@@ -38,10 +38,10 @@ export function Nav() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                className={`px-3 py-1.5 font-mono text-xs uppercase tracking-wider transition-colors ${
                   isActive
-                    ? "bg-[#198754]/15 text-[#198754]"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "border-b-2 border-foreground text-foreground"
+                    : "border-b-2 border-transparent text-muted-foreground hover:text-foreground"
                 }`}
               >
                 {link.label}

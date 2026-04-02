@@ -1,27 +1,7 @@
-import { cn } from "@/lib/utils";
 import type { ModelOutput } from "@/lib/types";
 
 interface EvBadgeProps {
   prediction: ModelOutput;
-}
-
-function Pill({
-  children,
-  className,
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex h-5 shrink-0 items-center justify-center rounded-full px-2 text-xs font-medium whitespace-nowrap",
-        className
-      )}
-    >
-      {children}
-    </span>
-  );
 }
 
 export function EvBadge({ prediction }: EvBadgeProps) {
@@ -29,43 +9,37 @@ export function EvBadge({ prediction }: EvBadgeProps) {
 
   if (prediction.ev_flag !== "No Play") {
     badges.push(
-      <Pill key="ev" className="bg-green-500/15 text-green-700 dark:text-green-400">
-        +EV
-      </Pill>
+      <span key="ev" className="text-positive">+EV</span>
     );
   }
 
   if (prediction.run_line_ev_flag !== "No Play") {
     badges.push(
-      <Pill key="rl" className="bg-blue-500/15 text-blue-700 dark:text-blue-400">
-        RL +EV
-      </Pill>
+      <span key="rl" className="text-accent-blue">RL</span>
     );
   }
 
   if (prediction.total_play === "Over") {
     badges.push(
-      <Pill key="total" className="bg-amber-500/15 text-amber-700 dark:text-amber-400">
-        Over
-      </Pill>
+      <span key="total" className="text-accent-amber">OVR</span>
     );
   } else if (prediction.total_play === "Under") {
     badges.push(
-      <Pill key="total" className="bg-purple-500/15 text-purple-700 dark:text-purple-400">
-        Under
-      </Pill>
+      <span key="total" className="text-accent-amber">UND</span>
     );
   }
 
   if (prediction.high_variance_flag === "Yes") {
     badges.push(
-      <Pill key="var" className="bg-red-500/15 text-red-700 dark:text-red-400">
-        High Var
-      </Pill>
+      <span key="var" className="text-negative">VAR</span>
     );
   }
 
   if (badges.length === 0) return null;
 
-  return <div className="flex flex-wrap items-center gap-1">{badges}</div>;
+  return (
+    <div className="flex items-center gap-1.5 font-mono text-xs font-medium">
+      {badges}
+    </div>
+  );
 }
