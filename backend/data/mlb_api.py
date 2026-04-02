@@ -129,7 +129,10 @@ def fetch_schedule(game_date: date = None) -> pd.DataFrame:
 
 
 def fetch_schedule_range(start_date: date, end_date: date) -> pd.DataFrame:
-    """Fetch schedule for a date range. Useful for loading historical data."""
+    """Fetch schedule for a date range. Useful for loading historical data.
+
+    Includes probable pitcher info when available.
+    """
     params = {
         "sportId": 1,
         "startDate": start_date.strftime("%Y-%m-%d"),
@@ -146,6 +149,8 @@ def fetch_schedule_range(start_date: date, end_date: date) -> pd.DataFrame:
         for game in date_entry.get("games", []):
             home = game.get("teams", {}).get("home", {})
             away = game.get("teams", {}).get("away", {})
+            home_pitcher = home.get("probablePitcher", {})
+            away_pitcher = away.get("probablePitcher", {})
 
             rows.append({
                 "game_pk": game["gamePk"],
@@ -157,12 +162,27 @@ def fetch_schedule_range(start_date: date, end_date: date) -> pd.DataFrame:
                 "away_score": away.get("score"),
                 "status": game.get("status", {}).get("abstractGameState", "Scheduled"),
                 "venue": game.get("venue", {}).get("name", ""),
+                "home_pitcher_name": home_pitcher.get("fullName"),
+                "home_pitcher_id": home_pitcher.get("id"),
+                "away_pitcher_name": away_pitcher.get("fullName"),
+                "away_pitcher_id": away_pitcher.get("id"),
             })
 
     df = pd.DataFrame(rows)
     if not df.empty:
         df["home_team"] = df["home_team"].apply(normalize_team)
         df["away_team"] = df["away_team"].apply(normalize_team)
+
+        # Batch fetch handedness for all pitchers
+        all_pitcher_ids = (
+            df["home_pitcher_id"].dropna().astype(int).tolist() +
+            df["away_pitcher_id"].dropna().astype(int).tolist()
+        )
+        if all_pitcher_ids:
+            _batch_fetch_handedness(list(set(all_pitcher_ids)))
+            df["home_pitcher_hand"] = df["home_pitcher_id"].map(_handedness_cache)
+            df["away_pitcher_hand"] = df["away_pitcher_id"].map(_handedness_cache)
+
     return df
 
 

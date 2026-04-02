@@ -69,7 +69,9 @@ export default async function Page() {
     const bHasEv =
       b.away.ev_flag !== "No Play" || b.home.ev_flag !== "No Play" ? 1 : 0;
     if (aHasEv !== bHasEv) return bHasEv - aHasEv;
-    return a.game_pk - b.game_pk;
+    const aTime = a.start_time ?? "";
+    const bTime = b.start_time ?? "";
+    return aTime.localeCompare(bTime);
   });
 
   const displayDate =

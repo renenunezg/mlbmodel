@@ -8,9 +8,11 @@ For team batting wRC+: uses FanGraphs team batting page via pybaseball.
 Fallback: computes OPS from Statcast if FanGraphs is unavailable.
 """
 
+import os
 import pandas as pd
 import numpy as np
 from datetime import date, timedelta
+from pathlib import Path
 from backend.team_mappings import TEAM_NAME_MAP, normalize_team
 import warnings
 warnings.filterwarnings("ignore")
@@ -19,6 +21,7 @@ warnings.filterwarnings("ignore")
 # This gets recalculated from the data if we have enough games.
 DEFAULT_FIP_CONSTANT = 3.15
 
+CACHE_DIR = Path(__file__).resolve().parent.parent.parent / "cache"
 
 # Cache Statcast data to avoid re-fetching within the same pipeline run
 _statcast_cache: dict[str, pd.DataFrame] = {}
@@ -153,30 +156,106 @@ def _compute_pitcher_stats(pitch_df: pd.DataFrame, pitcher_ids: set = None) -> p
     return pd.DataFrame(rows)
 
 
+def _get_prior_season_pitcher_stats() -> pd.DataFrame:
+    """Get prior-season pitcher stats, cached to parquet for fast reuse.
+
+    Used as fallback for pitchers with no current-season data.
+    """
+    prior_year = date.today().year - 1
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cache_path = CACHE_DIR / f"pitcher_stats_{prior_year}.parquet"
+
+    if cache_path.exists():
+        df = pd.read_parquet(cache_path)
+        print(f"  Using cached {prior_year} pitcher stats: {len(df)} pitchers")
+        return df
+
+    print(f"  Fetching {prior_year} Statcast data for pitcher fallback (one-time)...")
+    from pybaseball import statcast
+
+    # Fetch full prior season in monthly chunks to avoid timeouts
+    all_chunks = []
+    for month in range(3, 11):  # March through October
+        start = date(prior_year, month, 1)
+        if month == 10:
+            end = date(prior_year, 10, 31)
+        else:
+            end = date(prior_year, month + 1, 1) - timedelta(days=1)
+        try:
+            chunk = statcast(start_dt=str(start), end_dt=str(end))
+            if not chunk.empty:
+                all_chunks.append(chunk)
+                print(f"    {start.strftime('%b')}: {len(chunk)} pitches")
+        except Exception as e:
+            print(f"    {start.strftime('%b')}: failed ({e})")
+
+    if not all_chunks:
+        print(f"  No {prior_year} Statcast data available")
+        return pd.DataFrame()
+
+    pitch_df = pd.concat(all_chunks, ignore_index=True)
+    if "game_type" in pitch_df.columns:
+        pitch_df = pitch_df[pitch_df["game_type"] == "R"]
+
+    # Compute stats for all pitchers (not just starters — they might start next year)
+    df = _compute_pitcher_stats(pitch_df)
+    if df.empty:
+        return pd.DataFrame()
+
+    df["season"] = prior_year
+    df.to_parquet(cache_path, index=False)
+    print(f"  Cached {len(df)} pitcher stats to {cache_path}")
+    return df
+
+
 def fetch_pitcher_stats(season: int = None) -> pd.DataFrame:
     """Fetch starting pitcher stats computed from Statcast data.
 
+    For pitchers with no current-season stats, falls back to prior-season data.
     Returns DataFrame with columns matching the pitcher_stats DB table.
     """
     if season is None:
         season = date.today().year
 
     pitch_df = _get_statcast_range()
-    if pitch_df.empty:
-        print("No Statcast data — cannot compute pitcher stats.")
+
+    current_stats = pd.DataFrame()
+    if not pitch_df.empty:
+        starter_ids = _identify_starters(pitch_df)
+        print(f"  Identified {len(starter_ids)} starting pitchers")
+        current_stats = _compute_pitcher_stats(pitch_df, pitcher_ids=starter_ids)
+
+    # Get prior-season stats as fallback
+    prior_stats = _get_prior_season_pitcher_stats()
+
+    if current_stats.empty and prior_stats.empty:
+        print("  No pitcher stats from current or prior season.")
         return pd.DataFrame(columns=["pitcher_name", "team", "xfip", "whip", "k_9", "season", "role"])
 
-    starter_ids = _identify_starters(pitch_df)
-    print(f"  Identified {len(starter_ids)} starting pitchers")
+    if current_stats.empty:
+        # All fallback
+        print(f"  Using {len(prior_stats)} prior-season pitcher stats as fallback")
+        prior_stats["season"] = season
+        prior_stats["role"] = "starter"
+        return prior_stats
 
-    df = _compute_pitcher_stats(pitch_df, pitcher_ids=starter_ids)
-    if df.empty:
-        print("  No pitcher stats computed (not enough plate appearances).")
-        return pd.DataFrame(columns=["pitcher_name", "team", "xfip", "whip", "k_9", "season", "role"])
+    current_stats["season"] = season
+    current_stats["role"] = "starter"
 
-    df["season"] = season
-    df["role"] = "starter"
-    return df
+    if prior_stats.empty:
+        return current_stats
+
+    # Merge: current season takes priority, prior season fills gaps by pitcher_id
+    current_ids = set(current_stats["pitcher_id"].dropna().unique())
+    prior_fallback = prior_stats[~prior_stats["pitcher_id"].isin(current_ids)].copy()
+
+    if not prior_fallback.empty:
+        prior_fallback["season"] = season
+        prior_fallback["role"] = "starter"
+        print(f"  Added {len(prior_fallback)} prior-season pitcher stats as fallback")
+        return pd.concat([current_stats, prior_fallback], ignore_index=True)
+
+    return current_stats
 
 
 def fetch_bullpen_stats(season: int = None) -> pd.DataFrame:
