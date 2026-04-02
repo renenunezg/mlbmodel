@@ -15,7 +15,7 @@ export default async function Page() {
   if (!predictions || predictions.length === 0) {
     return (
       <main className="mx-auto max-w-5xl px-4 py-8">
-        <h1 className="text-2xl font-bold tracking-tight">
+        <h1 className="font-heading text-2xl tracking-tight">
           Today&apos;s Picks
         </h1>
         <p className="mt-4 text-muted-foreground">
@@ -80,7 +80,7 @@ export default async function Page() {
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight">
+        <h1 className="font-heading text-2xl tracking-tight">
           Today&apos;s Picks
         </h1>
         {displayDate && (
