@@ -1,6 +1,6 @@
 import os
 import datetime
-import pytz
+from zoneinfo import ZoneInfo
 import pandas as pd
 import numpy as np
 from sqlalchemy import create_engine, text
@@ -505,9 +505,8 @@ def main():
 
     # Predict only on today's games — past games are training data only,
     # re-predicting them would be cheating and skew output
-    # Use Pacific timezone to match user location
-    pst = pytz.timezone("America/Los_Angeles")
-    today_str = datetime.datetime.now(pst).date().isoformat()
+    # Use Pacific timezone (handles PST/PDT automatically)
+    today_str = datetime.datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat()
     today_df = df[df["game_date"].astype(str).str.startswith(today_str)].copy()
     if today_df.empty:
         print(f"  No games found for today ({today_str}). Nothing to predict.")
