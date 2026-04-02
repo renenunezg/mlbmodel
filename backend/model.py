@@ -507,9 +507,21 @@ def main():
     # re-predicting them would be cheating and skew output
     # Use Pacific timezone (handles PST/PDT automatically)
     today_str = datetime.datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat()
-    today_df = df[df["game_date"].astype(str).str.startswith(today_str)].copy()
+
+    # game_date is NaT for upcoming games (not Final yet), so look up today's
+    # game_pks directly from the games table rather than filtering by date on df
+    with engine.connect() as conn:
+        today_pks_df = pd.read_sql(
+            text("SELECT game_pk FROM games WHERE game_date = :today"),
+            conn,
+            params={"today": today_str},
+        )
+    today_pks = set(today_pks_df["game_pk"].tolist())
+    today_df = df[df["game_pk"].isin(today_pks)].copy()
+
     if today_df.empty:
         print(f"  No games found for today ({today_str}). Nothing to predict.")
+        return
 
     if train_df.empty:
         print("No completed games to train on yet. Using league-average model.")
