@@ -21,7 +21,7 @@ function TeamRow({
   const isFinal = score != null;
 
   return (
-    <div className="grid grid-cols-[1fr_3.5rem_3.5rem_3.5rem_auto] sm:grid-cols-[1fr_3.5rem_3.5rem_3.5rem_7rem_auto] items-center gap-x-2 py-1.5 font-mono text-sm">
+    <div className="col-span-full grid grid-cols-subgrid items-center py-1.5 font-mono text-sm">
       {/* Team + Starter */}
       <div className="min-w-0">
         <div className="flex items-center gap-2">
@@ -136,7 +136,7 @@ export function GameCard({ matchup }: GameCardProps) {
       </CardHeader>
 
       <CardContent className="space-y-0 py-0">
-        <div className="divide-y divide-border/50">
+        <div className="divide-y divide-border/50 grid grid-cols-[1fr_3.5rem_3.5rem_3.5rem_5rem] sm:grid-cols-[1fr_3.5rem_3.5rem_3.5rem_7rem_5rem] gap-x-2">
           <TeamRow
             prediction={matchup.away}
             isHome={false}

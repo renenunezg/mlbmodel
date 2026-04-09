@@ -218,7 +218,7 @@ export default async function HistoryPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {predictions.map((row) => {
+              {predictions.map((row, idx) => {
                 const game = gamesMap[row.game_pk];
                 const isFinal = game?.status === "Final";
                 const isHome = game?.home_team === row.team;
@@ -227,18 +227,54 @@ export default async function HistoryPage({
                 const won = isFinal && teamScore != null && oppScore != null
                   ? teamScore > oppScore
                   : null;
-                const hasPlay =
-                  row.ev_flag !== "No Play" || row.run_line_ev_flag !== "No Play";
+                const margin = isFinal && teamScore != null && oppScore != null
+                  ? teamScore - oppScore
+                  : null;
+
+                // +EV ML outcome: won the game
+                const mlPlay = row.ev_flag !== "No Play";
+                const mlWon = mlPlay && won === true;
+                const mlLost = mlPlay && won === false;
+
+                // RL outcome: won by 2+ (covers -1.5)
+                const rlPlay = row.run_line_ev_flag !== "No Play";
+                const rlWon = rlPlay && margin != null && margin >= 2;
+                const rlLost = rlPlay && margin != null && margin < 2;
+
+                // Totals outcome
+                const hasTotal = row.total_play === "Over" || row.total_play === "Under";
+                let totalWon: boolean | null = null;
+                if (hasTotal && isFinal && game) {
+                  const actualTotal = (game.home_score ?? 0) + (game.away_score ?? 0);
+                  const bookTotal = row.total ?? 0;
+                  if (row.total_play === "Over") {
+                    totalWon = actualTotal > bookTotal ? true : actualTotal < bookTotal ? false : null;
+                  } else {
+                    totalWon = actualTotal < bookTotal ? true : actualTotal > bookTotal ? false : null;
+                  }
+                }
+
+                // Show date only on first row of each date group
+                const rowDate = row.date ? row.date.split(/[T ]/)[0] : "";
+                const prevDate = idx > 0 && predictions[idx - 1].date
+                  ? predictions[idx - 1].date!.split(/[T ]/)[0]
+                  : "";
+                const showDate = rowDate !== prevDate;
+
+                // Show game_pk grouping: add top border between different games
+                const prevGamePk = idx > 0 ? predictions[idx - 1].game_pk : null;
+                const isNewGame = row.game_pk !== prevGamePk;
 
                 return (
                 <TableRow
                   key={`${row.game_pk}-${row.team}`}
                   className={cn(
-                    hasPlay && won === true && "text-positive",
-                    hasPlay && won === false && "text-negative"
+                    isNewGame && idx > 0 && "border-t-2 border-t-border"
                   )}
                 >
-                  <TableCell>{formatDate(row.date)}</TableCell>
+                  <TableCell className={cn(!showDate && "text-transparent select-none")}>
+                    {formatDate(row.date)}
+                  </TableCell>
                   <TableCell className="font-medium">{row.team}</TableCell>
                   <TableCell>{row.starter ?? "—"}</TableCell>
                   <TableCell className="text-right">{formatRuns(row.expected_runs)}</TableCell>
@@ -263,28 +299,49 @@ export default async function HistoryPage({
                     )}
                   </TableCell>
                   <TableCell className="text-center">
-                    <span
-                      className={
-                        row.ev_flag !== "No Play"
-                          ? "text-positive font-semibold"
-                          : "text-muted-foreground"
-                      }
-                    >
-                      {row.ev_flag !== "No Play" ? row.ev_flag : "—"}
-                    </span>
+                    {mlPlay ? (
+                      <span
+                        className={cn(
+                          "font-semibold",
+                          isFinal ? (mlWon ? "text-positive" : "text-negative") : "text-muted-foreground"
+                        )}
+                      >
+                        {row.ev_flag}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-center">
-                    <span
-                      className={
-                        row.run_line_ev_flag !== "No Play"
-                          ? "text-accent-blue font-semibold"
-                          : "text-muted-foreground"
-                      }
-                    >
-                      {row.run_line_ev_flag !== "No Play" ? row.run_line_ev_flag : "—"}
-                    </span>
+                    {rlPlay ? (
+                      <span
+                        className={cn(
+                          "font-semibold",
+                          isFinal ? (rlWon ? "text-positive" : "text-negative") : "text-accent-blue"
+                        )}
+                      >
+                        {row.run_line_ev_flag}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </TableCell>
-                  <TableCell className="text-center">{row.total_play || "—"}</TableCell>
+                  <TableCell className="text-center">
+                    {hasTotal ? (
+                      <span
+                        className={cn(
+                          "font-semibold",
+                          isFinal && totalWon === true ? "text-positive"
+                            : isFinal && totalWon === false ? "text-negative"
+                            : "text-muted-foreground"
+                        )}
+                      >
+                        {row.total_play}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
                 </TableRow>
                 );
               })}
