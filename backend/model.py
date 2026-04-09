@@ -6,7 +6,7 @@ import numpy as np
 from sqlalchemy import create_engine, text
 import xgboost as xgb
 import joblib
-from scipy.stats import poisson
+from scipy.stats import poisson, nbinom
 from sklearn.model_selection import TimeSeriesSplit, GridSearchCV
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.isotonic import IsotonicRegression
@@ -306,13 +306,22 @@ def train_model_cv(X, y, n_splits=5):
     return grid_search.best_estimator_, fold_metrics
 
 
-def poisson_win_prob(lambda_a, lambda_b, max_runs=15):
-    """Compute P(team A wins) using independent Poisson distributions.
+# Negative binomial dispersion parameter.  Variance = lambda + lambda^2 / r.
+# r=6 is calibrated from MLB historical run distributions; it adds realistic
+# overdispersion compared to plain Poisson, producing less extreme win probs.
+NBINOM_R = 6.0
 
+
+def win_prob(lambda_a, lambda_b, max_runs=15, r=NBINOM_R):
+    """Compute P(team A wins) using negative binomial distributions.
+
+    The negative binomial accounts for overdispersion in baseball scoring
+    (variance > mean), producing more realistic win probabilities than Poisson.
     Ties are allocated proportionally (extra innings approximation).
     """
-    a_probs = poisson.pmf(np.arange(max_runs + 1), lambda_a)
-    b_probs = poisson.pmf(np.arange(max_runs + 1), lambda_b)
+    runs = np.arange(max_runs + 1)
+    a_probs = nbinom.pmf(runs, r, r / (r + lambda_a))
+    b_probs = nbinom.pmf(runs, r, r / (r + lambda_b))
 
     # Joint probability matrix: rows = team A scores, cols = team B scores
     joint = np.outer(a_probs, b_probs)
@@ -326,6 +335,10 @@ def poisson_win_prob(lambda_a, lambda_b, max_runs=15):
     p_win += p_tie * tie_share
 
     return round(float(p_win), 4)
+
+
+# Backward-compatible alias used by backtest.py
+poisson_win_prob = win_prob
 
 
 def convert_to_odds(p):
@@ -396,7 +409,7 @@ def compute_predictions(df, model, calibrator=None):
         lambda_away = max(rows.iloc[0]["xR"], 0.5)
         lambda_home = max(rows.iloc[1]["xR"], 0.5)
 
-        p_home = poisson_win_prob(lambda_home, lambda_away)
+        p_home = win_prob(lambda_home, lambda_away)
         p_away = 1.0 - p_home
 
         df.loc[group.index[group["is_home"] == 1], "win_prob"] = round(p_home, 3)
