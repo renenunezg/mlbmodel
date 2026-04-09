@@ -17,6 +17,7 @@ export default function Filters() {
   const team = searchParams.get("team") ?? "";
   const from = searchParams.get("from") ?? "";
   const to = searchParams.get("to") ?? "";
+  const period = searchParams.get("period") ?? "all";
 
   const updateParam = useCallback(
     (key: string, value: string) => {
@@ -71,6 +72,22 @@ export default function Filters() {
           className="h-8 border border-input bg-transparent px-2"
         />
       </label>
+
+      <div className="flex items-center gap-1 ml-auto">
+        {(["7", "30", "all"] as const).map((p) => (
+          <button
+            key={p}
+            onClick={() => updateParam("period", p === "all" ? "" : p)}
+            className={`h-8 px-2.5 border transition-colors ${
+              period === p || (p === "all" && !searchParams.get("period"))
+                ? "border-foreground bg-foreground text-background"
+                : "border-input bg-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {p === "7" ? "7D" : p === "30" ? "30D" : "All"}
+          </button>
+        ))}
+      </div>
 
       {(team || from || to) && (
         <button

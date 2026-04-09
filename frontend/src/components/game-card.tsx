@@ -21,9 +21,9 @@ function TeamRow({
   const isFinal = score != null;
 
   return (
-    <div className="flex items-center gap-3 py-1.5 font-mono text-sm">
+    <div className="grid grid-cols-[1fr_3.5rem_3.5rem_3.5rem_auto] sm:grid-cols-[1fr_3.5rem_3.5rem_3.5rem_7rem_auto] items-center gap-x-2 py-1.5 font-mono text-sm">
       {/* Team + Starter */}
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0">
         <div className="flex items-center gap-2">
           <span
             className={cn(
@@ -88,7 +88,7 @@ function TeamRow({
       </div>
 
       {/* Badges */}
-      <div className="shrink-0">
+      <div className="text-right">
         <EvBadge prediction={prediction} />
       </div>
     </div>

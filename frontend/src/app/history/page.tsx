@@ -19,13 +19,14 @@ const PAGE_SIZE = 50;
 export default async function HistoryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ team?: string; from?: string; to?: string; page?: string }>;
+  searchParams: Promise<{ team?: string; from?: string; to?: string; page?: string; period?: string }>;
 }) {
   const params = await searchParams;
 
   const team = params.team ?? "";
   const from = params.from ?? "";
   const to = params.to ?? "";
+  const period = params.period ?? "";
   const page = Math.max(1, parseInt(params.page ?? "1", 10));
   const offset = (page - 1) * PAGE_SIZE;
 
@@ -69,12 +70,94 @@ export default async function HistoryPage({
     }
   }
 
+  // Compute record summary for the period filter
+  const periodDate = period === "7"
+    ? new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0]
+    : period === "30"
+      ? new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0]
+      : "";
+
+  let recordPredictions: ModelOutput[] = [];
+  let recordGamesMap: Record<number, GameInfo> = {};
+
+  {
+    let rq = supabase
+      .from("model_outputs_season")
+      .select("game_pk, team, win_prob, ev_flag, run_line_ev_flag, total_play, our_total, total");
+    if (periodDate) rq = rq.gte("date", periodDate);
+    if (team) rq = rq.eq("team", team);
+
+    const { data: rRows } = await rq;
+    recordPredictions = (rRows ?? []) as ModelOutput[];
+
+    const rPks = [...new Set(recordPredictions.map((p) => p.game_pk))];
+    if (rPks.length > 0) {
+      const { data: rGames } = await supabase
+        .from("games")
+        .select("*")
+        .eq("status", "Final")
+        .in("game_pk", rPks);
+      if (rGames) {
+        for (const g of rGames as GameInfo[]) {
+          recordGamesMap[g.game_pk] = g;
+        }
+      }
+    }
+  }
+
+  // Tally records
+  let mlWins = 0, mlLosses = 0;
+  let rlWins = 0, rlLosses = 0;
+  let totalsWins = 0, totalsLosses = 0;
+
+  for (const row of recordPredictions) {
+    const game = recordGamesMap[row.game_pk];
+    if (!game) continue;
+
+    const isHome = game.home_team === row.team;
+    const teamScore = isHome ? game.home_score : game.away_score;
+    const oppScore = isHome ? game.away_score : game.home_score;
+    if (teamScore == null || oppScore == null) continue;
+
+    const won = teamScore > oppScore;
+    const margin = teamScore - oppScore;
+
+    // ML record: only +EV picks
+    if (row.ev_flag !== "No Play") {
+      if (won) mlWins++; else mlLosses++;
+    }
+
+    // RL record: +EV run line picks, W = won by 2+ (covers -1.5)
+    if (row.run_line_ev_flag !== "No Play") {
+      if (margin >= 2) rlWins++; else rlLosses++;
+    }
+
+    // Totals record: Over/Under plays
+    if (row.total_play === "Over" || row.total_play === "Under") {
+      const actualTotal = (game.home_score ?? 0) + (game.away_score ?? 0);
+      const bookTotal = row.total ?? 0;
+      if (row.total_play === "Over") {
+        if (actualTotal > bookTotal) totalsWins++; else if (actualTotal < bookTotal) totalsLosses++;
+      } else {
+        if (actualTotal < bookTotal) totalsWins++; else if (actualTotal > bookTotal) totalsLosses++;
+      }
+    }
+  }
+
+  function fmtRecord(w: number, l: number) {
+    const total = w + l;
+    if (total === 0) return "0-0";
+    const pct = ((w / total) * 100).toFixed(0);
+    return `${w}-${l} (${pct}%)`;
+  }
+
   // Build current search params string for pagination links
   function pageUrl(p: number) {
     const sp = new URLSearchParams();
     if (team) sp.set("team", team);
     if (from) sp.set("from", from);
     if (to) sp.set("to", to);
+    if (period) sp.set("period", period);
     sp.set("page", String(p));
     return `/history?${sp.toString()}`;
   }
@@ -84,6 +167,28 @@ export default async function HistoryPage({
       <h1 className="font-heading text-2xl tracking-tight">Season History</h1>
 
       <Filters />
+
+      {/* Record Summary */}
+      <div className="flex flex-wrap items-center gap-4 font-mono text-sm">
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">ML:</span>
+          <span className={cn("font-semibold", mlWins + mlLosses > 0 && mlWins > mlLosses ? "text-positive" : mlWins < mlLosses ? "text-negative" : "")}>
+            {fmtRecord(mlWins, mlLosses)}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">RL:</span>
+          <span className={cn("font-semibold", rlWins + rlLosses > 0 && rlWins > rlLosses ? "text-positive" : rlWins < rlLosses ? "text-negative" : "")}>
+            {fmtRecord(rlWins, rlLosses)}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground">Totals:</span>
+          <span className={cn("font-semibold", totalsWins + totalsLosses > 0 && totalsWins > totalsLosses ? "text-positive" : totalsWins < totalsLosses ? "text-negative" : "")}>
+            {fmtRecord(totalsWins, totalsLosses)}
+          </span>
+        </div>
+      </div>
 
       {error ? (
         <p className="text-sm text-destructive">
@@ -113,8 +218,26 @@ export default async function HistoryPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {predictions.map((row) => (
-                <TableRow key={`${row.game_pk}-${row.team}`}>
+              {predictions.map((row) => {
+                const game = gamesMap[row.game_pk];
+                const isFinal = game?.status === "Final";
+                const isHome = game?.home_team === row.team;
+                const teamScore = isHome ? game?.home_score : game?.away_score;
+                const oppScore = isHome ? game?.away_score : game?.home_score;
+                const won = isFinal && teamScore != null && oppScore != null
+                  ? teamScore > oppScore
+                  : null;
+                const hasPlay =
+                  row.ev_flag !== "No Play" || row.run_line_ev_flag !== "No Play";
+
+                return (
+                <TableRow
+                  key={`${row.game_pk}-${row.team}`}
+                  className={cn(
+                    hasPlay && won === true && "text-positive",
+                    hasPlay && won === false && "text-negative"
+                  )}
+                >
                   <TableCell>{formatDate(row.date)}</TableCell>
                   <TableCell className="font-medium">{row.team}</TableCell>
                   <TableCell>{row.starter ?? "—"}</TableCell>
@@ -122,41 +245,23 @@ export default async function HistoryPage({
                   <TableCell className="text-right">{formatPct(row.win_prob)}</TableCell>
                   <TableCell className="text-right">{formatOdds(row.our_odds)}</TableCell>
                   <TableCell className="text-right">{formatOdds(row.moneyline)}</TableCell>
-                  {(() => {
-                    const game = gamesMap[row.game_pk];
-                    const isFinal = game?.status === "Final";
-                    const isHome = game?.home_team === row.team;
-                    const teamScore = isHome ? game?.home_score : game?.away_score;
-                    const oppScore = isHome ? game?.away_score : game?.home_score;
-                    const won = teamScore != null && oppScore != null ? teamScore > oppScore : null;
-                    const predictedWin = row.win_prob > 0.5;
-                    const correctPick = won != null ? won === predictedWin : null;
-                    return (
-                      <>
-                        <TableCell className="text-right tabular-nums">
-                          {isFinal && teamScore != null && oppScore != null
-                            ? `${teamScore}-${oppScore}`
-                            : "—"}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {won != null ? (
-                            <span
-                              className={cn(
-                                "font-semibold",
-                                correctPick
-                                  ? "text-positive"
-                                  : "text-negative"
-                              )}
-                            >
-                              {won ? "W" : "L"}
-                            </span>
-                          ) : (
-                            "—"
-                          )}
-                        </TableCell>
-                      </>
-                    );
-                  })()}
+                  <TableCell className="text-right tabular-nums">
+                    {isFinal && teamScore != null ? `${teamScore}` : "—"}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {won != null ? (
+                      <span
+                        className={cn(
+                          "font-semibold",
+                          won ? "text-positive" : "text-negative"
+                        )}
+                      >
+                        {won ? "W" : "L"}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </TableCell>
                   <TableCell className="text-center">
                     <span
                       className={
@@ -181,7 +286,8 @@ export default async function HistoryPage({
                   </TableCell>
                   <TableCell className="text-center">{row.total_play || "—"}</TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
 
