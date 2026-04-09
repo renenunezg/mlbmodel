@@ -95,13 +95,13 @@ All tables in Supabase use `game_pk` as the universal join key. Schema managed v
 2. **Statcast stats** — Compute pitcher xFIP/WHIP/K9, bullpen stats, and team batting splits from Statcast pitch data (single cached fetch)
 3. **Park factors** — Load from Baseball Savant if not already cached in DB
 4. **Odds** — Fetch today's lines from The Odds API, match to `game_pk` by team + nearest start time (handles doubleheaders), upsert
-5. **Model** — Train XGBoost (TimeSeriesSplit CV), predict expected runs, Poisson win probs, write to `model_outputs` + `model_outputs_season`
+5. **Model** — Train XGBoost (TimeSeriesSplit CV), predict expected runs, negative binomial win probs (r=6), write to `model_outputs` + `model_outputs_season`
 6. **Evaluation** — Compare predictions to actual results, write accuracy metrics to `model_evaluation`
 
 ## Progress (completed)
 - **Phase 1 — Data fetching**: Replaced 9 fragile scrapers with 4 clean API/fetcher modules. Selenium eliminated.
 - **Phase 2 — Database**: Supabase schema with 10 tables, all joined on `game_pk`.
-- **Phase 3 — Model improvements**: Expanded to 11 features, TimeSeriesSplit CV with GridSearchCV, Poisson-based win probabilities, early-season fallbacks. Replaced FanGraphs scraping with Statcast-computed stats (FanGraphs blocked by Cloudflare).
+- **Phase 3 — Model improvements**: Expanded to 11 features, TimeSeriesSplit CV with GridSearchCV, negative binomial win probabilities (r=6 dispersion, more realistic than Poisson), early-season fallbacks. Replaced FanGraphs scraping with Statcast-computed stats (FanGraphs blocked by Cloudflare).
 - **Phase 4 — Pipeline**: Consolidated 9-step daily_runner.py into 6-step pipeline.py with timing, batch DB ops, and proper error handling.
 - **Phase 5 — Frontend**: Migrated from Streamlit to Next.js 16 with App Router, Tailwind, shadcn/ui. Three pages: Today's Picks (game cards with +EV badges), Season History (filtered/paginated table), Model Performance (Recharts accuracy charts + KPIs). Data fetched via Supabase JS client in server components with 5-min revalidation.
 - **Phase 6 — Validation & Monitoring**:
@@ -113,6 +113,12 @@ All tables in Supabase use `game_pk` as the universal join key. Schema managed v
   - Frontend: history page shows actual scores and W/L results with color-coded accuracy
   - Frontend: filter team abbreviations fixed to match DB codes
   - Frontend: nav shows today's date
+- **Phase 7 — UX & Model fixes**:
+  - Win probability: replaced Poisson with negative binomial (r=6); 6.7 vs 3.3 xR → ~77% not ~87%
+  - History page: fixed Invalid Date, score showing team runs only, Result "L" bug for unfinished games, W/L colors, +EV row coloring
+  - Game cards: CSS grid layout for symmetric column alignment across both team rows
+  - History page: ML / RL / Totals W-L record summary with 7D / 30D / All period toggles
+  - Pipeline: cron moved to 14:00 UTC (6 AM PST) to run before 9 AM games
 
 ## Known Issues
 - **Supabase RLS**: Before public deploy, enable Row Level Security on frontend-facing tables with SELECT-only policies for the `anon` role.
@@ -120,5 +126,5 @@ All tables in Supabase use `game_pk` as the universal join key. Schema managed v
 - **Statcast availability**: Baseball Savant data may be delayed 1-2 days at season start. Pipeline handles empty data gracefully.
 
 ## Next Steps
-- **Phase 7 — Production hardening**: Enable Supabase RLS, add error alerting (email/Slack on pipeline failure), monitor model accuracy through first month
-- **Phase 8 — Model iteration**: Add features (weather, umpire, rest days), tune hyperparameters based on backtest results, consider ensemble methods
+- **Phase 8 — Production hardening**: Enable Supabase RLS, add error alerting (email/Slack on pipeline failure), monitor model accuracy through first month
+- **Phase 9 — Model iteration**: Add features (weather, umpire, rest days), tune hyperparameters based on backtest results, consider ensemble methods
