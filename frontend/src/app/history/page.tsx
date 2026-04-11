@@ -230,6 +230,46 @@ export default async function HistoryPage({
                 const hasPlay =
                   row.ev_flag !== "No Play" || row.run_line_ev_flag !== "No Play";
 
+                const mlIsPlay = row.ev_flag !== "No Play";
+                const rlIsPlay = row.run_line_ev_flag !== "No Play";
+                const totalsIsPlay =
+                  row.total_play === "Over" || row.total_play === "Under";
+
+                const mlWon: boolean | null =
+                  mlIsPlay && won !== null ? won : null;
+
+                const rlWon: boolean | null =
+                  rlIsPlay &&
+                  isFinal &&
+                  teamScore != null &&
+                  oppScore != null
+                    ? teamScore - oppScore >= 2
+                    : null;
+
+                const totalsWon: boolean | null = (() => {
+                  if (!totalsIsPlay) return null;
+                  if (
+                    !isFinal ||
+                    game?.home_score == null ||
+                    game?.away_score == null
+                  )
+                    return null;
+                  if (row.total == null) return null;
+                  const actual = game.home_score + game.away_score;
+                  const book = row.total;
+                  if (actual === book) return null; // push
+                  return row.total_play === "Over"
+                    ? actual > book
+                    : actual < book;
+                })();
+
+                const cellClass = (outcome: boolean | null, isPlay: boolean) => {
+                  if (!isPlay) return "text-muted-foreground";
+                  if (outcome === true) return "text-positive font-semibold";
+                  if (outcome === false) return "text-negative font-semibold";
+                  return "font-semibold";
+                };
+
                 return (
                 <TableRow
                   key={`${row.game_pk}-${row.team}`}
@@ -263,28 +303,20 @@ export default async function HistoryPage({
                     )}
                   </TableCell>
                   <TableCell className="text-center">
-                    <span
-                      className={
-                        row.ev_flag !== "No Play"
-                          ? "text-positive font-semibold"
-                          : "text-muted-foreground"
-                      }
-                    >
-                      {row.ev_flag !== "No Play" ? row.ev_flag : "—"}
+                    <span className={cellClass(mlWon, mlIsPlay)}>
+                      {mlIsPlay ? row.ev_flag : "—"}
                     </span>
                   </TableCell>
                   <TableCell className="text-center">
-                    <span
-                      className={
-                        row.run_line_ev_flag !== "No Play"
-                          ? "text-accent-blue font-semibold"
-                          : "text-muted-foreground"
-                      }
-                    >
-                      {row.run_line_ev_flag !== "No Play" ? row.run_line_ev_flag : "—"}
+                    <span className={cellClass(rlWon, rlIsPlay)}>
+                      {rlIsPlay ? row.run_line_ev_flag : "—"}
                     </span>
                   </TableCell>
-                  <TableCell className="text-center">{row.total_play || "—"}</TableCell>
+                  <TableCell className="text-center">
+                    <span className={cellClass(totalsWon, totalsIsPlay)}>
+                      {totalsIsPlay ? row.total_play : "—"}
+                    </span>
+                  </TableCell>
                 </TableRow>
                 );
               })}
