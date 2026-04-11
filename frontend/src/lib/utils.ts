@@ -22,7 +22,9 @@ export function formatRuns(value: number | null): string {
 
 export function formatDate(dateStr: string | null): string {
   if (!dateStr) return "—";
-  const d = new Date(dateStr.split(" ")[0] + "T12:00:00");
+  const datePart = dateStr.slice(0, 10); // "YYYY-MM-DD" prefix works for all formats
+  const d = new Date(datePart + "T12:00:00");
+  if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
