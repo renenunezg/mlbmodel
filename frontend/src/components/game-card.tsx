@@ -37,7 +37,7 @@ function TeamRow({
             <span className="font-bold tabular-nums">{score}</span>
           )}
         </div>
-        <span className="block truncate text-xs text-muted-foreground font-sans">
+        <span className="block text-xs text-muted-foreground font-sans leading-tight">
           {prediction.starter ?? "TBD"}
         </span>
       </div>
