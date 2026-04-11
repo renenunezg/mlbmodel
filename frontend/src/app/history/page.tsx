@@ -151,6 +151,15 @@ export default async function HistoryPage({
     return `${w}-${l} (${pct}%)`;
   }
 
+  // Map game_pk → alternating group index (0, 1, 2…) in display order
+  const gameGroupIndex: Record<number, number> = {};
+  let groupCounter = 0;
+  for (const row of predictions) {
+    if (!(row.game_pk in gameGroupIndex)) {
+      gameGroupIndex[row.game_pk] = groupCounter++;
+    }
+  }
+
   // Build current search params string for pagination links
   function pageUrl(p: number) {
     const sp = new URLSearchParams();
@@ -274,6 +283,7 @@ export default async function HistoryPage({
                 <TableRow
                   key={`${row.game_pk}-${row.team}`}
                   className={cn(
+                    gameGroupIndex[row.game_pk] % 2 === 0 ? "bg-muted/30" : "",
                     hasPlay && won === true && "text-positive",
                     hasPlay && won === false && "text-negative"
                   )}

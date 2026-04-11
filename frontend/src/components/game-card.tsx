@@ -10,12 +10,10 @@ interface GameCardProps {
 function TeamRow({
   prediction,
   score,
-  showDivider = false,
 }: {
   prediction: ModelOutput;
   isHome: boolean;
   score: number | null;
-  showDivider?: boolean;
 }) {
   const hasEvPlay = prediction.ev_flag !== "No Play";
   const confidence = prediction.ml_confidence;
@@ -23,12 +21,7 @@ function TeamRow({
   const isFinal = score != null;
 
   return (
-    <div
-      className={cn(
-        "col-span-full grid grid-cols-subgrid items-center py-1.5",
-        showDivider && "border-t border-border/50"
-      )}
-    >
+    <div className="grid grid-cols-[1fr_3.5rem_3.5rem_3.5rem_5.5rem] sm:grid-cols-[1fr_3.5rem_3.5rem_3.5rem_7rem_5.5rem] items-center gap-x-2 py-1.5 font-mono text-sm">
       {/* Team + Starter */}
       <div className="min-w-0">
         <div className="flex items-center gap-2">
@@ -143,7 +136,7 @@ export function GameCard({ matchup }: GameCardProps) {
       </CardHeader>
 
       <CardContent className="space-y-0 py-0">
-        <div className="grid grid-cols-[1fr_3.5rem_3.5rem_3.5rem_auto] sm:grid-cols-[1fr_3.5rem_3.5rem_3.5rem_7rem_auto] gap-x-2 font-mono text-sm">
+        <div className="divide-y divide-border/50">
           <TeamRow
             prediction={matchup.away}
             isHome={false}
@@ -153,7 +146,6 @@ export function GameCard({ matchup }: GameCardProps) {
             prediction={matchup.home}
             isHome={true}
             score={isFinal ? matchup.home_score : null}
-            showDivider
           />
         </div>
       </CardContent>
