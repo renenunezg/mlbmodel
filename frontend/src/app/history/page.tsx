@@ -151,15 +151,6 @@ export default async function HistoryPage({
     return `${w}-${l} (${pct}%)`;
   }
 
-  // Map game_pk → alternating group index (0, 1, 2…) in display order
-  const gameGroupIndex: Record<number, number> = {};
-  let groupCounter = 0;
-  for (const row of predictions) {
-    if (!(row.game_pk in gameGroupIndex)) {
-      gameGroupIndex[row.game_pk] = groupCounter++;
-    }
-  }
-
   // Build current search params string for pagination links
   function pageUrl(p: number) {
     const sp = new URLSearchParams();
@@ -227,7 +218,8 @@ export default async function HistoryPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {predictions.map((row) => {
+              {predictions.map((row, i) => {
+                const nextRow = predictions[i + 1];
                 const game = gamesMap[row.game_pk];
                 const isFinal = game?.status === "Final";
                 const isHome = game?.home_team === row.team;
@@ -283,7 +275,8 @@ export default async function HistoryPage({
                 <TableRow
                   key={`${row.game_pk}-${row.team}`}
                   className={cn(
-                    gameGroupIndex[row.game_pk] % 2 === 0 ? "bg-muted/30" : "",
+                    // Suppress the divider between the two rows of the same game
+                    nextRow?.game_pk === row.game_pk && "border-b-0",
                     hasPlay && won === true && "text-positive",
                     hasPlay && won === false && "text-negative"
                   )}

@@ -5,41 +5,35 @@ interface EvBadgeProps {
 }
 
 export function EvBadge({ prediction }: EvBadgeProps) {
-  const badges: React.ReactNode[] = [];
+  const ml = prediction.ev_flag !== "No Play";
+  const rl = prediction.run_line_ev_flag !== "No Play";
+  const isOver = prediction.total_play === "Over";
+  const isUnder = prediction.total_play === "Under";
+  const variance = prediction.high_variance_flag === "Yes";
 
-  if (prediction.ev_flag !== "No Play") {
-    badges.push(
-      <span key="ev" className="text-positive">+EV</span>
-    );
-  }
-
-  if (prediction.run_line_ev_flag !== "No Play") {
-    badges.push(
-      <span key="rl" className="text-accent-blue">RL</span>
-    );
-  }
-
-  if (prediction.total_play === "Over") {
-    badges.push(
-      <span key="total" className="text-accent-amber">OVR</span>
-    );
-  } else if (prediction.total_play === "Under") {
-    badges.push(
-      <span key="total" className="text-accent-amber">UND</span>
-    );
-  }
-
-  if (prediction.high_variance_flag === "Yes") {
-    badges.push(
-      <span key="var" className="text-negative">VAR</span>
-    );
-  }
-
-  if (badges.length === 0) return null;
+  const hasAny = ml || rl || isOver || isUnder || variance;
+  if (!hasAny) return null;
 
   return (
-    <div className="flex items-center gap-1.5 font-mono text-xs font-medium">
-      {badges}
+    <div className="flex items-center gap-1 font-mono text-xs font-medium">
+      {/* Slot 1: ML (+EV) */}
+      <span className="inline-block w-6 text-right">
+        {ml ? <span className="text-positive">+EV</span> : null}
+      </span>
+      {/* Slot 2: Run line (RL) */}
+      <span className="inline-block w-4 text-right">
+        {rl ? <span className="text-accent-blue">RL</span> : null}
+      </span>
+      {/* Slot 3: Totals (OVR/UND) or VAR */}
+      <span className="inline-block w-7 text-right">
+        {isOver ? (
+          <span className="text-accent-amber">OVR</span>
+        ) : isUnder ? (
+          <span className="text-accent-amber">UND</span>
+        ) : variance ? (
+          <span className="text-negative">VAR</span>
+        ) : null}
+      </span>
     </div>
   );
 }
