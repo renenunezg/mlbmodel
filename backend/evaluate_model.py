@@ -2,19 +2,34 @@
 Evaluate model predictions against actual game results.
 
 Computes accuracy metrics for moneyline, run line, and totals picks,
-then upserts a summary row into the model_evaluation table.
+plus comprehensive regression, probabilistic, and financial metrics.
+Writes results to model_evaluation (with eval_window), model_calibration,
+model_feature_importance, and model_edge_buckets tables.
 
 Usage:
     from backend.evaluate_model import main
     main()
 """
 
+import datetime
+import json
+import subprocess
 import pandas as pd
 import numpy as np
-from sqlalchemy import MetaData
+from sqlalchemy import MetaData, text
 from sqlalchemy.dialects.postgresql import insert
 
 from backend.db import engine
+from backend.kelly import american_to_decimal, quarter_kelly
+from backend.metrics import (
+    regression_summary,
+    probabilistic_summary,
+    calibration_curve,
+    financial_summary,
+    equity_curve_from_ledger,
+    hit_rate_by_edge_bucket,
+)
+from backend.model import FEATURE_COLS
 
 
 def _calc_run_line_pick(row):
@@ -48,8 +63,181 @@ def _calc_total_pick(row):
     return np.nan
 
 
-def main():
-    """Run full evaluation and write results to model_evaluation table."""
+def _build_bet_ledger(eval_df):
+    """Build a bet ledger from evaluated predictions.
+
+    Each row where ev_flag or run_line_ev_flag or total_play fired is a bet.
+    Stake = quarter-Kelly fraction of a 1-unit bankroll.
+    Payout = stake * decimal_odds if won, else 0.
+    """
+    rows = []
+
+    for _, r in eval_df.iterrows():
+        date = r.get("game_date", r.get("date"))
+
+        # Moneyline bets
+        if r.get("ev_flag") == r.get("team") and pd.notna(r.get("moneyline")):
+            dec_odds = american_to_decimal(r["moneyline"])
+            stake = r.get("kelly_quarter_ml", 0)
+            if pd.isna(stake) or stake <= 0:
+                stake = 0.01  # minimum bet
+            won = bool(r.get("actual_win") == 1)
+            edge = r.get("win_prob", 0.5) - (1 / dec_odds if dec_odds else 0.5)
+            rows.append({
+                "date": date, "bet_type": "ml", "team": r["team"],
+                "game_pk": r["game_pk"], "stake": float(stake),
+                "decimal_odds": float(dec_odds), "won": won,
+                "payout": float(stake * dec_odds) if won else 0.0,
+                "edge": float(edge) if pd.notna(edge) else 0.0,
+            })
+
+        # Run line bets
+        if r.get("run_line_ev_flag") == r.get("team") and pd.notna(r.get("spread_odds")):
+            dec_odds = american_to_decimal(r["spread_odds"])
+            stake = r.get("kelly_quarter_rl", 0)
+            if pd.isna(stake) or stake <= 0:
+                stake = 0.01
+            # Did the team cover?
+            rl_correct = _calc_run_line_pick(r)
+            won = bool(rl_correct == 1) if pd.notna(rl_correct) else False
+            edge = r.get("p_cover", 0.5) - (1 / dec_odds if dec_odds else 0.5)
+            rows.append({
+                "date": date, "bet_type": "rl", "team": r["team"],
+                "game_pk": r["game_pk"], "stake": float(stake),
+                "decimal_odds": float(dec_odds), "won": won,
+                "payout": float(stake * dec_odds) if won else 0.0,
+                "edge": float(edge) if pd.notna(edge) else 0.0,
+            })
+
+        # Totals bets
+        if r.get("total_play") in ("Over", "Under") and pd.notna(r.get("game_total")):
+            direction = r["total_play"].strip().lower()
+            odds_col = "total_over_odds" if direction == "over" else "total_under_odds"
+            book_odds = r.get(odds_col)
+            if pd.notna(book_odds):
+                dec_odds = american_to_decimal(book_odds)
+                stake = r.get("kelly_quarter_total", 0)
+                if pd.isna(stake) or stake <= 0:
+                    stake = 0.01
+                total_correct = _calc_total_pick(r)
+                won = bool(total_correct == 1) if pd.notna(total_correct) else False
+                model_p = r.get("p_over") if direction == "over" else r.get("p_under")
+                edge = (model_p or 0.5) - (1 / dec_odds if dec_odds else 0.5)
+                rows.append({
+                    "date": date, "bet_type": "total", "team": r["team"],
+                    "game_pk": r["game_pk"], "stake": float(stake),
+                    "decimal_odds": float(dec_odds), "won": won,
+                    "payout": float(stake * dec_odds) if won else 0.0,
+                    "edge": float(edge) if pd.notna(edge) else 0.0,
+                })
+
+    return pd.DataFrame(rows) if rows else pd.DataFrame(
+        columns=["date", "bet_type", "team", "game_pk", "stake",
+                 "decimal_odds", "won", "payout", "edge"]
+    )
+
+
+def _write_evaluation_row(eval_date, eval_window, base_row, metric_dict):
+    """Upsert one row into model_evaluation."""
+    metadata = MetaData()
+    metadata.reflect(bind=engine)
+    table = metadata.tables["model_evaluation"]
+
+    row = {**base_row, **metric_dict, "date": eval_date, "eval_window": eval_window}
+    # Clean NaN/inf for Postgres
+    for k, v in row.items():
+        if isinstance(v, float) and (np.isnan(v) or np.isinf(v)):
+            row[k] = None
+
+    update_cols = {k: v for k, v in row.items() if k not in ("date", "eval_window")}
+
+    with engine.begin() as conn:
+        conn.execute(
+            insert(table)
+            .values(**row)
+            .on_conflict_do_update(
+                index_elements=["date", "eval_window"],
+                set_=update_cols,
+            )
+        )
+
+
+def _write_calibration(eval_date, cal_bins):
+    """Upsert calibration curve bins for a date."""
+    if not cal_bins:
+        return
+    with engine.begin() as conn:
+        for b in cal_bins:
+            conn.execute(text("""
+                INSERT INTO model_calibration (date, bin_mid, predicted_mean, observed_rate, count)
+                VALUES (:date, :bin_mid, :predicted_mean, :observed_rate, :count)
+                ON CONFLICT (date, bin_mid) DO UPDATE SET
+                    predicted_mean = EXCLUDED.predicted_mean,
+                    observed_rate = EXCLUDED.observed_rate,
+                    count = EXCLUDED.count
+            """), {"date": eval_date, **b})
+
+
+def _write_feature_importance(eval_date, importance_dict):
+    """Upsert feature importance for a date."""
+    if not importance_dict:
+        return
+    with engine.begin() as conn:
+        for feature, imp in importance_dict.items():
+            conn.execute(text("""
+                INSERT INTO model_feature_importance (date, feature, importance)
+                VALUES (:date, :feature, :importance)
+                ON CONFLICT (date, feature) DO UPDATE SET importance = EXCLUDED.importance
+            """), {"date": eval_date, "feature": feature, "importance": float(imp)})
+
+
+def _write_edge_buckets(eval_date, eval_window, buckets):
+    """Upsert edge bucket stats."""
+    if not buckets:
+        return
+    with engine.begin() as conn:
+        for b in buckets:
+            conn.execute(text("""
+                INSERT INTO model_edge_buckets (date, eval_window, bucket_label, n_bets, hit_rate, roi)
+                VALUES (:date, :eval_window, :bucket_label, :n_bets, :hit_rate, :roi)
+                ON CONFLICT (date, eval_window, bucket_label) DO UPDATE SET
+                    n_bets = EXCLUDED.n_bets,
+                    hit_rate = EXCLUDED.hit_rate,
+                    roi = EXCLUDED.roi
+            """), {"date": eval_date, "eval_window": eval_window, **b})
+
+
+def _write_experiment_run(cv_metrics, best_params):
+    """Log the training run to experiment_runs."""
+    try:
+        git_sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL
+        ).decode().strip()
+    except Exception:
+        git_sha = None
+
+    best_cv_mae = np.mean([m["mae"] for m in cv_metrics]) if cv_metrics else None
+
+    with engine.begin() as conn:
+        conn.execute(text("""
+            INSERT INTO experiment_runs (git_sha, hyperparameters, best_cv_mae, feature_list)
+            VALUES (:git_sha, :params, :mae, :features)
+        """), {
+            "git_sha": git_sha,
+            "params": json.dumps(best_params) if best_params else None,
+            "mae": float(best_cv_mae) if best_cv_mae else None,
+            "features": FEATURE_COLS,
+        })
+
+
+def main(model=None, cv_metrics=None, best_params=None):
+    """Run full evaluation and write results to DB.
+
+    Args:
+        model: trained XGBoost model (for feature importance). None = skip.
+        cv_metrics: list of per-fold metric dicts from train_model_cv. None = skip.
+        best_params: dict of best hyperparameters. None = skip.
+    """
     model_df = pd.read_sql_table("model_outputs_season", con=engine)
     games_df = pd.read_sql_table("games", con=engine)
 
@@ -63,6 +251,7 @@ def main():
         games_df["home_team"],
         games_df["away_team"],
     )
+    games_df["game_total"] = games_df["home_score"] + games_df["away_score"]
 
     # Reshape games: one row per team
     home_df = games_df.rename(columns={"home_team": "team", "home_score": "actual_runs"})[
@@ -83,6 +272,13 @@ def main():
         how="inner",
     ).dropna(subset=["actual_runs"])
 
+    # Also merge game_total for totals evaluation
+    eval_df = eval_df.merge(
+        games_df[["game_pk", "game_total"]].drop_duplicates(subset=["game_pk"]),
+        on="game_pk",
+        how="left",
+    )
+
     if eval_df.empty:
         print("  No predictions matched to completed games yet.")
         return
@@ -92,8 +288,8 @@ def main():
     eval_df["pred_win"] = (eval_df["win_prob"] > 0.5).astype(int)
 
     accuracy = (eval_df["pred_win"] == eval_df["actual_win"]).mean()
-    mae = abs(eval_df["expected_runs"] - eval_df["actual_runs"]).mean()
-    print(f"  Win accuracy: {accuracy:.2%} | Runs MAE: {mae:.3f} | {len(eval_df)} predictions evaluated")
+    runs_mae = abs(eval_df["expected_runs"] - eval_df["actual_runs"]).mean()
+    print(f"  Win accuracy: {accuracy:.2%} | Runs MAE: {runs_mae:.3f} | {len(eval_df)} predictions evaluated")
 
     # Moneyline picks
     ml_plays = eval_df[eval_df["ev_flag"] == eval_df["team"]].drop_duplicates(subset=["game_pk"])
@@ -104,6 +300,7 @@ def main():
 
     # Run line picks
     rl_plays = eval_df[eval_df["run_line_ev_flag"] == eval_df["team"]].drop_duplicates(subset=["game_pk"])
+    rl_plays = rl_plays.copy()
     rl_plays["run_line_correct"] = rl_plays.apply(_calc_run_line_pick, axis=1)
     rl_correct = int(rl_plays["run_line_correct"].sum()) if not rl_plays.empty else 0
     rl_total = int(rl_plays["run_line_correct"].notna().sum())
@@ -111,58 +308,106 @@ def main():
     print(f"  RL picks: {rl_correct}/{rl_total} ({rl_accuracy:.2%})" if rl_total > 0 else "  RL picks: none")
 
     # Totals picks
-    games_df["game_total"] = games_df["home_score"] + games_df["away_score"]
-    totals_eval = (
-        eval_df[eval_df["total_play"].isin(["Over", "Under"])]
-        .groupby(["game_pk", "total", "total_play"])
-        .first()
-        .reset_index()
-    )
-    totals_eval = totals_eval.merge(
-        games_df[["game_pk", "game_total"]].drop_duplicates(subset=["game_pk"]),
-        on="game_pk",
-        how="left",
-    )
-    totals_eval["total_pick_correct"] = totals_eval.apply(_calc_total_pick, axis=1)
-    totals_correct = int(totals_eval["total_pick_correct"].sum())
-    totals_total = int(totals_eval["total_pick_correct"].notna().sum())
+    totals_plays = eval_df[eval_df["total_play"].isin(["Over", "Under"])].copy()
+    totals_plays["total_pick_correct"] = totals_plays.apply(_calc_total_pick, axis=1)
+    totals_correct = int(totals_plays["total_pick_correct"].sum()) if not totals_plays.empty else 0
+    totals_total = int(totals_plays["total_pick_correct"].notna().sum())
     totals_accuracy = totals_correct / totals_total if totals_total > 0 else np.nan
-    print(f"  Totals picks: {totals_correct}/{totals_total} ({totals_accuracy:.2%})" if totals_total > 0 else "  Totals picks: none")
 
-    # Upsert into model_evaluation
-    metadata = MetaData()
-    metadata.reflect(bind=engine)
-    model_evaluation = metadata.tables["model_evaluation"]
+    # --- Build bet ledger ---
+    ledger = _build_bet_ledger(eval_df)
 
     eval_date = pd.to_datetime(eval_df["game_date"].max()).date()
     total_correct = int((eval_df["pred_win"] == eval_df["actual_win"]).sum())
     total_predictions = len(eval_df)
 
-    row = {
-        "date": eval_date,
+    base_row = {
         "total_correct": total_correct,
         "total_predictions": total_predictions,
-        "total_accuracy": round(total_correct / total_predictions, 2),
+        "total_accuracy": round(total_correct / total_predictions, 4) if total_predictions > 0 else None,
         "ml_correct": int(ml_correct),
         "ml_predictions": int(ml_total),
-        "ml_accuracy": round(float(ml_accuracy), 2) if pd.notna(ml_accuracy) else 0.0,
+        "ml_accuracy": round(float(ml_accuracy), 4) if pd.notna(ml_accuracy) else None,
         "run_line_correct": int(rl_correct),
         "run_line_predictions": int(rl_total),
-        "run_line_accuracy": round(float(rl_accuracy), 2) if pd.notna(rl_accuracy) else 0.0,
-        "average_total_diff": round(float(mae), 2),
-        "average_win_prob": round(float(eval_df["win_prob"].mean()), 2),
+        "run_line_accuracy": round(float(rl_accuracy), 4) if pd.notna(rl_accuracy) else None,
+        "average_total_diff": round(float(runs_mae), 4),
+        "average_win_prob": round(float(eval_df["win_prob"].mean()), 4),
     }
 
-    update_cols = {k: v for k, v in row.items() if k != "date"}
+    # --- Compute metrics for multiple windows ---
+    eval_df["game_date"] = pd.to_datetime(eval_df["game_date"])
+    latest_date = eval_df["game_date"].max()
 
-    with engine.begin() as conn:
-        conn.execute(
-            insert(model_evaluation)
-            .values(**row)
-            .on_conflict_do_update(index_elements=["date"], set_=update_cols)
-        )
+    windows = {
+        "day": eval_df[eval_df["game_date"] == latest_date],
+        "7d": eval_df[eval_df["game_date"] >= latest_date - pd.Timedelta(days=7)],
+        "30d": eval_df[eval_df["game_date"] >= latest_date - pd.Timedelta(days=30)],
+        "season": eval_df,
+    }
 
-    print(f"  Evaluation written for {eval_date}")
+    if not ledger.empty:
+        ledger["date"] = pd.to_datetime(ledger["date"])
+
+    for window_name, window_df in windows.items():
+        if window_df.empty:
+            continue
+
+        y_true = window_df["actual_runs"].values.astype(float)
+        y_pred = window_df["expected_runs"].values.astype(float)
+        probs = window_df["win_prob"].values.astype(float)
+        outcomes = window_df["actual_win"].values.astype(float)
+
+        reg = regression_summary(y_true, y_pred)
+        prob = probabilistic_summary(probs, outcomes, y_pred, y_true)
+
+        # Financial metrics for this window
+        if not ledger.empty:
+            window_dates = set(window_df["game_date"].dt.date)
+            window_ledger = ledger[ledger["date"].dt.date.isin(window_dates)]
+        else:
+            window_ledger = pd.DataFrame(columns=ledger.columns if not ledger.empty else [])
+
+        fin = financial_summary(window_ledger) if not window_ledger.empty else {}
+
+        # Equity end
+        eq = equity_curve_from_ledger(window_ledger)
+        equity_end = float(eq["equity"].iloc[-1]) if not eq.empty else 1.0
+
+        metrics = {
+            **reg,
+            **prob,
+            **fin,
+            "equity_end_units": round(equity_end, 4),
+        }
+        # Remove residual_ sub-keys from the DB row (they don't have columns)
+        metrics = {k: v for k, v in metrics.items() if not k.startswith("residual_")}
+
+        _write_evaluation_row(eval_date, window_name, base_row, metrics)
+
+        # Edge buckets per window
+        if not window_ledger.empty:
+            buckets = hit_rate_by_edge_bucket(window_ledger)
+            _write_edge_buckets(eval_date, window_name, buckets)
+
+    # --- Calibration curve (season-wide, latest date) ---
+    season_df = windows["season"]
+    cal_bins = calibration_curve(
+        season_df["win_prob"].values,
+        season_df["actual_win"].values,
+    )
+    _write_calibration(eval_date, cal_bins)
+
+    # --- Feature importance ---
+    if model is not None:
+        importance = dict(zip(FEATURE_COLS, model.feature_importances_))
+        _write_feature_importance(eval_date, importance)
+
+    # --- Experiment tracking ---
+    if cv_metrics:
+        _write_experiment_run(cv_metrics, best_params)
+
+    print(f"  Evaluation written for {eval_date} (4 windows + calibration + importance)")
 
 
 if __name__ == "__main__":

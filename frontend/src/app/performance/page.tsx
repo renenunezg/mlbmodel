@@ -1,31 +1,44 @@
 import { supabase } from "@/lib/supabase";
-import type { ModelEvaluation } from "@/lib/types";
-import { AccuracyChart } from "@/components/accuracy-chart";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import type {
+  ModelEvaluation,
+  CalibrationBin,
+  FeatureImportance,
+  EdgeBucket,
+} from "@/lib/types";
+import { PerformanceTabs } from "./tabs";
 
 export const revalidate = 300;
 
-function pct(value: number | undefined | null): string {
-  if (value == null) return "\u2014";
-  return `${(value * 100).toFixed(1)}%`;
-}
-
 export default async function PerformancePage() {
-  const { data: evaluations } = await supabase
-    .from("model_evaluation")
-    .select("*")
-    .order("date", { ascending: true });
+  // Fetch all data in parallel
+  const [evalRes, calRes, featRes, edgeRes] = await Promise.all([
+    supabase
+      .from("model_evaluation")
+      .select("*")
+      .order("date", { ascending: true }),
+    supabase
+      .from("model_calibration")
+      .select("*")
+      .order("date", { ascending: false })
+      .limit(10),
+    supabase
+      .from("model_feature_importance")
+      .select("*")
+      .order("date", { ascending: false })
+      .limit(20),
+    supabase
+      .from("model_edge_buckets")
+      .select("*")
+      .order("date", { ascending: false })
+      .limit(40),
+  ]);
 
-  const rows = (evaluations ?? []) as ModelEvaluation[];
+  const evaluations = (evalRes.data ?? []) as ModelEvaluation[];
+  const calibration = (calRes.data ?? []) as CalibrationBin[];
+  const featureImportance = (featRes.data ?? []) as FeatureImportance[];
+  const edgeBuckets = (edgeRes.data ?? []) as EdgeBucket[];
 
-  if (rows.length === 0) {
+  if (evaluations.length === 0) {
     return (
       <main className="mx-auto max-w-5xl px-4 py-8">
         <h1 className="font-heading text-2xl tracking-tight">
@@ -39,79 +52,17 @@ export default async function PerformancePage() {
     );
   }
 
-  const latest = rows[rows.length - 1];
-
   return (
-    <main className="mx-auto max-w-5xl px-4 py-8 space-y-8">
+    <main className="mx-auto max-w-5xl px-4 py-8 space-y-6">
       <h1 className="font-heading text-2xl tracking-tight">
         Model Performance
       </h1>
-
-      {/* KPI inline metrics */}
-      <div className="flex items-baseline gap-8 font-mono text-sm">
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-xs uppercase tracking-wider text-muted-foreground">ML Accuracy</span>
-          <span className="font-bold tabular-nums">{pct(latest.ml_accuracy)}</span>
-        </div>
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-xs uppercase tracking-wider text-muted-foreground">Run Line</span>
-          <span className="font-bold tabular-nums">{pct(latest.run_line_accuracy)}</span>
-        </div>
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-xs uppercase tracking-wider text-muted-foreground">Overall</span>
-          <span className="font-bold tabular-nums">{pct(latest.total_accuracy)}</span>
-        </div>
-      </div>
-
-      {/* Chart */}
-      <div className="border-t border-border pt-6">
-        <h2 className="font-heading text-lg mb-4">Accuracy Over Time</h2>
-        <AccuracyChart data={rows} />
-      </div>
-
-      {/* Stats table */}
-      <div className="border-t border-border pt-6">
-        <h2 className="font-heading text-lg mb-4">Evaluation History</h2>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Overall</TableHead>
-              <TableHead>ML</TableHead>
-              <TableHead>Run Line</TableHead>
-              <TableHead className="text-right">Avg Total Diff</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {[...rows].reverse().map((row) => (
-              <TableRow key={row.date}>
-                <TableCell className="font-medium">{row.date}</TableCell>
-                <TableCell>
-                  {row.total_correct}/{row.total_predictions}{" "}
-                  <span className="text-muted-foreground">
-                    ({pct(row.total_accuracy)})
-                  </span>
-                </TableCell>
-                <TableCell>
-                  {row.ml_correct}/{row.ml_predictions}{" "}
-                  <span className="text-muted-foreground">
-                    ({pct(row.ml_accuracy)})
-                  </span>
-                </TableCell>
-                <TableCell>
-                  {row.run_line_correct}/{row.run_line_predictions}{" "}
-                  <span className="text-muted-foreground">
-                    ({pct(row.run_line_accuracy)})
-                  </span>
-                </TableCell>
-                <TableCell className="text-right">
-                  {row.average_total_diff?.toFixed(2) ?? "\u2014"}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
+      <PerformanceTabs
+        evaluations={evaluations}
+        calibration={calibration}
+        featureImportance={featureImportance}
+        edgeBuckets={edgeBuckets}
+      />
     </main>
   );
 }
