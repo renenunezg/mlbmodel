@@ -174,7 +174,7 @@ export function PerformanceTabs({
         <div className="flex flex-wrap items-baseline gap-8 font-mono text-sm">
           <KpiCard label="MAE" value={fmt(latest?.mae)} />
           <KpiCard label="RMSE" value={fmt(latest?.rmse)} />
-          <KpiCard label="R\u00B2" value={fmt(latest?.r2)} />
+          <KpiCard label="R&#178;" value={fmt(latest?.r2)} />
           <KpiCard label="MAPE" value={latest?.mape != null ? `${latest.mape.toFixed(1)}%` : "\u2014"} />
         </div>
 
