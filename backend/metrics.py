@@ -116,7 +116,7 @@ def calibration_curve(probs, outcomes, n_bins=10):
         if count == 0:
             continue
         result.append({
-            "bin_mid": round((bins[i] + bins[i + 1]) / 2, 2),
+            "bin_mid": round(float((bins[i] + bins[i + 1]) / 2), 2),
             "predicted_mean": round(float(probs[in_bin].mean()), 4),
             "observed_rate": round(float(outcomes[in_bin].mean()), 4),
             "count": count,
