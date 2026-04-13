@@ -100,7 +100,7 @@ def _build_bet_ledger(eval_df):
             # Did the team cover?
             rl_correct = _calc_run_line_pick(r)
             won = bool(rl_correct == 1) if pd.notna(rl_correct) else False
-            edge = r.get("p_cover", 0.5) - (1 / dec_odds if dec_odds else 0.5)
+            edge = (r.get("p_cover") or 0.5) - (1 / dec_odds if dec_odds else 0.5)
             rows.append({
                 "date": date, "bet_type": "rl", "team": r["team"],
                 "game_pk": r["game_pk"], "stake": float(stake),
