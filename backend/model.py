@@ -6,7 +6,8 @@ import numpy as np
 from sqlalchemy import create_engine, text
 import xgboost as xgb
 import joblib
-from scipy.stats import poisson, nbinom
+from scipy.stats import nbinom
+from backend.kelly import american_to_decimal, kelly_fraction, quarter_kelly, compute_kelly_row
 from sklearn.model_selection import TimeSeriesSplit, GridSearchCV
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.isotonic import IsotonicRegression
@@ -16,17 +17,18 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost:5432/mlbmodel")
 engine = create_engine(DATABASE_URL)
 
-# 11 features for the XGBoost model
+# 12 features for the XGBoost model
 FEATURE_COLS = [
     'xfip',               # starter xFIP (computed from Statcast)
     'xfip_bullpen',       # bullpen xFIP
     'starter_whip',       # starter WHIP
     'bullpen_k_9',        # bullpen K/9
-    'batting_ops',        # team OPS vs opponent handedness
-    'batting_iso',        # team ISO vs opponent handedness (power)
-    'batting_k_pct',      # team K% vs opponent handedness (contact)
+    'batting_ops',        # team OPS blended across starter + bullpen handedness
+    'batting_iso',        # team ISO blended across starter + bullpen handedness
+    'batting_k_pct',      # team K% blended across starter + bullpen handedness
     'avg_last5',          # rolling 5-game run average
     'avg_last10',         # rolling 10-game run average
+    'std_last5',          # rolling 5-game std dev (volatility signal)
     'park_factor',        # park factor (affects offense)
     'is_home',            # home field advantage (0/1)
 ]
@@ -115,16 +117,25 @@ def load_training_data():
     starters = pd.merge(starters, opp, on="game_pk")
     starters = starters[starters["team"] != starters["opp_team"]]
 
-    # Select batting stats based on opponent pitcher handedness
+    # Select batting stats based on opponent pitching — blended across starter and bullpen.
+    # Reasoning: ~60% of a game's innings come from the starter (whose handedness is known)
+    # and ~40% from the bullpen. Bullpens are ~60% RHP league-wide regardless of the
+    # starter, so using only the starter's handedness for the whole game overstates
+    # the handedness signal for the bullpen portion of the game.
+    STARTER_INNING_SHARE = 0.6
+    BULLPEN_RHP_SHARE = 0.6
     for stat, vs_r_col, vs_l_col in [
         ("batting_ops", "ops_vs_r", "ops_vs_l"),
         ("batting_iso", "iso_vs_r", "iso_vs_l"),
         ("batting_k_pct", "k_pct_vs_r", "k_pct_vs_l"),
     ]:
-        starters[stat] = np.where(
-            starters["opp_handedness"] == "R",
-            starters.get(vs_r_col, np.nan),
-            starters.get(vs_l_col, np.nan),
+        vs_r = starters.get(vs_r_col, pd.Series(np.nan, index=starters.index))
+        vs_l = starters.get(vs_l_col, pd.Series(np.nan, index=starters.index))
+        split_vs_starter = np.where(starters["opp_handedness"] == "R", vs_r, vs_l)
+        split_vs_bullpen = BULLPEN_RHP_SHARE * vs_r + (1 - BULLPEN_RHP_SHARE) * vs_l
+        starters[stat] = (
+            STARTER_INNING_SHARE * split_vs_starter
+            + (1 - STARTER_INNING_SHARE) * split_vs_bullpen
         )
 
     # Load park factors and merge based on home team
@@ -132,8 +143,12 @@ def load_training_data():
     if not parks.empty:
         home_teams = starters[starters["is_home"] == True][["game_pk", "team"]].rename(columns={"team": "home_team"})
         starters = pd.merge(starters, home_teams, on="game_pk", how="left")
-        home_parks = pd.merge(home_teams, parks, left_on="home_team", right_on="team", how="left")[["game_pk", "park_factor"]]
-        starters = pd.merge(starters, home_parks, on="game_pk", how="left")
+        home_parks = pd.merge(home_teams, parks, left_on="home_team", right_on="team", how="left")[["game_pk", "home_team", "park_factor"]]
+        # Audit: surface silent merge failures (unmapped home team names) as loud warnings.
+        unmapped = home_parks[home_parks["park_factor"].isna()]["home_team"].unique().tolist()
+        if unmapped:
+            print(f"  WARNING: park_factors missing for home teams {unmapped} — check team_mappings.py")
+        starters = pd.merge(starters, home_parks.drop(columns=["home_team"]), on="game_pk", how="left")
     else:
         starters["park_factor"] = 100
 
@@ -166,28 +181,41 @@ def load_training_data():
             starters["away_score"],
         )
 
-        # Compute rolling averages
+        # Compute rolling averages — vectorized groupby/rolling with (game_date, game_pk)
+        # ordering so doubleheader game 2 is deterministic. Same-day games are excluded
+        # from each other's windows to match `game_date < current_date` semantics: all
+        # games on the same (team, game_date) inherit the rolling values computed as of
+        # the FIRST game on that date, i.e. strictly prior dates only.
         games["game_date"] = pd.to_datetime(games["game_date"])
         starters["game_date"] = pd.to_datetime(starters["game_date"])
 
-        home_runs = games[["game_date", "home_team", "home_score"]].rename(columns={"home_team": "team", "home_score": "runs"})
-        away_runs = games[["game_date", "away_team", "away_score"]].rename(columns={"away_team": "team", "away_score": "runs"})
-        team_games = pd.concat([home_runs, away_runs]).sort_values(["team", "game_date"]).reset_index(drop=True)
+        home_runs = games[["game_pk", "game_date", "home_team", "home_score"]].rename(
+            columns={"home_team": "team", "home_score": "runs"}
+        )
+        away_runs = games[["game_pk", "game_date", "away_team", "away_score"]].rename(
+            columns={"away_team": "team", "away_score": "runs"}
+        )
+        team_games = pd.concat([home_runs, away_runs], ignore_index=True)
+        team_games = team_games.sort_values(["team", "game_date", "game_pk"]).reset_index(drop=True)
 
-        def get_rolling_averages(team, current_date):
-            if pd.isna(current_date):
-                return pd.Series({"avg_last5": np.nan, "avg_last10": np.nan, "std_last5": np.nan})
-            past = team_games[(team_games["team"] == team) & (team_games["game_date"] < current_date)]
-            last5 = past.tail(5)["runs"]
-            last10 = past.tail(10)["runs"]
-            return pd.Series({
-                "avg_last5": last5.mean() if not last5.empty else np.nan,
-                "avg_last10": last10.mean() if not last10.empty else np.nan,
-                "std_last5": last5.std() if len(last5) >= 2 else np.nan,
-            })
+        # Shift by 1 within each team so the window excludes the current row's runs
+        team_games["runs_shifted"] = team_games.groupby("team")["runs"].shift(1)
 
-        starters[["avg_last5", "avg_last10", "std_last5"]] = starters.apply(
-            lambda row: get_rolling_averages(row["team"], row["game_date"]), axis=1
+        grp = team_games.groupby("team")["runs_shifted"]
+        team_games["avg_last5"] = grp.rolling(5, min_periods=1).mean().reset_index(level=0, drop=True)
+        team_games["avg_last10"] = grp.rolling(10, min_periods=1).mean().reset_index(level=0, drop=True)
+        team_games["std_last5"] = grp.rolling(5, min_periods=2).std().reset_index(level=0, drop=True)
+
+        # Doubleheader handling: all games on the same date share the FIRST game's rolling,
+        # so neither game sees the other's runs (matches old `game_date < current_date`).
+        for col in ["avg_last5", "avg_last10", "std_last5"]:
+            team_games[col] = team_games.groupby(["team", "game_date"])[col].transform("first")
+
+        starters = pd.merge(
+            starters,
+            team_games[["game_pk", "team", "avg_last5", "avg_last10", "std_last5"]],
+            on=["game_pk", "team"],
+            how="left",
         )
 
     # Filter for games with exactly 2 teams
@@ -241,7 +269,8 @@ def _train_simple(X, y):
         random_state=42,
     )
     model.fit(X, y)
-    return model, []
+    # No OOF predictions possible without CV — calibrator will be skipped downstream.
+    return model, [], np.full(len(X), np.nan), {"n_estimators": 100, "max_depth": 3, "learning_rate": 0.1}
 
 
 def train_model_cv(X, y, n_splits=5):
@@ -281,9 +310,12 @@ def train_model_cv(X, y, n_splits=5):
     print(f"Best params: {grid_search.best_params_}")
     print(f"Best CV MAE: {-grid_search.best_score_:.3f}")
 
-    # Report per-fold metrics with best params
+    # Report per-fold metrics with best params — also collect out-of-fold predictions
+    # aligned to X's row positions. These OOF predictions are used downstream to fit
+    # the isotonic calibrator without in-sample leakage.
     tscv = TimeSeriesSplit(n_splits=n_splits)
     fold_metrics = []
+    oof_preds = np.full(len(X), np.nan)
     for fold, (train_idx, val_idx) in enumerate(tscv.split(X)):
         X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
         y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
@@ -293,6 +325,7 @@ def train_model_cv(X, y, n_splits=5):
         )
         model.fit(X_train, y_train)
         preds = model.predict(X_val)
+        oof_preds[val_idx] = preds
 
         mae = mean_absolute_error(y_val, preds)
         rmse = np.sqrt(mean_squared_error(y_val, preds))
@@ -303,7 +336,10 @@ def train_model_cv(X, y, n_splits=5):
     avg_rmse = np.mean([m["rmse"] for m in fold_metrics])
     print(f"  CV Average: MAE={avg_mae:.3f}, RMSE={avg_rmse:.3f}")
 
-    return grid_search.best_estimator_, fold_metrics
+    n_oof = int(np.sum(~np.isnan(oof_preds)))
+    print(f"  Collected {n_oof}/{len(X)} OOF predictions for calibration")
+
+    return grid_search.best_estimator_, fold_metrics, oof_preds, grid_search.best_params_
 
 
 # Negative binomial dispersion parameter.  Variance = lambda + lambda^2 / r.
@@ -312,29 +348,89 @@ def train_model_cv(X, y, n_splits=5):
 NBINOM_R = 6.0
 
 
-def win_prob(lambda_a, lambda_b, max_runs=15, r=NBINOM_R):
-    """Compute P(team A wins) using negative binomial distributions.
+def compute_game_probs(lambda_home, lambda_away, total_line=None, spread_home=None,
+                       max_runs=25, r=NBINOM_R):
+    """Full game-level probability dict from the joint negative-binomial run distribution.
 
-    The negative binomial accounts for overdispersion in baseball scoring
-    (variance > mean), producing more realistic win probabilities than Poisson.
-    Ties are allocated proportionally (extra innings approximation).
+    Replaces the old magic `win_prob - 0.10` heuristic for run line and the
+    `±1 run` heuristic for totals — both are now derived directly from the joint
+    distribution, which naturally tightens in high-scoring environments and
+    widens in low-scoring ones.
+
+    Args:
+        lambda_home: expected runs for home team
+        lambda_away: expected runs for away team
+        total_line: book total runs line (for over/under). None → skip.
+        spread_home: signed spread from home team's perspective
+            (e.g. -1.5 = home favored by 1.5, +1.5 = home underdog). None → skip.
+        max_runs: truncation point for the run distribution (25 covers 99.9%+ of games)
+        r: negative binomial dispersion parameter (higher r → less overdispersion)
+
+    Returns dict with keys: p_home_win, p_away_win, p_home_cover, p_away_cover,
+    p_over, p_under. Keys whose input is missing are set to None.
+    Ties on the moneyline are allocated proportionally to expected runs
+    (extra-innings approximation). Pushes on run line / totals are split 50/50.
     """
     runs = np.arange(max_runs + 1)
-    a_probs = nbinom.pmf(runs, r, r / (r + lambda_a))
-    b_probs = nbinom.pmf(runs, r, r / (r + lambda_b))
+    h_probs = nbinom.pmf(runs, r, r / (r + lambda_home))
+    a_probs = nbinom.pmf(runs, r, r / (r + lambda_away))
+    # joint[h, a] = P(home scores h, away scores a)
+    joint = np.outer(h_probs, a_probs)
 
-    # Joint probability matrix: rows = team A scores, cols = team B scores
-    joint = np.outer(a_probs, b_probs)
+    # Moneyline with proportional tie allocation
+    p_home_outright = float(np.tril(joint, k=-1).sum())  # h > a
+    p_away_outright = float(np.triu(joint, k=1).sum())   # a > h
+    p_tie = float(np.trace(joint))
+    total_lambda = lambda_home + lambda_away
+    home_tie_share = lambda_home / total_lambda if total_lambda > 0 else 0.5
+    p_home_win = p_home_outright + p_tie * home_tie_share
+    p_away_win = p_away_outright + p_tie * (1 - home_tie_share)
 
-    p_win = np.tril(joint, k=-1).sum()   # P(A > B)
-    p_tie = np.trace(joint)               # P(A == B)
+    result = {
+        "p_home_win": round(p_home_win, 4),
+        "p_away_win": round(p_away_win, 4),
+        "p_home_cover": None,
+        "p_away_cover": None,
+        "p_over": None,
+        "p_under": None,
+    }
 
-    # Allocate ties proportionally to expected runs
-    total_lambda = lambda_a + lambda_b
-    tie_share = lambda_a / total_lambda if total_lambda > 0 else 0.5
-    p_win += p_tie * tie_share
+    # Run line: home "covers" spread_home if home_runs + spread_home > away_runs.
+    if spread_home is not None and not pd.isna(spread_home):
+        h_mat = runs[:, None]
+        a_mat = runs[None, :]
+        margin = h_mat - a_mat  # home minus away
+        # Strict cover: margin > -spread_home. Push (only for integer spreads): margin == -spread_home.
+        p_home_strict = float(joint[margin > -spread_home].sum())
+        p_push = float(joint[margin == -spread_home].sum())
+        p_away_strict = float(joint[margin < -spread_home].sum())
+        # Pushes split 50/50 (half win each side)
+        result["p_home_cover"] = round(p_home_strict + 0.5 * p_push, 4)
+        result["p_away_cover"] = round(p_away_strict + 0.5 * p_push, 4)
 
-    return round(float(p_win), 4)
+    # Totals: over/under the book's total_line
+    if total_line is not None and not pd.isna(total_line):
+        h_mat = runs[:, None]
+        a_mat = runs[None, :]
+        total_runs = h_mat + a_mat
+        p_over_strict = float(joint[total_runs > total_line].sum())
+        p_under_strict = float(joint[total_runs < total_line].sum())
+        p_push_total = float(joint[total_runs == total_line].sum())
+        result["p_over"] = round(p_over_strict + 0.5 * p_push_total, 4)
+        result["p_under"] = round(p_under_strict + 0.5 * p_push_total, 4)
+
+    return result
+
+
+def win_prob(lambda_a, lambda_b, max_runs=15, r=NBINOM_R):
+    """Backward-compatible: returns P(team A beats team B) as a float.
+
+    Thin wrapper around compute_game_probs so existing callers (backtest.py,
+    compute_predictions) continue to work. See compute_game_probs for the full
+    joint-distribution output.
+    """
+    probs = compute_game_probs(lambda_a, lambda_b, max_runs=max_runs, r=r)
+    return probs["p_home_win"]
 
 
 # Backward-compatible alias used by backtest.py
@@ -375,28 +471,39 @@ def flag_ev(row, threshold=0.03):
 
 
 def flag_runline_ev(row, threshold=0.03):
+    """Flag a run line play if our model's cover probability (from the joint
+    negative-binomial distribution, accounting for the book's actual spread)
+    beats the book's implied cover probability by at least `threshold`.
+    """
     try:
         book_prob = american_to_prob(row["spread_odds"])
-        if pd.isna(book_prob):
+        model_prob = row.get("p_cover")
+        if pd.isna(book_prob) or pd.isna(model_prob):
             return "No Play"
-        model_prob = max(row["win_prob"] - 0.10, 0)
         edge = model_prob - book_prob
         return row["team"] if edge >= threshold else "No Play"
     except Exception:
         return "No Play"
 
 
-def compute_predictions(df, model, calibrator=None):
-    """Predict expected runs and compute Poisson-based win probabilities.
+def compute_predictions(df, model, calibrator=None, use_existing_xR=False):
+    """Predict expected runs and compute negative-binomial win probabilities.
 
     If calibrator is provided, applies isotonic regression to calibrate
-    win probabilities after the Poisson step, then renormalizes per game.
+    win probabilities after the NB step, then renormalizes per game.
+
+    If use_existing_xR is True, the caller has already set `xR` on df (e.g.
+    out-of-fold predictions from CV) and model.predict is skipped. This lets
+    us compute leak-free win probabilities for calibrator fitting.
     """
     df = df.copy()
     df["is_home"] = df["is_home"].astype(int)
 
-    X = df[FEATURE_COLS].copy()
-    df["xR"] = model.predict(X).round(2)
+    if use_existing_xR:
+        df["xR"] = pd.to_numeric(df["xR"], errors="coerce").round(2)
+    else:
+        X = df[FEATURE_COLS].copy()
+        df["xR"] = model.predict(X).round(2)
 
     # Compute Poisson win probs per game
     df["win_prob"] = np.nan
@@ -473,9 +580,79 @@ def fit_calibrator(df):
     return calibrator
 
 
+def _get_table_columns(table_name):
+    """Return the set of column names currently present in a table."""
+    with engine.connect() as conn:
+        result = conn.execute(
+            text(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_name = :t"
+            ),
+            {"t": table_name},
+        )
+        return {row[0] for row in result}
+
+
+def _apply_market_probs(df):
+    """Compute p_cover / p_over / p_under per row from the joint NB distribution,
+    using the book's actual total_line and spread (pulled from the row's odds columns).
+
+    Expected columns on df: game_pk, team, is_home, xR, total, spread.
+    Adds columns: p_cover, p_over, p_under.
+    """
+    df = df.copy()
+    df["p_cover"] = np.nan
+    df["p_over"] = np.nan
+    df["p_under"] = np.nan
+
+    for game_pk, group in df.groupby("game_pk"):
+        if len(group) != 2:
+            continue
+        rows = group.sort_values("is_home", ascending=True)
+        away_row = rows.iloc[0]
+        home_row = rows.iloc[1]
+        lambda_away = max(float(away_row["xR"]), 0.5)
+        lambda_home = max(float(home_row["xR"]), 0.5)
+
+        total_line = home_row.get("total")
+        if pd.isna(total_line):
+            total_line = None
+        # spread is stored per-row, signed from that row's team perspective.
+        # We want the spread from the HOME team's perspective.
+        spread_home = home_row.get("spread")
+        if pd.isna(spread_home):
+            spread_home = None
+
+        probs = compute_game_probs(
+            lambda_home, lambda_away,
+            total_line=total_line,
+            spread_home=spread_home,
+        )
+
+        home_idx = rows.index[rows["is_home"] == 1]
+        away_idx = rows.index[rows["is_home"] == 0]
+
+        if probs["p_home_cover"] is not None:
+            df.loc[home_idx, "p_cover"] = probs["p_home_cover"]
+            df.loc[away_idx, "p_cover"] = probs["p_away_cover"]
+        if probs["p_over"] is not None:
+            df.loc[group.index, "p_over"] = probs["p_over"]
+            df.loc[group.index, "p_under"] = probs["p_under"]
+
+    return df
+
+
 def _upsert_season_outputs(df):
-    """Upsert into model_outputs_season using ON CONFLICT (game_pk, team)."""
-    cols = df.columns.tolist()
+    """Upsert into model_outputs_season using ON CONFLICT (game_pk, team).
+
+    Filters df to only columns that currently exist in the target table so that
+    new in-memory columns (added before a migration lands) don't break the insert.
+    """
+    existing_cols = _get_table_columns("model_outputs_season")
+    cols = [c for c in df.columns if c in existing_cols]
+    if not cols:
+        print("  WARNING: no matching columns for model_outputs_season upsert")
+        return
     placeholders = ", ".join([f":{c}" for c in cols])
     col_names = ", ".join(cols)
     update_set = ", ".join([f"{c} = EXCLUDED.{c}" for c in cols if c not in ("game_pk", "team")])
@@ -546,6 +723,8 @@ def main():
         df["xR"] = LEAGUE_AVG["avg_last5"]
         train_df = df
         model = None
+        cv_metrics = None
+        best_params = None
     else:
         # Sort by date for proper temporal ordering in CV
         train_df = train_df.sort_values("game_date").reset_index(drop=True)
@@ -564,9 +743,12 @@ def main():
         if len(X) < 4:
             print(f"Only {len(X)} training samples — too few for reliable model. Using league avg.")
             model = None
+            oof_preds = None
+            cv_metrics = None
+            best_params = None
             train_df["xR"] = LEAGUE_AVG["avg_last5"]
         else:
-            model, cv_metrics = train_model_cv(X, y)
+            model, cv_metrics, oof_preds, best_params = train_model_cv(X, y)
 
     # Save model and fit calibrator if we trained one
     calibrator = None
@@ -574,13 +756,27 @@ def main():
         model.save_model("xgb_model.json")
         print("Model trained and saved to xgb_model.json")
 
-        # Fit isotonic calibrator on training data predictions vs actuals
-        print("\nFitting isotonic calibrator...")
-        train_preds = compute_predictions(train_df, model, calibrator=None)
-        calibrator = fit_calibrator(train_preds)
-        if calibrator is not None:
-            joblib.dump(calibrator, "isotonic_calibrator.pkl")
-            print("  Calibrator saved to isotonic_calibrator.pkl")
+        # Fit isotonic calibrator on OUT-OF-FOLD predictions (leak-free).
+        # Rows that were never in a validation fold have NaN xR and get dropped.
+        print("\nFitting isotonic calibrator on OOF predictions...")
+        if oof_preds is not None and np.any(~np.isnan(oof_preds)):
+            cal_df = train_df.loc[X.index].copy()
+            cal_df["xR"] = oof_preds
+            cal_df = cal_df.dropna(subset=["xR"])
+            # Keep only games where BOTH teams have OOF predictions
+            pair_counts = cal_df.groupby("game_pk").size()
+            valid_games = pair_counts[pair_counts == 2].index
+            cal_df = cal_df[cal_df["game_pk"].isin(valid_games)]
+            if len(cal_df) >= 800:
+                train_preds = compute_predictions(cal_df, model, calibrator=None, use_existing_xR=True)
+                calibrator = fit_calibrator(train_preds)
+                if calibrator is not None:
+                    joblib.dump(calibrator, "isotonic_calibrator.pkl")
+                    print("  Calibrator saved to isotonic_calibrator.pkl")
+            else:
+                print(f"  Only {len(cal_df)} paired OOF rows — skipping calibration (need >= 800)")
+        else:
+            print("  No OOF predictions available — skipping calibration")
 
     # Predict only on today's games
     predict_df = today_df.copy()
@@ -606,19 +802,27 @@ def main():
         ["game_pk", "is_home"], ascending=[True, True]
     ).reset_index(drop=True)[["game_pk", "game_date", "team", "starter", "xR", "win_prob", "our_odds"]]
 
-    # Merge odds data
+    # Merge odds data — include total_over_odds/total_under_odds so the totals EV
+    # flag can compare model over/under probability to the book's implied price.
     odds_df = _safe_read_table("odds")
+    odds_cols = ["game_pk", "team", "moneyline", "total", "spread", "spread_odds",
+                 "total_over_odds", "total_under_odds"]
     if not odds_df.empty:
         odds_df = odds_df.drop_duplicates(subset=["game_pk", "team"], keep="first")
+        available = [c for c in odds_cols if c in odds_df.columns]
         final_output = pd.merge(
             final_output,
-            odds_df[["game_pk", "team", "moneyline", "total", "spread", "spread_odds"]],
+            odds_df[available],
             on=["game_pk", "team"],
             how="left",
         )
+        for col in odds_cols:
+            if col not in final_output.columns:
+                final_output[col] = np.nan
     else:
-        for col in ["moneyline", "total", "spread", "spread_odds"]:
-            final_output[col] = np.nan
+        for col in odds_cols:
+            if col not in ("game_pk", "team"):
+                final_output[col] = np.nan
 
     # Compute additional columns
     our_totals = final_output.groupby("game_pk")["xR"].sum().round(2).rename("our_total")
@@ -626,30 +830,70 @@ def main():
     final_output["total"] = pd.to_numeric(final_output["total"], errors="coerce")
     final_output["total_diff"] = (final_output["our_total"] - final_output["total"]).round(2)
 
-    def flag_total_play(row):
-        if pd.isna(row["total_diff"]):
+    # Joint-distribution market probabilities (p_cover, p_over, p_under) using
+    # the book's actual total line and spread. Replaces the old `-0.10` run line
+    # heuristic and the `±1 run` totals heuristic.
+    final_output = _apply_market_probs(final_output)
+
+    def flag_total_play(row, threshold=0.03):
+        """Flag Over/Under based on joint-distribution probabilities vs book odds."""
+        try:
+            over_prob_book = american_to_prob(row.get("total_over_odds"))
+            under_prob_book = american_to_prob(row.get("total_under_odds"))
+            p_over = row.get("p_over")
+            p_under = row.get("p_under")
+            if pd.notna(p_over) and pd.notna(over_prob_book) and (p_over - over_prob_book) >= threshold:
+                return "Over"
+            if pd.notna(p_under) and pd.notna(under_prob_book) and (p_under - under_prob_book) >= threshold:
+                return "Under"
+            # Fallback when book over/under odds missing: use old diff heuristic so
+            # the UI still surfaces directional model disagreement with the line.
+            if pd.isna(over_prob_book) and pd.isna(under_prob_book) and pd.notna(row.get("total_diff")):
+                if row["total_diff"] >= 1:
+                    return "Over"
+                if row["total_diff"] <= -1:
+                    return "Under"
             return "No Play"
-        if row["total_diff"] >= 1:
-            return "Over"
-        elif row["total_diff"] <= -1:
-            return "Under"
-        return "No Play"
+        except Exception:
+            return "No Play"
 
     final_output["total_play"] = final_output.apply(flag_total_play, axis=1)
     final_output["ev_flag"] = final_output.apply(flag_ev, axis=1)
     final_output["run_line_ev_flag"] = final_output.apply(flag_runline_ev, axis=1)
 
-    final_output["ml_confidence"] = final_output.apply(
-        lambda row: round(row["win_prob"] - american_to_prob(row["moneyline"]), 3)
-        if pd.notna(row.get("moneyline")) else np.nan,
+    # --- Kelly sizing ---
+    # Moneyline Kelly: model prob vs book moneyline
+    ml_kelly = final_output.apply(
+        lambda row: compute_kelly_row(row["win_prob"], row["moneyline"]), axis=1
+    )
+    final_output["kelly_full_ml"] = ml_kelly.apply(lambda x: x[0])
+    final_output["kelly_quarter_ml"] = ml_kelly.apply(lambda x: x[1])
+
+    # Run line Kelly: model p_cover vs book spread odds
+    rl_kelly = final_output.apply(
+        lambda row: compute_kelly_row(row.get("p_cover"), row.get("spread_odds")), axis=1
+    )
+    final_output["kelly_full_rl"] = rl_kelly.apply(lambda x: x[0])
+    final_output["kelly_quarter_rl"] = rl_kelly.apply(lambda x: x[1])
+
+    # Totals Kelly: model p_over vs book over odds, model p_under vs book under odds
+    final_output["kelly_full_total"] = final_output.apply(
+        lambda row: (
+            kelly_fraction(row.get("p_over"), american_to_decimal(row.get("total_over_odds")))
+            if row.get("total_play") == "Over"
+            else kelly_fraction(row.get("p_under"), american_to_decimal(row.get("total_under_odds")))
+            if row.get("total_play") == "Under"
+            else 0.0
+        ),
         axis=1,
+    )
+    final_output["kelly_quarter_total"] = final_output["kelly_full_total"].apply(
+        lambda x: round(x * 0.25, 6) if pd.notna(x) else np.nan
     )
 
-    final_output["run_line_confidence"] = final_output.apply(
-        lambda row: round(max(row["win_prob"] - 0.10, 0) - american_to_prob(row["spread_odds"]), 3)
-        if pd.notna(row.get("spread_odds")) else np.nan,
-        axis=1,
-    )
+    # Confidence from quarter-Kelly (replaces ad-hoc edge differences)
+    final_output["ml_confidence"] = final_output["kelly_quarter_ml"]
+    final_output["run_line_confidence"] = final_output["kelly_quarter_rl"]
 
     final_output["high_variance_flag"] = predictions.get("std_last5", pd.Series(dtype=float)).apply(
         lambda x: "Yes" if pd.notna(x) and x > 4.0 else "No"
@@ -672,6 +916,13 @@ def main():
     _upsert_season_outputs(final_output)
 
     print("\nmodel_outputs tables updated.")
+
+    # Return model artifacts so the pipeline can pass them to evaluate_model
+    return {
+        "model": model,
+        "cv_metrics": cv_metrics if model is not None else None,
+        "best_params": best_params if model is not None else None,
+    }
 
 
 if __name__ == "__main__":

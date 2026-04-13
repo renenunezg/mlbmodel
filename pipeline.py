@@ -305,16 +305,24 @@ def fetch_and_load_odds():
     print(f"  {len(insert_df)} odds rows for {len(game_pks)} games")
 
 
+_model_artifacts = {}
+
 def run_model():
     """Train/predict and write to model_outputs tables."""
     from backend.model import main as model_main
-    model_main()
+    result = model_main()
+    if result:
+        _model_artifacts.update(result)
 
 
 def run_evaluation():
     """Evaluate predictions against actual results."""
     from backend.evaluate_model import main as eval_main
-    eval_main()
+    eval_main(
+        model=_model_artifacts.get("model"),
+        cv_metrics=_model_artifacts.get("cv_metrics"),
+        best_params=_model_artifacts.get("best_params"),
+    )
 
 
 # ---------------------------------------------------------------------------

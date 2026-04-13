@@ -125,6 +125,33 @@ def main():
             check(f"league-avg fallback rate ({fallback_pct:.0f}%)",
                   fallback_pct < 50, warning_only=is_early)
 
+        # 11. model_evaluation has rows for all 4 windows
+        eval_windows = conn.execute(
+            text("SELECT eval_window FROM model_evaluation WHERE date = :d"),
+            {"d": str(today)},
+        ).fetchall()
+        window_names = {r[0] for r in eval_windows}
+        expected_windows = {"day", "7d", "30d", "season"}
+        check(f"model_evaluation has all 4 windows ({window_names})",
+              expected_windows.issubset(window_names),
+              warning_only=is_early)
+
+        # 12. model_feature_importance has today's features
+        feat_count = conn.execute(
+            text("SELECT COUNT(*) FROM model_feature_importance WHERE date = :d"),
+            {"d": str(today)},
+        ).scalar()
+        check(f"model_feature_importance has features ({feat_count})",
+              feat_count >= 11, warning_only=is_early)
+
+        # 13. model_calibration has today's bins
+        cal_count = conn.execute(
+            text("SELECT COUNT(*) FROM model_calibration WHERE date = :d"),
+            {"d": str(today)},
+        ).scalar()
+        check(f"model_calibration has bins ({cal_count})",
+              cal_count >= 5, warning_only=is_early)
+
     print(f"\n{'=' * 50}")
     print(f"Results: {CHECKS_PASSED} passed, {CHECKS_FAILED} failed, {WARNINGS} warnings")
 

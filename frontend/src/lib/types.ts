@@ -34,6 +34,7 @@ export interface GameInfo {
 
 export interface ModelEvaluation {
   date: string;
+  eval_window: string;
   total_correct: number;
   total_predictions: number;
   total_accuracy: number;
@@ -45,6 +46,47 @@ export interface ModelEvaluation {
   run_line_accuracy: number;
   average_total_diff: number;
   average_win_prob: number;
+  // Regression metrics
+  mae: number | null;
+  rmse: number | null;
+  mape: number | null;
+  r2: number | null;
+  // Probabilistic metrics
+  brier_score: number | null;
+  log_loss: number | null;
+  sharpness: number | null;
+  interval_coverage_80: number | null;
+  // Financial metrics
+  roi: number | null;
+  sharpe: number | null;
+  sortino: number | null;
+  max_drawdown: number | null;
+  total_staked_units: number | null;
+  net_profit_units: number | null;
+  equity_end_units: number | null;
+}
+
+export interface CalibrationBin {
+  date: string;
+  bin_mid: number;
+  predicted_mean: number;
+  observed_rate: number;
+  count: number;
+}
+
+export interface FeatureImportance {
+  date: string;
+  feature: string;
+  importance: number;
+}
+
+export interface EdgeBucket {
+  date: string;
+  eval_window: string;
+  bucket_label: string;
+  n_bets: number;
+  hit_rate: number;
+  roi: number;
 }
 
 export interface GameMatchup {
