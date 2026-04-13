@@ -800,7 +800,7 @@ def main():
 
     final_output = predictions.sort_values(
         ["game_pk", "is_home"], ascending=[True, True]
-    ).reset_index(drop=True)[["game_pk", "game_date", "team", "starter", "xR", "win_prob", "our_odds"]]
+    ).reset_index(drop=True)[["game_pk", "game_date", "team", "starter", "xR", "win_prob", "our_odds", "is_home"]]
 
     # Merge odds data — include total_over_odds/total_under_odds so the totals EV
     # flag can compare model over/under probability to the book's implied price.
