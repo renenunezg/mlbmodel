@@ -127,8 +127,8 @@ def main():
 
         # 11. model_evaluation has rows for all 4 windows
         eval_windows = conn.execute(
-            text("SELECT eval_window FROM model_evaluation WHERE date = :d"),
-            {"d": str(today)},
+            text("SELECT eval_window FROM model_evaluation WHERE date::date IN (:d1, :d2)"),
+            {"d1": str(today), "d2": str(yesterday)},
         ).fetchall()
         window_names = {r[0] for r in eval_windows}
         expected_windows = {"day", "7d", "30d", "season"}
@@ -138,16 +138,16 @@ def main():
 
         # 12. model_feature_importance has today's features
         feat_count = conn.execute(
-            text("SELECT COUNT(*) FROM model_feature_importance WHERE date = :d"),
-            {"d": str(today)},
+            text("SELECT COUNT(*) FROM model_feature_importance WHERE date::date IN (:d1, :d2)"),
+            {"d1": str(today), "d2": str(yesterday)},
         ).scalar()
         check(f"model_feature_importance has features ({feat_count})",
               feat_count >= 11, warning_only=is_early)
 
         # 13. model_calibration has today's bins
         cal_count = conn.execute(
-            text("SELECT COUNT(*) FROM model_calibration WHERE date = :d"),
-            {"d": str(today)},
+            text("SELECT COUNT(*) FROM model_calibration WHERE date::date IN (:d1, :d2)"),
+            {"d1": str(today), "d2": str(yesterday)},
         ).scalar()
         check(f"model_calibration has bins ({cal_count})",
               cal_count >= 5, warning_only=is_early)

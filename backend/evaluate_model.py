@@ -238,6 +238,17 @@ def main(model=None, cv_metrics=None, best_params=None):
         cv_metrics: list of per-fold metric dicts from train_model_cv. None = skip.
         best_params: dict of best hyperparameters. None = skip.
     """
+    today = datetime.date.today()
+
+    # --- Feature importance (depends only on trained model, not completed games) ---
+    if model is not None:
+        importance = dict(zip(FEATURE_COLS, model.feature_importances_))
+        _write_feature_importance(today, importance)
+
+    # --- Experiment tracking (depends only on CV metrics, not completed games) ---
+    if cv_metrics:
+        _write_experiment_run(cv_metrics, best_params)
+
     model_df = pd.read_sql_table("model_outputs_season", con=engine)
     games_df = pd.read_sql_table("games", con=engine)
 
@@ -398,16 +409,7 @@ def main(model=None, cv_metrics=None, best_params=None):
     )
     _write_calibration(eval_date, cal_bins)
 
-    # --- Feature importance ---
-    if model is not None:
-        importance = dict(zip(FEATURE_COLS, model.feature_importances_))
-        _write_feature_importance(eval_date, importance)
-
-    # --- Experiment tracking ---
-    if cv_metrics:
-        _write_experiment_run(cv_metrics, best_params)
-
-    print(f"  Evaluation written for {eval_date} (4 windows + calibration + importance)")
+    print(f"  Evaluation written for {eval_date} (4 windows + calibration)")
 
 
 if __name__ == "__main__":
