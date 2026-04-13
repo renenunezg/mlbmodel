@@ -230,6 +230,41 @@ def _write_experiment_run(cv_metrics, best_params):
         })
 
 
+def _compute_base_row(window_df):
+    """Compute accuracy counts for a given window of evaluated predictions."""
+    total_correct = int((window_df["pred_win"] == window_df["actual_win"]).sum())
+    total_predictions = len(window_df)
+    runs_mae = abs(window_df["expected_runs"] - window_df["actual_runs"]).mean()
+
+    # Moneyline picks
+    ml_plays = window_df[window_df["ev_flag"] == window_df["team"]].drop_duplicates(subset=["game_pk"])
+    ml_correct = int((ml_plays["actual_win"] == 1).sum())
+    ml_total = len(ml_plays)
+    ml_accuracy = ml_correct / ml_total if ml_total > 0 else np.nan
+
+    # Run line picks
+    rl_plays = window_df[window_df["run_line_ev_flag"] == window_df["team"]].drop_duplicates(subset=["game_pk"])
+    rl_plays = rl_plays.copy()
+    rl_plays["run_line_correct"] = rl_plays.apply(_calc_run_line_pick, axis=1)
+    rl_correct = int(rl_plays["run_line_correct"].sum()) if not rl_plays.empty else 0
+    rl_total = int(rl_plays["run_line_correct"].notna().sum())
+    rl_accuracy = rl_correct / rl_total if rl_total > 0 else np.nan
+
+    return {
+        "total_correct": total_correct,
+        "total_predictions": total_predictions,
+        "total_accuracy": round(total_correct / total_predictions, 4) if total_predictions > 0 else None,
+        "ml_correct": ml_correct,
+        "ml_predictions": ml_total,
+        "ml_accuracy": round(float(ml_accuracy), 4) if pd.notna(ml_accuracy) else None,
+        "run_line_correct": rl_correct,
+        "run_line_predictions": rl_total,
+        "run_line_accuracy": round(float(rl_accuracy), 4) if pd.notna(rl_accuracy) else None,
+        "average_total_diff": round(float(runs_mae), 4),
+        "average_win_prob": round(float(window_df["win_prob"].mean()), 4),
+    }
+
+
 def main(model=None, cv_metrics=None, best_params=None):
     """Run full evaluation and write results to DB.
 
@@ -302,49 +337,10 @@ def main(model=None, cv_metrics=None, best_params=None):
     runs_mae = abs(eval_df["expected_runs"] - eval_df["actual_runs"]).mean()
     print(f"  Win accuracy: {accuracy:.2%} | Runs MAE: {runs_mae:.3f} | {len(eval_df)} predictions evaluated")
 
-    # Moneyline picks
-    ml_plays = eval_df[eval_df["ev_flag"] == eval_df["team"]].drop_duplicates(subset=["game_pk"])
-    ml_correct = (ml_plays["actual_win"] == 1).sum()
-    ml_total = len(ml_plays)
-    ml_accuracy = ml_correct / ml_total if ml_total > 0 else np.nan
-    print(f"  ML picks: {ml_correct}/{ml_total} ({ml_accuracy:.2%})" if ml_total > 0 else "  ML picks: none")
-
-    # Run line picks
-    rl_plays = eval_df[eval_df["run_line_ev_flag"] == eval_df["team"]].drop_duplicates(subset=["game_pk"])
-    rl_plays = rl_plays.copy()
-    rl_plays["run_line_correct"] = rl_plays.apply(_calc_run_line_pick, axis=1)
-    rl_correct = int(rl_plays["run_line_correct"].sum()) if not rl_plays.empty else 0
-    rl_total = int(rl_plays["run_line_correct"].notna().sum())
-    rl_accuracy = rl_correct / rl_total if rl_total > 0 else np.nan
-    print(f"  RL picks: {rl_correct}/{rl_total} ({rl_accuracy:.2%})" if rl_total > 0 else "  RL picks: none")
-
-    # Totals picks
-    totals_plays = eval_df[eval_df["total_play"].isin(["Over", "Under"])].copy()
-    totals_plays["total_pick_correct"] = totals_plays.apply(_calc_total_pick, axis=1)
-    totals_correct = int(totals_plays["total_pick_correct"].sum()) if not totals_plays.empty else 0
-    totals_total = int(totals_plays["total_pick_correct"].notna().sum())
-    totals_accuracy = totals_correct / totals_total if totals_total > 0 else np.nan
-
     # --- Build bet ledger ---
     ledger = _build_bet_ledger(eval_df)
 
     eval_date = pd.to_datetime(eval_df["game_date"].max()).date()
-    total_correct = int((eval_df["pred_win"] == eval_df["actual_win"]).sum())
-    total_predictions = len(eval_df)
-
-    base_row = {
-        "total_correct": total_correct,
-        "total_predictions": total_predictions,
-        "total_accuracy": round(total_correct / total_predictions, 4) if total_predictions > 0 else None,
-        "ml_correct": int(ml_correct),
-        "ml_predictions": int(ml_total),
-        "ml_accuracy": round(float(ml_accuracy), 4) if pd.notna(ml_accuracy) else None,
-        "run_line_correct": int(rl_correct),
-        "run_line_predictions": int(rl_total),
-        "run_line_accuracy": round(float(rl_accuracy), 4) if pd.notna(rl_accuracy) else None,
-        "average_total_diff": round(float(runs_mae), 4),
-        "average_win_prob": round(float(eval_df["win_prob"].mean()), 4),
-    }
 
     # --- Compute metrics for multiple windows ---
     eval_df["game_date"] = pd.to_datetime(eval_df["game_date"])
@@ -363,6 +359,9 @@ def main(model=None, cv_metrics=None, best_params=None):
     for window_name, window_df in windows.items():
         if window_df.empty:
             continue
+
+        # Compute base_row per window so counts match the time period
+        base_row = _compute_base_row(window_df)
 
         y_true = window_df["actual_runs"].values.astype(float)
         y_pred = window_df["expected_runs"].values.astype(float)
