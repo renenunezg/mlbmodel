@@ -105,7 +105,7 @@ export function PerformanceTabs({
       {/* OVERVIEW TAB */}
       {/* ============================================================ */}
       <TabsContent value="overview" className="space-y-8">
-        <div className="flex flex-wrap items-baseline gap-x-5 gap-y-3 font-mono text-sm">
+        <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-baseline gap-x-4 gap-y-3 font-mono text-sm">
           <KpiCard label="ROI" value={pct(latest?.roi)} />
           <KpiCard label="Sharpe" value={fmt(latest?.sharpe, 2)} />
           <KpiCard label="Max DD" value={pct(latest?.max_drawdown)} />
@@ -171,7 +171,7 @@ export function PerformanceTabs({
       {/* REGRESSION TAB */}
       {/* ============================================================ */}
       <TabsContent value="regression" className="space-y-8">
-        <div className="flex flex-wrap items-baseline gap-x-5 gap-y-3 font-mono text-sm">
+        <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-baseline gap-x-4 gap-y-3 font-mono text-sm">
           <KpiCard label="MAE" value={fmt(latest?.mae)} />
           <KpiCard label="RMSE" value={fmt(latest?.rmse)} />
           <KpiCard label="R&#178;" value={fmt(latest?.r2)} />
@@ -203,7 +203,7 @@ export function PerformanceTabs({
       {/* PROBABILISTIC TAB */}
       {/* ============================================================ */}
       <TabsContent value="probabilistic" className="space-y-8">
-        <div className="flex flex-wrap items-baseline gap-x-5 gap-y-3 font-mono text-sm">
+        <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-baseline gap-x-4 gap-y-3 font-mono text-sm">
           <KpiCard label="Brier Score" value={fmt(latest?.brier_score)} sub="Lower is better (baseline: 0.250)" />
           <KpiCard label="Log Loss" value={fmt(latest?.log_loss)} />
           <KpiCard label="Sharpness" value={fmt(latest?.sharpness, 4)} sub="Higher = more decisive" />
@@ -241,7 +241,7 @@ export function PerformanceTabs({
       {/* BETTING TAB */}
       {/* ============================================================ */}
       <TabsContent value="betting" className="space-y-8">
-        <div className="flex flex-wrap items-baseline gap-x-5 gap-y-3 font-mono text-sm">
+        <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-baseline gap-x-4 gap-y-3 font-mono text-sm">
           <KpiCard label="ROI" value={pct(latest?.roi)} />
           <KpiCard label="Sharpe" value={fmt(latest?.sharpe, 2)} />
           <KpiCard label="Sortino" value={fmt(latest?.sortino, 2)} />
@@ -323,7 +323,7 @@ export function PerformanceTabs({
 
         <div className="border-t border-border pt-6">
           <h2 className="font-heading text-lg mb-4">Prediction Interval Coverage</h2>
-          <div className="flex flex-wrap items-baseline gap-x-5 gap-y-3 font-mono text-sm">
+          <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-baseline gap-x-4 gap-y-3 font-mono text-sm">
             <KpiCard
               label="80% Interval"
               value={pct(latest?.interval_coverage_80)}
