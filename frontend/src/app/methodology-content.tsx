@@ -53,7 +53,7 @@ const features = [
   {
     category: "Pitching",
     rows: [
-      { name: "xfip", desc: "Starter Expected FIP — park-neutral pitching quality", source: "Statcast" },
+      { name: "xfip", desc: "Starter Expected FIP, adjusted for park effects", source: "Statcast" },
       { name: "starter_whip", desc: "Starter walks + hits per inning pitched", source: "Statcast" },
       { name: "xfip_bullpen", desc: "IP-weighted bullpen xFIP", source: "Statcast" },
       { name: "bullpen_k_9", desc: "IP-weighted bullpen strikeouts per 9 innings", source: "Statcast" },
@@ -63,7 +63,7 @@ const features = [
     category: "Batting Splits",
     rows: [
       { name: "batting_ops", desc: "Team OPS vs opponent pitcher handedness (60/40 blend)", source: "Statcast" },
-      { name: "batting_iso", desc: "Team isolated power (SLG − AVG) — pure extra-base hit rate", source: "Statcast" },
+      { name: "batting_iso", desc: "Team isolated power (SLG − AVG), a measure of extra-base hit rate", source: "Statcast" },
       { name: "batting_k_pct", desc: "Team strikeout percentage vs pitcher handedness", source: "Statcast" },
     ],
   },
@@ -72,7 +72,7 @@ const features = [
     rows: [
       { name: "avg_last5", desc: "5-game rolling average runs scored", source: "DB" },
       { name: "avg_last10", desc: "10-game rolling average runs scored", source: "DB" },
-      { name: "std_last5", desc: "5-game rolling standard deviation — scoring volatility", source: "DB" },
+      { name: "std_last5", desc: "5-game rolling standard deviation of runs scored", source: "DB" },
     ],
   },
   {
@@ -123,26 +123,26 @@ export function MethodologyContent() {
       >
         <div className="space-y-4 text-sm leading-relaxed">
           <p>
-            This project builds a complete machine learning pipeline that predicts expected runs
-            scored per team per MLB game and evaluates those predictions against sportsbook-implied
-            probabilities — not as a gambling exercise, but because sports betting markets function
-            as one of the most efficient real-time probability benchmarks available. Sharp
-            market participants force lines to near-true probabilities quickly, making them
-            a higher-quality calibration target than any single statistical model alone.
+            This project builds a machine learning pipeline that predicts expected runs per
+            team per MLB game and evaluates those predictions against sportsbook-implied
+            probabilities. Sports betting markets are used as a calibration benchmark, not
+            as a gambling application. Sharp market participants push lines to near-true
+            probabilities quickly, making them a higher-quality probability signal than most
+            independently constructed models.
           </p>
           <p>
-            The betting-adjacent metrics here — expected value, Kelly criterion, probability
-            calibration — are applied entirely as <strong>quantitative finance and decision-theory
-            concepts</strong>. Kelly criterion is a portfolio optimization formula from information
-            theory. Expected value is the foundation of rational decision-making under uncertainty.
-            Probability calibration is a core model evaluation technique. The sports context is the
-            domain; the underlying methods are those of applied statistics and quantitative analysis.
+            The metrics here are drawn from quantitative finance and decision theory: expected
+            value, Kelly criterion, and probability calibration. Kelly criterion is a portfolio
+            optimization formula from information theory. Expected value is standard in rational
+            decision-making under uncertainty. Probability calibration is a core model evaluation
+            technique. The domain is baseball; the methods are from applied statistics and
+            quantitative analysis.
           </p>
           <p>
-            The goal was to build something genuinely end-to-end: automated data ingestion from
-            multiple APIs, feature engineering from pitch-level Statcast data, probabilistic
-            inference with calibrated outputs, daily evaluation against actual results, and a
-            production frontend that displays everything in real time.
+            The project covers the full stack: automated data ingestion from multiple APIs,
+            feature engineering from pitch-level Statcast data, probabilistic inference with
+            calibrated outputs, daily evaluation against actual results, and a production
+            frontend updated each morning of the season.
           </p>
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
             {[
@@ -172,10 +172,10 @@ export function MethodologyContent() {
           <p className="leading-relaxed text-muted-foreground">
             The pipeline runs as a GitHub Actions cron job at 14:00 UTC (6 AM PST), before
             early games tip off. Each step is timed and logged; failures are captured with
-            full tracebacks but don&apos;t abort downstream steps.
+            full tracebacks but do not abort downstream steps.
           </p>
 
-          {/* Step flow — vertical on mobile, horizontal on desktop */}
+          {/* Step flow - vertical on mobile, horizontal on desktop */}
           <div className="mt-4 flex flex-col gap-2 md:flex-row md:items-start md:gap-0">
             {pipelineSteps.map((step, i) => (
               <div key={step.num} className="flex md:flex-1 md:flex-col">
@@ -227,10 +227,10 @@ export function MethodologyContent() {
         <div className="space-y-4 text-sm">
           <p className="leading-relaxed text-muted-foreground">
             FanGraphs was the original data source for advanced pitching stats, but it blocks
-            automated requests via Cloudflare. All features are now computed directly from
+            automated requests via Cloudflare. All features are computed directly from
             Statcast pitch-level data using{" "}
-            <span className="font-mono">pybaseball</span> — giving full control over the
-            formulas and removing a brittle external dependency.
+            <span className="font-mono">pybaseball</span>, which gives direct formula control
+            and removes a scraping dependency.
           </p>
           <p className="leading-relaxed text-muted-foreground">
             Batting split features use a <strong>60/40 handedness blend</strong>: 60% weight
@@ -279,8 +279,8 @@ export function MethodologyContent() {
           <p>
             The model predicts expected runs as a regression target (
             <span className="font-mono">reg:squarederror</span>) rather than a
-            classification, which lets downstream logic derive win probabilities via
-            distributional assumptions rather than baking them into the model directly.
+            classification. This lets downstream logic derive win probabilities via
+            distributional assumptions rather than encoding them directly into the model.
           </p>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -321,8 +321,8 @@ export function MethodologyContent() {
                 </p>
                 <p className="text-muted-foreground">
                   <strong className="text-foreground">TimeSeriesSplit</strong> with 5 folds,
-                  games sorted chronologically. Training windows only ever see past data —
-                  no future leakage. Minimum 60 samples required; folds reduced
+                  games sorted chronologically. Training windows only see past data, with no
+                  forward-looking information. Minimum 60 samples required; folds are reduced
                   dynamically for early-season sparsity.
                 </p>
               </div>
@@ -332,7 +332,7 @@ export function MethodologyContent() {
                 </p>
                 <p className="text-muted-foreground">
                   Negative mean absolute error (MAE). Chosen over RMSE because run-scoring
-                  outliers (blowout games) shouldn&apos;t dominate gradient updates.
+                  outliers (blowout games) should not dominate gradient updates.
                 </p>
               </div>
             </div>
@@ -350,10 +350,10 @@ export function MethodologyContent() {
           <p>
             Given expected runs λ for each team, win probability is derived from a{" "}
             <strong>negative binomial distribution</strong> rather than the simpler Poisson.
-            Baseball run-scoring exhibits overdispersion — the variance in runs scored exceeds
-            the mean across games. Poisson forces variance = mean, producing probabilities
-            that are systematically overconfident. The negative binomial adds a dispersion
-            parameter <span className="font-mono">r</span> that relaxes this constraint.
+            Baseball run-scoring exhibits overdispersion: the variance in runs scored exceeds
+            the mean across games. Poisson forces variance equal to the mean, producing
+            probabilities that are systematically overconfident. The negative binomial adds a
+            dispersion parameter <span className="font-mono">r</span> that relaxes this constraint.
           </p>
 
           <FormulaBlock>
@@ -363,18 +363,18 @@ export function MethodologyContent() {
 
           <p>
             A joint probability matrix is computed for all combinations of home/away scores
-            from 0–25 runs. From this matrix, three probabilities are derived:
+            from 0 to 25 runs. Three probabilities are derived from this matrix:
           </p>
           <ul className="ml-4 space-y-1 text-muted-foreground">
             <li>
-              <strong className="text-foreground">Win probability</strong> — P(home &gt; away) +
+              <strong className="text-foreground">Win probability:</strong> P(home &gt; away) +
               P(tie) × λ_home / (λ_home + λ_away)
             </li>
             <li>
-              <strong className="text-foreground">Cover probability</strong> — P(home margin &gt; spread), pushes split 50/50
+              <strong className="text-foreground">Cover probability:</strong> P(home margin &gt; spread), pushes split 50/50
             </li>
             <li>
-              <strong className="text-foreground">Over/under probability</strong> — P(total &gt; line), pushes split 50/50
+              <strong className="text-foreground">Over/under probability:</strong> P(total &gt; line), pushes split 50/50
             </li>
           </ul>
           <p className="text-muted-foreground">
@@ -393,15 +393,15 @@ export function MethodologyContent() {
         <div className="space-y-4 text-sm leading-relaxed">
           <p>
             Raw model win probabilities are calibrated using{" "}
-            <strong>isotonic regression</strong> — a non-parametric, monotone-constrained
+            <strong>isotonic regression</strong>, a non-parametric, monotone-constrained
             method that maps predicted probabilities to empirical win rates without
             assuming any functional form.
           </p>
           <p>
-            Crucially, the calibrator is fit only on{" "}
+            The calibrator is fit only on{" "}
             <strong>out-of-fold (OOF) predictions</strong> from the TimeSeriesSplit CV folds.
-            This means the calibration mapping never sees the same data the model was trained
-            on, preventing the calibrated outputs from being optimistically biased.
+            The calibration mapping therefore never sees the same data the model trained on,
+            ensuring calibrated outputs are not optimistically biased.
           </p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {[
@@ -436,19 +436,18 @@ export function MethodologyContent() {
         <div className="space-y-4 text-sm leading-relaxed">
           <p>
             When the model&apos;s implied probability diverges from the sportsbook&apos;s implied
-            probability, that gap is the <strong>edge</strong> — a measure of how much the
-            model disagrees with the market consensus. Tracking edge and its realized accuracy
-            over time is how model quality is evaluated in practice: not just &ldquo;was the
-            prediction close?&rdquo; but &ldquo;did the model identify cases where the market
-            was systematically wrong?&rdquo;
+            probability, that gap is the <strong>edge</strong>: a measure of how much the
+            model disagrees with market consensus. Tracking edge and its realized accuracy
+            over time is how model quality is evaluated in practice. The relevant question
+            is not just whether the prediction was close, but whether the model identified
+            cases where the market was systematically wrong.
           </p>
           <p>
             Position sizing uses the{" "}
-            <strong>Kelly criterion</strong> — a formula from information theory and portfolio
+            <strong>Kelly criterion</strong>, a formula from information theory and portfolio
             optimization that determines the theoretically optimal allocation to maximize
             long-run logarithmic growth. It is widely used in quantitative finance (Thorp,
-            Shannon) and serves here as a principled framework for weighting predictions by
-            confidence, not as a gambling strategy:
+            Shannon) and applied here as a framework for weighting predictions by confidence:
           </p>
           <FormulaBlock>
             f* = (p · b − q) / b<br />
@@ -457,10 +456,10 @@ export function MethodologyContent() {
             </span>
           </FormulaBlock>
           <p>
-            Full Kelly is mathematically optimal but practically aggressive — a short losing
-            streak can draw down significantly. The implementation uses{" "}
-            <strong>quarter-Kelly</strong> (f* × 0.25), a standard industry convention that
-            trades some long-run growth for substantially reduced variance.
+            Full Kelly is mathematically optimal but practically aggressive; short losing
+            streaks can draw down a bankroll significantly. The implementation uses{" "}
+            <strong>quarter-Kelly</strong> (f* × 0.25), a fractional adjustment that reduces
+            variance at the cost of some long-run growth rate.
           </p>
 
           <div>
@@ -488,7 +487,7 @@ export function MethodologyContent() {
             Historical validation uses a{" "}
             <strong className="text-foreground">walk-forward backtest</strong> over full
             MLB seasons: the model trains on all games before a 7-day window, predicts
-            that window, advances, and repeats — mimicking live deployment. Results are
+            that window, advances, and repeats, mirroring live deployment conditions. Results are
             visible on the{" "}
             <Link href="/performance" className="underline underline-offset-2 hover:text-foreground">
               Performance dashboard
@@ -523,9 +522,9 @@ export function MethodologyContent() {
           <div className="mt-2 rounded-sm border border-border bg-muted/50 p-3 text-xs text-muted-foreground leading-relaxed">
             <strong className="text-foreground">Note on data sourcing:</strong> FanGraphs
             was the original source for advanced pitching stats but blocks automated requests
-            via Cloudflare. All stats (xFIP, WHIP, K/9, batting splits) are now computed
+            via Cloudflare. All stats (xFIP, WHIP, K/9, batting splits) are computed
             directly from Statcast pitch-level data via <span className="font-mono">pybaseball</span>,
-            giving full formula control and eliminating a brittle scraping dependency.
+            giving direct formula control and removing the scraping dependency.
             Prior-season stats are cached to{" "}
             <span className="font-mono">cache/</span> on first run (~30 min) and reused on
             subsequent days.
