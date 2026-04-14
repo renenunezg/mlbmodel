@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Lora } from "next/font/google";
 import "./globals.css";
 import { Nav } from "@/components/nav";
@@ -19,7 +19,7 @@ const lora = Lora({
   weight: ["400", "500", "600", "700"],
 });
 
-export const viewport = {
+export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
 };
