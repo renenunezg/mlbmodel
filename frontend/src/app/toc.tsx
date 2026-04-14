@@ -61,7 +61,7 @@ export function TableOfContents() {
       </aside>
 
       {/* Mobile horizontal strip */}
-      <div className="lg:hidden -mx-4 mb-6 overflow-x-auto border-b border-border px-4 pb-3">
+      <div className="lg:hidden mb-6 overflow-x-auto border-b border-border pb-3">
         <nav className="flex gap-0 min-w-max">
           {sections.map(({ id, label }) => (
             <a
