@@ -48,61 +48,52 @@ export default async function HistoryPage({
     query = query.lte("date", to);
   }
 
-  const { data: rows, count, error } = await query;
-  const predictions: ModelOutput[] = rows ?? [];
-  const totalRows = count ?? 0;
-  const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
-
-  // Fetch actual scores for the game_pks in this page
-  const gamePks = [...new Set(predictions.map((p) => p.game_pk))];
-  let gamesMap: Record<number, GameInfo> = {};
-
-  if (gamePks.length > 0) {
-    const { data: games } = await supabase
-      .from("games")
-      .select("*")
-      .in("game_pk", gamePks);
-
-    if (games) {
-      for (const g of games as GameInfo[]) {
-        gamesMap[g.game_pk] = g;
-      }
-    }
-  }
-
-  // Compute record summary for the period filter
+  // Compute record period date up front
   const periodDate = period === "7"
     ? new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0]
     : period === "30"
       ? new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0]
       : "";
 
-  let recordPredictions: ModelOutput[] = [];
-  let recordGamesMap: Record<number, GameInfo> = {};
+  // Build record query (runs in parallel with main pagination query)
+  let rq = supabase
+    .from("model_outputs_season")
+    .select("game_pk, team, win_prob, ev_flag, run_line_ev_flag, total_play, our_total, total");
+  if (periodDate) rq = rq.gte("date", periodDate);
+  if (team) rq = rq.eq("team", team);
 
-  {
-    let rq = supabase
-      .from("model_outputs_season")
-      .select("game_pk, team, win_prob, ev_flag, run_line_ev_flag, total_play, our_total, total");
-    if (periodDate) rq = rq.gte("date", periodDate);
-    if (team) rq = rq.eq("team", team);
+  // Run both main queries in parallel
+  const [{ data: rows, count, error }, { data: rRows }] = await Promise.all([
+    query,
+    rq,
+  ]);
 
-    const { data: rRows } = await rq;
-    recordPredictions = (rRows ?? []) as ModelOutput[];
+  const predictions: ModelOutput[] = rows ?? [];
+  const totalRows = count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
+  const recordPredictions: ModelOutput[] = (rRows ?? []) as ModelOutput[];
 
-    const rPks = [...new Set(recordPredictions.map((p) => p.game_pk))];
-    if (rPks.length > 0) {
-      const { data: rGames } = await supabase
-        .from("games")
-        .select("*")
-        .eq("status", "Final")
-        .in("game_pk", rPks);
-      if (rGames) {
-        for (const g of rGames as GameInfo[]) {
-          recordGamesMap[g.game_pk] = g;
-        }
-      }
-    }
+  // Fetch games for both sets of pks in parallel
+  const gamePks = [...new Set(predictions.map((p) => p.game_pk))];
+  const rPks = [...new Set(recordPredictions.map((p) => p.game_pk))];
+
+  const [gamesRes, rGamesRes] = await Promise.all([
+    gamePks.length > 0
+      ? supabase.from("games").select("*").in("game_pk", gamePks)
+      : Promise.resolve({ data: [] }),
+    rPks.length > 0
+      ? supabase.from("games").select("*").eq("status", "Final").in("game_pk", rPks)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const gamesMap: Record<number, GameInfo> = {};
+  for (const g of (gamesRes.data ?? []) as GameInfo[]) {
+    gamesMap[g.game_pk] = g;
+  }
+
+  const recordGamesMap: Record<number, GameInfo> = {};
+  for (const g of (rGamesRes.data ?? []) as GameInfo[]) {
+    recordGamesMap[g.game_pk] = g;
   }
 
   // Tally records
@@ -163,7 +154,7 @@ export default async function HistoryPage({
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-8 space-y-6">
+    <main className="mx-auto w-full max-w-6xl min-w-0 px-4 py-8 space-y-6">
       <h1 className="font-heading text-2xl tracking-tight">Season History</h1>
 
       <Filters />
