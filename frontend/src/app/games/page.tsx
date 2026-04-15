@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import type { ModelOutput, GameMatchup } from "@/lib/types";
-import { GameCard } from "@/components/game-card";
+import { GamesLive } from "@/components/games-live";
 import { SummaryStats } from "@/components/summary-stats";
 
 export const revalidate = 300;
@@ -99,11 +99,7 @@ export default async function Page() {
         <SummaryStats matchups={matchups} />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {matchups.map((matchup) => (
-          <GameCard key={matchup.game_pk} matchup={matchup} />
-        ))}
-      </div>
+      <GamesLive initial={matchups} />
     </main>
   );
 }
