@@ -178,14 +178,14 @@ export function MethodologyContent() {
           {/* Step flow - vertical on mobile, horizontal on desktop */}
           <div className="mt-4 flex flex-col gap-2 md:flex-row md:items-start md:gap-0">
             {pipelineSteps.map((step, i) => (
-              <div key={step.num} className="flex md:flex-1 md:flex-col">
+              <div key={step.num} className="flex min-w-0 md:flex-1 md:flex-col">
                 <div className="flex md:flex-col md:items-center">
                   <div className="flex flex-col md:items-center">
-                    <div className="flex items-start gap-3 md:flex-col md:items-center md:gap-1">
+                    <div className="flex min-w-0 items-start gap-3 md:flex-col md:items-center md:gap-1">
                       <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border bg-muted font-mono text-xs text-muted-foreground">
                         {step.num}
                       </span>
-                      <div className="md:text-center">
+                      <div className="min-w-0 md:text-center">
                         <p className="font-medium leading-tight">{step.name}</p>
                         <p className="mt-0.5 text-xs text-muted-foreground leading-snug md:mx-auto md:max-w-[120px]">
                           {step.desc}

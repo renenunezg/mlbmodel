@@ -96,7 +96,13 @@
     @apply font-sans;
   }
   html, body {
-    max-width: 100vw;
-    overflow-x: hidden;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+  /* Force long words to wrap rather than overflow their container on mobile */
+  p, li, td, th, h1, h2, h3, h4, span {
+    overflow-wrap: anywhere;
+    word-break: normal;
   }
 }
