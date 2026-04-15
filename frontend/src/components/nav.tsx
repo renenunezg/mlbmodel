@@ -14,9 +14,9 @@ export function Nav() {
   const pathname = usePathname();
 
   return (
-    <nav className="border-b border-border bg-background overflow-hidden">
-      <div className="mx-auto flex w-full max-w-7xl min-w-0 flex-col items-start gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-0">
-        <div className="flex items-baseline gap-3">
+    <nav className="relative z-10 border-b border-border bg-background">
+      <div className="mx-auto flex w-full max-w-7xl min-w-0 flex-col items-start gap-1 px-4 pt-3 sm:flex-row sm:items-center sm:justify-between sm:gap-0 sm:pb-0">
+        <div className="flex items-baseline gap-3 pb-2 sm:pb-3">
           <Link href="/" className="font-heading text-lg tracking-tight">
             MLB Predictions
           </Link>
@@ -28,7 +28,7 @@ export function Nav() {
             })}
           </span>
         </div>
-        <div className="-mx-4 flex w-[calc(100%+2rem)] gap-0 overflow-x-auto px-4 sm:mx-0 sm:w-auto sm:overflow-visible sm:px-0">
+        <div className="flex w-full gap-0 overflow-x-auto pb-0 sm:w-auto sm:overflow-visible">
           {links.map((link) => {
             const isActive =
               link.href === "/"
@@ -39,7 +39,7 @@ export function Nav() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`px-3 py-1.5 font-mono text-xs uppercase tracking-wider transition-colors ${
+                className={`px-3 py-3 font-mono text-xs uppercase tracking-wider transition-colors ${
                   isActive
                     ? "border-b-2 border-foreground text-foreground"
                     : "border-b-2 border-transparent text-muted-foreground hover:text-foreground"
