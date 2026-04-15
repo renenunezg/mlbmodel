@@ -14,8 +14,8 @@ export function Nav() {
   const pathname = usePathname();
 
   return (
-    <nav className="border-b border-border bg-background">
-      <div className="mx-auto flex max-w-7xl flex-col items-start gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-0">
+    <nav className="border-b border-border bg-background overflow-hidden">
+      <div className="mx-auto flex w-full max-w-7xl min-w-0 flex-col items-start gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-0">
         <div className="flex items-baseline gap-3">
           <Link href="/" className="font-heading text-lg tracking-tight">
             MLB Predictions
@@ -28,7 +28,7 @@ export function Nav() {
             })}
           </span>
         </div>
-        <div className="flex gap-0">
+        <div className="-mx-4 flex w-[calc(100%+2rem)] gap-0 overflow-x-auto px-4 sm:mx-0 sm:w-auto sm:overflow-visible sm:px-0">
           {links.map((link) => {
             const isActive =
               link.href === "/"
