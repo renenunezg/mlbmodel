@@ -100,4 +100,5 @@ export interface GameMatchup {
   home: ModelOutput;
   home_score: number | null;
   away_score: number | null;
+  status: string | null;
 }
