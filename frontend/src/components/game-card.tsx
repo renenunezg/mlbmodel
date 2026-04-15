@@ -102,7 +102,10 @@ export function GameCard({ matchup }: GameCardProps) {
     matchup.away.run_line_ev_flag !== "No Play" ||
     matchup.home.run_line_ev_flag !== "No Play";
 
-  const isFinal = matchup.home_score != null && matchup.away_score != null;
+  const isFinal =
+    matchup.status === "Final" &&
+    matchup.home_score != null &&
+    matchup.away_score != null;
 
   const startTime = matchup.start_time
     ? new Date(matchup.start_time).toLocaleTimeString("en-US", {

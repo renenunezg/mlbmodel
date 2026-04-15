@@ -93,13 +93,15 @@ export function PerformanceTabs({
 
   return (
     <Tabs defaultValue="overview">
-      <TabsList className="mb-6">
-        <TabsTrigger value="overview">Overview</TabsTrigger>
-        <TabsTrigger value="regression">Regression</TabsTrigger>
-        <TabsTrigger value="probabilistic">Probabilistic</TabsTrigger>
-        <TabsTrigger value="betting">Betting</TabsTrigger>
-        <TabsTrigger value="diagnostics">Diagnostics</TabsTrigger>
-      </TabsList>
+      <div className="mb-6 -mx-4 overflow-x-auto px-4 sm:mx-0 sm:overflow-visible sm:px-0">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="regression">Regression</TabsTrigger>
+          <TabsTrigger value="probabilistic">Probabilistic</TabsTrigger>
+          <TabsTrigger value="betting">Betting</TabsTrigger>
+          <TabsTrigger value="diagnostics">Diagnostics</TabsTrigger>
+        </TabsList>
+      </div>
 
       {/* ============================================================ */}
       {/* OVERVIEW TAB */}
@@ -334,7 +336,7 @@ export function PerformanceTabs({
 
         <div className="border-t border-border pt-6">
           <h2 className="font-heading text-lg mb-4">Daily Metric Stability</h2>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <h3 className="text-sm font-medium mb-2">MAE (daily)</h3>
               <MetricLineChart data={dailyEvals} dataKey="mae" name="MAE" color="#b08a30" />
