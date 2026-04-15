@@ -35,7 +35,7 @@ export default async function Page() {
   const { data: games } = await supabase
     .from("games")
     .select(
-      "game_pk, game_date, home_team, away_team, venue, start_time, home_score, away_score"
+      "game_pk, game_date, home_team, away_team, venue, start_time, home_score, away_score, status"
     )
     .in("game_pk", gamePks);
 
@@ -63,6 +63,7 @@ export default async function Page() {
         home,
         home_score: game.home_score,
         away_score: game.away_score,
+        status: game.status ?? null,
       };
     })
     .filter(Boolean) as GameMatchup[];

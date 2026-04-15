@@ -40,7 +40,7 @@ export default async function PerformancePage() {
 
   if (evaluations.length === 0) {
     return (
-      <main className="mx-auto max-w-5xl px-4 py-8">
+      <main className="mx-auto w-full max-w-5xl min-w-0 px-4 py-8">
         <h1 className="font-heading text-2xl tracking-tight">
           Model Performance
         </h1>
@@ -53,7 +53,7 @@ export default async function PerformancePage() {
   }
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-8 space-y-6">
+    <main className="mx-auto w-full max-w-5xl min-w-0 px-4 py-8 space-y-6">
       <h1 className="font-heading text-2xl tracking-tight">
         Model Performance
       </h1>
