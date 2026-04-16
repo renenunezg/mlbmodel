@@ -125,8 +125,8 @@ export function MethodologyContent() {
           <p>
             This project builds a machine learning pipeline that predicts expected runs per
             team per MLB game and evaluates those predictions against sportsbook-implied
-            probabilities. Sports betting markets are used as a calibration benchmark, not
-            as a gambling application. Sharp market participants push lines to near-true
+            probabilities. <strong>Sports betting markets are used as a calibration benchmark, not
+            as a gambling application.</strong> Sharp market participants push lines to near-true
             probabilities quickly, making them a higher-quality probability signal than most
             independently constructed models.
           </p>
@@ -234,10 +234,12 @@ export function MethodologyContent() {
           </p>
           <p className="leading-relaxed text-muted-foreground">
             Batting split features use a <strong>60/40 handedness blend</strong>: 60% weight
-            on the team&apos;s splits vs the starting pitcher&apos;s hand, 40% on bullpen (assumed
-            60% RHP league-wide). This approximates real plate appearance distribution across
-            a full game. Early-season fallbacks use league-average values when fewer than 10
-            games of data exist.
+            on the team&apos;s splits vs the starting pitcher&apos;s hand (known pre-game from
+            probable starters), 40% vs a league-average bullpen assumed to be 60% RHP. The
+            bullpen portion cannot be predicted — reliever handedness and usage are unknown
+            until the game unfolds — so a fixed league-average prior is used as a stand-in.
+            This approximates the real plate appearance split across a full game. Early-season
+            fallbacks use league-average values when fewer than 10 games of data exist.
           </p>
 
           <Table>

@@ -7,7 +7,7 @@ export default function Page() {
       <div className="mb-6">
         <h1 className="font-heading text-2xl tracking-tight">Methodology</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          How the MLB expected runs model works — data, features, modeling, and evaluation
+          How the MLB expected runs model works: data, features, modeling, and evaluation
         </p>
       </div>
 
