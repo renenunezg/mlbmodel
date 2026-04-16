@@ -17,14 +17,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import xgboost as xgb
-from scipy.stats import poisson
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from backend.data.mlb_api import fetch_schedule_range
 from backend.data.fangraphs import (
     _compute_pitcher_stats,
     _identify_starters,
-    DEFAULT_FIP_CONSTANT,
 )
 from backend.data.savant import _static_park_factors
 from backend.model import FEATURE_COLS, LEAGUE_AVG, poisson_win_prob
