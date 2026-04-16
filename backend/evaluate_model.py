@@ -20,7 +20,7 @@ from sqlalchemy import MetaData, text
 from sqlalchemy.dialects.postgresql import insert
 
 from backend.db import engine
-from backend.kelly import american_to_decimal, quarter_kelly
+from backend.kelly import american_to_decimal
 from backend.metrics import (
     regression_summary,
     probabilistic_summary,

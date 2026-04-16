@@ -11,35 +11,42 @@ from scipy.stats import nbinom
 # Regression metrics (predicted runs vs actual runs)
 # ---------------------------------------------------------------------------
 
-def mae(y_true, y_pred):
+def _finite_pair(y_true, y_pred):
+    """Return (y_true, y_pred) filtered to rows where both values are finite."""
     mask = ~(np.isnan(y_true) | np.isnan(y_pred))
-    return float(np.mean(np.abs(y_true[mask] - y_pred[mask]))) if mask.any() else np.nan
+    return y_true[mask], y_pred[mask]
+
+
+def mae(y_true, y_pred):
+    yt, yp = _finite_pair(y_true, y_pred)
+    return float(np.mean(np.abs(yt - yp))) if yt.size else np.nan
 
 
 def rmse(y_true, y_pred):
-    mask = ~(np.isnan(y_true) | np.isnan(y_pred))
-    return float(np.sqrt(np.mean((y_true[mask] - y_pred[mask]) ** 2))) if mask.any() else np.nan
+    yt, yp = _finite_pair(y_true, y_pred)
+    return float(np.sqrt(np.mean((yt - yp) ** 2))) if yt.size else np.nan
 
 
 def mape(y_true, y_pred):
-    mask = ~(np.isnan(y_true) | np.isnan(y_pred)) & (y_true != 0)
-    if not mask.any():
+    yt, yp = _finite_pair(y_true, y_pred)
+    nonzero = yt != 0
+    if not nonzero.any():
         return np.nan
-    return float(np.mean(np.abs((y_true[mask] - y_pred[mask]) / y_true[mask])) * 100)
+    return float(np.mean(np.abs((yt[nonzero] - yp[nonzero]) / yt[nonzero])) * 100)
 
 
 def r_squared(y_true, y_pred):
-    mask = ~(np.isnan(y_true) | np.isnan(y_pred))
-    if mask.sum() < 2:
+    yt, yp = _finite_pair(y_true, y_pred)
+    if yt.size < 2:
         return np.nan
-    ss_res = np.sum((y_true[mask] - y_pred[mask]) ** 2)
-    ss_tot = np.sum((y_true[mask] - np.mean(y_true[mask])) ** 2)
+    ss_res = np.sum((yt - yp) ** 2)
+    ss_tot = np.sum((yt - np.mean(yt)) ** 2)
     return float(1 - ss_res / ss_tot) if ss_tot > 0 else np.nan
 
 
 def residual_stats(y_true, y_pred):
-    mask = ~(np.isnan(y_true) | np.isnan(y_pred))
-    residuals = y_pred[mask] - y_true[mask]
+    yt, yp = _finite_pair(y_true, y_pred)
+    residuals = yp - yt
     if len(residuals) < 2:
         return {"mean": np.nan, "std": np.nan, "skew": np.nan}
     return {
