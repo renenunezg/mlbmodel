@@ -10,7 +10,7 @@ Free tier: 500 requests/month. Each call with multiple markets costs ~3 credits.
 import os
 import requests
 import pandas as pd
-from datetime import date, datetime
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -67,14 +67,6 @@ def _get_api_key() -> str:
 
 def _normalize_team(name: str) -> str:
     return ODDS_TEAM_MAP.get(name, name)
-
-
-def _american_odds(decimal_price: float) -> int:
-    """Convert decimal odds to American odds."""
-    if decimal_price >= 2.0:
-        return round((decimal_price - 1) * 100)
-    else:
-        return round(-100 / (decimal_price - 1))
 
 
 def fetch_odds(books: list[str] = None) -> pd.DataFrame:
@@ -169,7 +161,7 @@ def fetch_odds(books: list[str] = None) -> pd.DataFrame:
                     "commence_time": commence,
                     "team": team,
                     **data,
-                    "scraped_at": datetime.utcnow().isoformat(),
+                    "scraped_at": datetime.now(timezone.utc).isoformat(),
                 })
 
     df = pd.DataFrame(rows)
@@ -182,7 +174,7 @@ def fetch_odds(books: list[str] = None) -> pd.DataFrame:
 
 
 def check_remaining_credits() -> dict:
-    """Check how many API credits remain without using any."""
+    """Check remaining API credits. Costs one h2h-only call on The Odds API."""
     api_key = _get_api_key()
     resp = requests.get(
         f"{ODDS_API_BASE}/{SPORT}/odds",

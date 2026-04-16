@@ -7,7 +7,7 @@ from sqlalchemy import create_engine, text
 import xgboost as xgb
 import joblib
 from scipy.stats import nbinom
-from backend.kelly import american_to_decimal, kelly_fraction, quarter_kelly, compute_kelly_row
+from backend.kelly import american_to_decimal, kelly_fraction, compute_kelly_row
 from sklearn.model_selection import TimeSeriesSplit, GridSearchCV
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.isotonic import IsotonicRegression
@@ -117,11 +117,8 @@ def load_training_data():
     starters = pd.merge(starters, opp, on="game_pk")
     starters = starters[starters["team"] != starters["opp_team"]]
 
-    # Select batting stats based on opponent pitching — blended across starter and bullpen.
-    # Reasoning: ~60% of a game's innings come from the starter (whose handedness is known)
-    # and ~40% from the bullpen. Bullpens are ~60% RHP league-wide regardless of the
-    # starter, so using only the starter's handedness for the whole game overstates
-    # the handedness signal for the bullpen portion of the game.
+    # Blend batting splits: ~60% of innings face the starter (known handedness),
+    # ~40% the bullpen (~60% RHP league-wide regardless of starter).
     STARTER_INNING_SHARE = 0.6
     BULLPEN_RHP_SHARE = 0.6
     for stat, vs_r_col, vs_l_col in [
@@ -181,11 +178,9 @@ def load_training_data():
             starters["away_score"],
         )
 
-        # Compute rolling averages — vectorized groupby/rolling with (game_date, game_pk)
-        # ordering so doubleheader game 2 is deterministic. Same-day games are excluded
-        # from each other's windows to match `game_date < current_date` semantics: all
-        # games on the same (team, game_date) inherit the rolling values computed as of
-        # the FIRST game on that date, i.e. strictly prior dates only.
+        # Rolling team run averages — strictly prior dates only. Games sharing a
+        # (team, game_date) inherit the window computed as of the first game on that date,
+        # so doubleheader game 2 never leaks its own result into its features.
         games["game_date"] = pd.to_datetime(games["game_date"])
         starters["game_date"] = pd.to_datetime(starters["game_date"])
 
@@ -395,23 +390,20 @@ def compute_game_probs(lambda_home, lambda_away, total_line=None, spread_home=No
         "p_under": None,
     }
 
-    # Run line: home "covers" spread_home if home_runs + spread_home > away_runs.
+    h_mat = runs[:, None]
+    a_mat = runs[None, :]
+
+    # Run line: home "covers" if home_runs + spread_home > away_runs. Pushes split 50/50.
     if spread_home is not None and not pd.isna(spread_home):
-        h_mat = runs[:, None]
-        a_mat = runs[None, :]
-        margin = h_mat - a_mat  # home minus away
-        # Strict cover: margin > -spread_home. Push (only for integer spreads): margin == -spread_home.
+        margin = h_mat - a_mat
         p_home_strict = float(joint[margin > -spread_home].sum())
         p_push = float(joint[margin == -spread_home].sum())
         p_away_strict = float(joint[margin < -spread_home].sum())
-        # Pushes split 50/50 (half win each side)
         result["p_home_cover"] = round(p_home_strict + 0.5 * p_push, 4)
         result["p_away_cover"] = round(p_away_strict + 0.5 * p_push, 4)
 
-    # Totals: over/under the book's total_line
+    # Totals: over/under the book's total_line. Pushes split 50/50.
     if total_line is not None and not pd.isna(total_line):
-        h_mat = runs[:, None]
-        a_mat = runs[None, :]
         total_runs = h_mat + a_mat
         p_over_strict = float(joint[total_runs > total_line].sum())
         p_under_strict = float(joint[total_runs < total_line].sum())
@@ -486,6 +478,29 @@ def flag_runline_ev(row, threshold=0.03):
         return "No Play"
 
 
+def flag_total_play(row, threshold=0.03):
+    """Flag Over/Under based on joint-distribution probabilities vs book odds."""
+    try:
+        over_prob_book = american_to_prob(row.get("total_over_odds"))
+        under_prob_book = american_to_prob(row.get("total_under_odds"))
+        p_over = row.get("p_over")
+        p_under = row.get("p_under")
+        if pd.notna(p_over) and pd.notna(over_prob_book) and (p_over - over_prob_book) >= threshold:
+            return "Over"
+        if pd.notna(p_under) and pd.notna(under_prob_book) and (p_under - under_prob_book) >= threshold:
+            return "Under"
+        # Fallback when book over/under odds missing: use diff heuristic so the UI
+        # still surfaces directional model disagreement with the line.
+        if pd.isna(over_prob_book) and pd.isna(under_prob_book) and pd.notna(row.get("total_diff")):
+            if row["total_diff"] >= 1:
+                return "Over"
+            if row["total_diff"] <= -1:
+                return "Under"
+        return "No Play"
+    except Exception:
+        return "No Play"
+
+
 def compute_predictions(df, model, calibrator=None, use_existing_xR=False):
     """Predict expected runs and compute negative-binomial win probabilities.
 
@@ -505,7 +520,7 @@ def compute_predictions(df, model, calibrator=None, use_existing_xR=False):
         X = df[FEATURE_COLS].copy()
         df["xR"] = model.predict(X).round(2)
 
-    # Compute Poisson win probs per game
+    # Compute negative-binomial win probs per game
     df["win_prob"] = np.nan
     df["our_odds"] = np.nan
 
@@ -539,13 +554,13 @@ def compute_predictions(df, model, calibrator=None, use_existing_xR=False):
 
 
 def fit_calibrator(df):
-    """Fit isotonic regression on Poisson win probs vs actual outcomes.
+    """Fit isotonic regression on negative-binomial win probs vs actual outcomes.
 
     Args:
         df: DataFrame with win_prob and actual_runs columns (completed games only).
 
     Returns:
-        Fitted IsotonicRegression, or None if fewer than 50 outcomes available.
+        Fitted IsotonicRegression, or None if fewer than 400 outcomes available.
     """
     outcomes = []
     for game_pk, group in df.groupby("game_pk"):
@@ -830,32 +845,9 @@ def main():
     final_output["total"] = pd.to_numeric(final_output["total"], errors="coerce")
     final_output["total_diff"] = (final_output["our_total"] - final_output["total"]).round(2)
 
-    # Joint-distribution market probabilities (p_cover, p_over, p_under) using
-    # the book's actual total line and spread. Replaces the old `-0.10` run line
-    # heuristic and the `±1 run` totals heuristic.
+    # Joint-distribution market probabilities (p_cover, p_over, p_under) from
+    # the book's actual total line and spread.
     final_output = _apply_market_probs(final_output)
-
-    def flag_total_play(row, threshold=0.03):
-        """Flag Over/Under based on joint-distribution probabilities vs book odds."""
-        try:
-            over_prob_book = american_to_prob(row.get("total_over_odds"))
-            under_prob_book = american_to_prob(row.get("total_under_odds"))
-            p_over = row.get("p_over")
-            p_under = row.get("p_under")
-            if pd.notna(p_over) and pd.notna(over_prob_book) and (p_over - over_prob_book) >= threshold:
-                return "Over"
-            if pd.notna(p_under) and pd.notna(under_prob_book) and (p_under - under_prob_book) >= threshold:
-                return "Under"
-            # Fallback when book over/under odds missing: use old diff heuristic so
-            # the UI still surfaces directional model disagreement with the line.
-            if pd.isna(over_prob_book) and pd.isna(under_prob_book) and pd.notna(row.get("total_diff")):
-                if row["total_diff"] >= 1:
-                    return "Over"
-                if row["total_diff"] <= -1:
-                    return "Under"
-            return "No Play"
-        except Exception:
-            return "No Play"
 
     final_output["total_play"] = final_output.apply(flag_total_play, axis=1)
     final_output["ev_flag"] = final_output.apply(flag_ev, axis=1)

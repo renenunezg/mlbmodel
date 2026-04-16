@@ -13,7 +13,7 @@ Uses the MLB-StatsAPI package for clean access to:
 import statsapi
 import pandas as pd
 import requests
-from datetime import datetime, date, timedelta
+from datetime import date, timedelta
 from backend.team_mappings import normalize_team
 
 BASE_URL = "https://statsapi.mlb.com/api/v1"
@@ -35,7 +35,8 @@ def _fetch_pitcher_handedness(pitcher_id: int) -> str | None:
         if hand:
             _handedness_cache[pitcher_id] = hand
         return hand
-    except Exception:
+    except Exception as e:
+        print(f"  Handedness fetch failed for pitcher {pitcher_id}: {e}")
         return None
 
 
@@ -80,7 +81,7 @@ def fetch_schedule(game_date: date = None) -> pd.DataFrame:
         "gameType": "R",  # Regular season only (excludes spring training)
         "hydrate": "probablePitcher(note),venue,team",
     }
-    resp = requests.get(f"{BASE_URL}/schedule", params=params)
+    resp = requests.get(f"{BASE_URL}/schedule", params=params, timeout=15)
     resp.raise_for_status()
     data = resp.json()
 
@@ -140,7 +141,7 @@ def fetch_schedule_range(start_date: date, end_date: date) -> pd.DataFrame:
         "hydrate": "probablePitcher(note),venue,team",
         "gameType": "R",  # Regular season only
     }
-    resp = requests.get(f"{BASE_URL}/schedule", params=params)
+    resp = requests.get(f"{BASE_URL}/schedule", params=params, timeout=15)
     resp.raise_for_status()
     data = resp.json()
 
@@ -196,24 +197,14 @@ def fetch_probable_starters(game_date: date = None, days_ahead: int = 7) -> pd.D
         game_date = date.today()
 
     end_date = game_date + timedelta(days=days_ahead)
-    schedule_df = fetch_schedule_range(game_date, end_date)
 
-    if schedule_df.empty:
-        return pd.DataFrame()
-
-    rows = []
-    for _, game in schedule_df.iterrows():
-        # Re-fetch with pitcher hydration for each date
-        pass
-
-    # Use the full schedule fetch which already includes pitchers
-    full_params = {
+    params = {
         "sportId": 1,
         "startDate": game_date.strftime("%Y-%m-%d"),
         "endDate": end_date.strftime("%Y-%m-%d"),
         "hydrate": "probablePitcher(note),team",
     }
-    resp = requests.get(f"{BASE_URL}/schedule", params=full_params)
+    resp = requests.get(f"{BASE_URL}/schedule", params=params, timeout=15)
     resp.raise_for_status()
     data = resp.json()
 
@@ -276,17 +267,6 @@ def fetch_batting_splits(season: int = None, split: str = "vs_rhp") -> pd.DataFr
         ),
     }
 
-    resp = requests.get(f"{BASE_URL}/teams/stats", params=params)
-    resp.raise_for_status()
-    data = resp.json()
-
-    rows = []
-    for record in data.get("records", []):
-        for team_stat in record.get("teamRecords", []) if "teamRecords" in record else [record]:
-            # Handle different response structures
-            pass
-
-    # Use the statsapi package for a cleaner approach
     try:
         stats_data = statsapi.get(
             "teams_stats",
@@ -298,18 +278,9 @@ def fetch_batting_splits(season: int = None, split: str = "vs_rhp") -> pd.DataFr
                 "sitCodes": sit_code,
             },
         )
-    except Exception:
-        # Fallback to direct API call
-        resp = requests.get(
-            f"{BASE_URL}/teams/stats",
-            params={
-                "stats": "season",
-                "group": "hitting",
-                "sportIds": 1,
-                "season": season,
-                "sitCodes": sit_code,
-            },
-        )
+    except Exception as e:
+        print(f"  statsapi.get failed, falling back to direct request: {e}")
+        resp = requests.get(f"{BASE_URL}/teams/stats", params=params, timeout=15)
         resp.raise_for_status()
         stats_data = resp.json()
 

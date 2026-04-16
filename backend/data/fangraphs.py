@@ -8,17 +8,16 @@ For team batting wRC+: uses FanGraphs team batting page via pybaseball.
 Fallback: computes OPS from Statcast if FanGraphs is unavailable.
 """
 
-import os
 import pandas as pd
 import numpy as np
 from datetime import date, timedelta
 from pathlib import Path
-from backend.team_mappings import TEAM_NAME_MAP, normalize_team
+from backend.team_mappings import normalize_team
 import warnings
 warnings.filterwarnings("ignore")
 
-# 2026 FIP constant (updated each season; ~3.10-3.20 historically)
-# This gets recalculated from the data if we have enough games.
+# FIP constant — league-wide reconciliation factor (~3.10-3.20 historically).
+# Updated each season.
 DEFAULT_FIP_CONSTANT = 3.15
 
 CACHE_DIR = Path(__file__).resolve().parent.parent.parent / "cache"
@@ -30,12 +29,12 @@ _statcast_cache: dict[str, pd.DataFrame] = {}
 def _get_statcast_range(start_date: date = None) -> pd.DataFrame:
     """Fetch Statcast pitch-level data from start_date to today. Cached per session.
 
-    Defaults to March 20 of the current year (safely before any opening day).
+    Defaults to March 25 of the current year (safely before any opening day).
     """
     from pybaseball import statcast
 
     end_dt = date.today()
-    start_dt = start_date or date(end_dt.year, 3, 25)  # MLB opening day
+    start_dt = start_date or date(end_dt.year, 3, 25)
     cache_key = f"{start_dt}_{end_dt}"
 
     if cache_key in _statcast_cache:
@@ -129,15 +128,12 @@ def _compute_pitcher_stats(pitch_df: pd.DataFrame, pitcher_ids: set = None) -> p
 
         xfip = ((13 * lg_hr_fb * fb) + 3 * (bb + hbp - ibb) - 2 * k) / ip + DEFAULT_FIP_CONSTANT if ip > 0 else np.nan
         fip = ((13 * hr) + 3 * (bb + hbp - ibb) - 2 * k) / ip + DEFAULT_FIP_CONSTANT if ip > 0 else np.nan
-        whip = (bb + hits - hr) / ip if ip > 0 else np.nan  # WHIP = (BB + H) / IP, but hits includes HR
         whip = (bb + hits) / ip if ip > 0 else np.nan
         k_9 = (k / ip) * 9 if ip > 0 else np.nan
         bb_9 = (bb / ip) * 9 if ip > 0 else np.nan
         hr_9 = (hr / ip) * 9 if ip > 0 else np.nan
-        era = (group["events"].isin(["home_run"]).sum() * 1) / ip * 9  # Simplified; not perfect
 
-        # Get team from Statcast (pitcher's team)
-        # In Statcast, pitcher's team is the fielding team
+        # Pitcher's team is the fielding team (top of inning = home pitching).
         team = group["home_team"].iloc[0] if group["inning_topbot"].iloc[0] == "Top" else group["away_team"].iloc[0]
 
         rows.append({
@@ -280,14 +276,20 @@ def fetch_bullpen_stats(season: int = None) -> pd.DataFrame:
         return pd.DataFrame(columns=["team", "xfip", "k_9", "season"])
 
     # Aggregate to team level (IP-weighted averages)
+    def _ip_weighted(g, col):
+        mask = g[col].notna()
+        if not mask.any():
+            return np.nan
+        return np.average(g.loc[mask, col], weights=g.loc[mask, "ip"])
+
     team_stats = df.groupby("team").apply(
         lambda g: pd.Series({
             "ip": g["ip"].sum(),
-            "xfip": np.average(g["xfip"].dropna(), weights=g.loc[g["xfip"].notna(), "ip"]) if g["xfip"].notna().any() else np.nan,
-            "fip": np.average(g["fip"].dropna(), weights=g.loc[g["fip"].notna(), "ip"]) if g["fip"].notna().any() else np.nan,
-            "whip": np.average(g["whip"].dropna(), weights=g.loc[g["whip"].notna(), "ip"]) if g["whip"].notna().any() else np.nan,
-            "k_9": np.average(g["k_9"].dropna(), weights=g.loc[g["k_9"].notna(), "ip"]) if g["k_9"].notna().any() else np.nan,
-            "bb_9": np.average(g["bb_9"].dropna(), weights=g.loc[g["bb_9"].notna(), "ip"]) if g["bb_9"].notna().any() else np.nan,
+            "xfip": _ip_weighted(g, "xfip"),
+            "fip": _ip_weighted(g, "fip"),
+            "whip": _ip_weighted(g, "whip"),
+            "k_9": _ip_weighted(g, "k_9"),
+            "bb_9": _ip_weighted(g, "bb_9"),
         })
     ).reset_index()
 

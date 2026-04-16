@@ -8,6 +8,7 @@ Usage: python pipeline.py
 
 import time
 import traceback
+from collections import defaultdict
 from datetime import date, timedelta
 
 import pandas as pd
@@ -247,7 +248,6 @@ def fetch_and_load_odds():
         return
 
     # Build team -> [(game_pk, start_time), ...] for time-aware matching
-    from collections import defaultdict
     team_games = defaultdict(list)
     for _, g in games.iterrows():
         entry = (int(g["game_pk"]), g.get("start_time"))
