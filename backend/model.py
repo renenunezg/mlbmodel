@@ -450,6 +450,17 @@ def american_to_prob(odds):
         return abs(odds) / (abs(odds) + 100)
 
 
+# Dedupe warnings so a systematic issue doesn't spam stdout once per row.
+_flag_warnings_seen: set[tuple[str, str]] = set()
+
+
+def _warn_flag_error(fn_name: str, exc: Exception) -> None:
+    key = (fn_name, f"{type(exc).__name__}: {exc}")
+    if key not in _flag_warnings_seen:
+        _flag_warnings_seen.add(key)
+        print(f"  WARNING: {fn_name} raised {type(exc).__name__}: {exc} — returning 'No Play'")
+
+
 def flag_ev(row, threshold=0.03):
     try:
         our_prob = american_to_prob(row["our_odds"])
@@ -458,7 +469,8 @@ def flag_ev(row, threshold=0.03):
             return "No Play"
         edge = our_prob - book_prob
         return row["team"] if edge >= threshold else "No Play"
-    except Exception:
+    except Exception as e:
+        _warn_flag_error("flag_ev", e)
         return "No Play"
 
 
@@ -474,7 +486,8 @@ def flag_runline_ev(row, threshold=0.03):
             return "No Play"
         edge = model_prob - book_prob
         return row["team"] if edge >= threshold else "No Play"
-    except Exception:
+    except Exception as e:
+        _warn_flag_error("flag_runline_ev", e)
         return "No Play"
 
 
@@ -497,7 +510,8 @@ def flag_total_play(row, threshold=0.03):
             if row["total_diff"] <= -1:
                 return "Under"
         return "No Play"
-    except Exception:
+    except Exception as e:
+        _warn_flag_error("flag_total_play", e)
         return "No Play"
 
 
@@ -678,22 +692,23 @@ def _upsert_season_outputs(df):
         ON CONFLICT (game_pk, team) DO UPDATE SET {update_set}
     """
 
+    def _coerce(val):
+        if pd.isna(val):
+            return None
+        if isinstance(val, np.integer):
+            return int(val)
+        if isinstance(val, np.floating):
+            return float(val)
+        if isinstance(val, np.bool_):
+            return bool(val)
+        return val
+
+    batch = [{c: _coerce(row[c]) for c in cols} for _, row in df.iterrows()]
+    if not batch:
+        return
+
     with engine.begin() as conn:
-        for _, row in df.iterrows():
-            params = {}
-            for c in cols:
-                val = row[c]
-                if pd.isna(val):
-                    params[c] = None
-                elif isinstance(val, (np.integer,)):
-                    params[c] = int(val)
-                elif isinstance(val, (np.floating,)):
-                    params[c] = float(val)
-                elif isinstance(val, (np.bool_,)):
-                    params[c] = bool(val)
-                else:
-                    params[c] = val
-            conn.execute(text(sql), params)
+        conn.execute(text(sql), batch)
 
 
 def main():
@@ -894,9 +909,12 @@ def main():
     print("\nFinal output with flags:")
     print(final_output)
 
-    # Insert into model_outputs table (today's snapshot, replaced each run)
+    # Refresh model_outputs (today's snapshot). TRUNCATE + append preserves the
+    # table's RLS, policies, and indexes; to_sql(if_exists="replace") would drop them.
     final_output = final_output.rename(columns={"xR": "expected_runs", "game_date": "date"})
-    final_output.to_sql("model_outputs", con=engine, if_exists="replace", index=False)
+    with engine.begin() as conn:
+        conn.execute(text("TRUNCATE TABLE model_outputs"))
+        final_output.to_sql("model_outputs", con=conn, if_exists="append", index=False)
 
     # Upsert into model_outputs_season (historical record, deduplicated by game_pk+team)
     float_cols = ["expected_runs", "win_prob", "our_total"]
