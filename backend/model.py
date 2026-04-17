@@ -911,10 +911,20 @@ def main():
 
     # Refresh model_outputs (today's snapshot). TRUNCATE + append preserves the
     # table's RLS, policies, and indexes; to_sql(if_exists="replace") would drop them.
+    # Column-filter to existing schema so new DataFrame columns don't break the insert
+    # when the table was created by an older pipeline run.
     final_output = final_output.rename(columns={"xR": "expected_runs", "game_date": "date"})
-    with engine.begin() as conn:
-        conn.execute(text("TRUNCATE TABLE model_outputs"))
-        final_output.to_sql("model_outputs", con=conn, if_exists="append", index=False)
+    existing_mo_cols = _get_table_columns("model_outputs")
+    if existing_mo_cols:
+        # Table exists — TRUNCATE then append, keeping only columns the table knows about
+        mo_cols = [c for c in final_output.columns if c in existing_mo_cols]
+        with engine.begin() as conn:
+            conn.execute(text("TRUNCATE TABLE model_outputs"))
+            final_output[mo_cols].to_sql("model_outputs", con=conn, if_exists="append", index=False)
+    else:
+        # Table missing (fresh DB or manual drop) — create it from the DataFrame
+        final_output.to_sql("model_outputs", con=engine, if_exists="replace", index=False)
+        print("  Created model_outputs table (was missing)")
 
     # Upsert into model_outputs_season (historical record, deduplicated by game_pk+team)
     float_cols = ["expected_runs", "win_prob", "our_total"]
