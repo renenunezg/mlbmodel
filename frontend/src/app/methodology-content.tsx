@@ -217,6 +217,21 @@ export function MethodologyContent() {
       >
         <div className="space-y-6 text-sm">
           <div className="border-l-2 border-border pl-4">
+            <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground mb-1">April 20, 2026</p>
+            <p className="font-medium mb-1.5">Raised the +EV threshold from 3% to 4.5% across all three markets</p>
+            <p className="text-muted-foreground leading-relaxed">
+              A play gets flagged when the model&apos;s probability of an outcome exceeds the
+              book&apos;s implied probability by some margin. That margin was 3%, which is
+              below the typical vig on a -110 line and leaves almost no cushion if the model
+              is even slightly miscalibrated. Moving it to 4.5% puts every flagged play
+              clearly above the juice. The Kelly sizing logic is untouched and runs on the
+              same plays as before, just on a smaller and higher-confidence set. The number
+              applies uniformly to moneylines, run lines, and totals for now, though totals
+              probabilities depend on more modeling assumptions than the other two and may
+              warrant a slightly stricter threshold later.
+            </p>
+          </div>
+          <div className="border-l-2 border-border pl-4">
             <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground mb-1">April 2026</p>
             <p className="font-medium mb-1.5">Switched win probability from Poisson to negative binomial</p>
             <p className="text-muted-foreground leading-relaxed">
