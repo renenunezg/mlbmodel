@@ -134,6 +134,7 @@ export function PerformanceTabs({
                 <TableHead>Overall</TableHead>
                 <TableHead>ML</TableHead>
                 <TableHead>Run Line</TableHead>
+                <TableHead>Totals</TableHead>
                 <TableHead className="text-right">MAE</TableHead>
               </TableRow>
             </TableHeader>
@@ -157,6 +158,12 @@ export function PerformanceTabs({
                     {row.run_line_correct}/{row.run_line_predictions}{" "}
                     <span className="text-muted-foreground">
                       ({pct(row.run_line_accuracy)})
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    {row.totals_correct ?? "—"}/{row.totals_predictions ?? "—"}{" "}
+                    <span className="text-muted-foreground">
+                      ({pct(row.totals_accuracy)})
                     </span>
                   </TableCell>
                   <TableCell className="text-right font-mono tabular-nums">

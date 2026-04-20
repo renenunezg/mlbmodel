@@ -78,10 +78,20 @@ export function AccuracyChart({ data }: AccuracyChartProps) {
         />
         <Line
           type="monotone"
+          dataKey="totals_accuracy"
+          name="Totals"
+          stroke="#9b59b6"
+          strokeWidth={1.5}
+          dot={false}
+          activeDot={{ r: 3 }}
+        />
+        <Line
+          type="monotone"
           dataKey="total_accuracy"
           name="Overall"
           stroke="#b08a30"
           strokeWidth={1.5}
+          strokeDasharray="4 2"
           dot={false}
           activeDot={{ r: 3 }}
         />
