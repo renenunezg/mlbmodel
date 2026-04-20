@@ -250,6 +250,14 @@ def _compute_base_row(window_df):
     rl_total = int(rl_plays["run_line_correct"].notna().sum())
     rl_accuracy = rl_correct / rl_total if rl_total > 0 else np.nan
 
+    # Totals picks (one row per game — dedupe on game_pk, take the row with a total_play)
+    totals_plays = window_df[window_df["total_play"].isin(["Over", "Under"])].drop_duplicates(subset=["game_pk"])
+    totals_plays = totals_plays.copy()
+    totals_plays["total_correct"] = totals_plays.apply(_calc_total_pick, axis=1)
+    totals_correct = int(totals_plays["total_correct"].sum()) if not totals_plays.empty else 0
+    totals_total = int(totals_plays["total_correct"].notna().sum())
+    totals_accuracy = totals_correct / totals_total if totals_total > 0 else np.nan
+
     return {
         "total_correct": total_correct,
         "total_predictions": total_predictions,
@@ -260,6 +268,9 @@ def _compute_base_row(window_df):
         "run_line_correct": rl_correct,
         "run_line_predictions": rl_total,
         "run_line_accuracy": round(float(rl_accuracy), 4) if pd.notna(rl_accuracy) else None,
+        "totals_correct": totals_correct,
+        "totals_predictions": totals_total,
+        "totals_accuracy": round(float(totals_accuracy), 4) if pd.notna(totals_accuracy) else None,
         "average_total_diff": round(float(runs_mae), 4),
         "average_win_prob": round(float(window_df["win_prob"].mean()), 4),
     }

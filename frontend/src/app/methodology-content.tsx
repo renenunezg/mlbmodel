@@ -84,6 +84,53 @@ const features = [
   },
 ];
 
+const flowNodes = [
+  {
+    group: "Inputs",
+    color: "border-blue-500/40 bg-blue-500/5",
+    labelColor: "text-blue-400",
+    items: [
+      { label: "MLB Stats API", sub: "Schedule, scores, starters" },
+      { label: "Statcast / pybaseball", sub: "Pitch-level data" },
+      { label: "Baseball Savant", sub: "Park factors" },
+      { label: "The Odds API", sub: "ML, RL, O/U lines" },
+    ],
+  },
+  {
+    group: "Feature Engineering",
+    color: "border-amber-500/40 bg-amber-500/5",
+    labelColor: "text-amber-400",
+    items: [
+      { label: "Pitching", sub: "xFIP, WHIP, K/9 (starter + bullpen)" },
+      { label: "Batting Splits", sub: "OPS, ISO, K% vs handedness" },
+      { label: "Rolling Form", sub: "5/10-game scoring averages" },
+      { label: "Context", sub: "Park factor, home/away" },
+    ],
+  },
+  {
+    group: "Model",
+    color: "border-emerald-500/40 bg-emerald-500/5",
+    labelColor: "text-emerald-400",
+    items: [
+      { label: "XGBoost Regressor", sub: "12 features → xR per team" },
+      { label: "TimeSeriesSplit CV", sub: "5-fold, past-only training windows" },
+      { label: "Neg. Binomial (r=6)", sub: "Joint score distribution (0–25)" },
+      { label: "Isotonic Calibration", sub: "OOF-fit probability mapping" },
+    ],
+  },
+  {
+    group: "Outputs",
+    color: "border-purple-500/40 bg-purple-500/5",
+    labelColor: "text-purple-400",
+    items: [
+      { label: "Win probability", sub: "P(team wins) per game" },
+      { label: "Cover probability", sub: "P(team covers spread)" },
+      { label: "Over/under prob.", sub: "P(total > line)" },
+      { label: "EV flags + sizing", sub: "Quarter-Kelly allocation" },
+    ],
+  },
+];
+
 const pipelineSteps = [
   { num: "01", name: "Schedule & Scores", desc: "Fetch 3-day window of schedules, upsert games, finalize scores" },
   { num: "02", name: "Statcast Stats", desc: "Compute pitcher, bullpen, and batting stats from pitch-level data" },
@@ -162,6 +209,37 @@ export function MethodologyContent() {
         </div>
       </SectionCard>
 
+      {/* Changelog */}
+      <SectionCard
+        id="changelog"
+        title="Model Changelog"
+        subtitle="Significant updates to model behavior, inference, and data handling — in chronological order"
+      >
+        <div className="space-y-6 text-sm">
+          <div className="border-l-2 border-border pl-4">
+            <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground mb-1">April 2026</p>
+            <p className="font-medium mb-1.5">Pipeline output persistence and observability</p>
+            <p className="text-muted-foreground leading-relaxed">
+              Prior to this update, the model output table was rebuilt from scratch on each
+              pipeline run using a replace-on-write strategy. While operationally simple, this
+              approach silently dropped all database-level configuration — row-level security
+              policies, indexes, and access controls — on every execution, requiring manual
+              re-application each time. Storage was refactored to use incremental upserts
+              against the existing table structure, ensuring that schema-level configuration
+              survives across daily runs.
+            </p>
+            <p className="text-muted-foreground leading-relaxed mt-2">
+              Additionally, the expected value classification logic — the functions that assign
+              Over/Under, moneyline, and run-line plays to each game — previously swallowed
+              exceptions silently, making it impossible to distinguish between a game with no
+              applicable play and one where classification failed on unexpected input. Exception
+              handling was added to surface these failures explicitly, improving diagnostic
+              visibility on edge-case games such as postponements and doubleheaders.
+            </p>
+          </div>
+        </div>
+      </SectionCard>
+
       {/* Pipeline */}
       <SectionCard
         id="pipeline"
@@ -214,6 +292,57 @@ export function MethodologyContent() {
                 <Badge key={src} variant="outline">{src}</Badge>
               ))}
             </div>
+          </div>
+        </div>
+      </SectionCard>
+
+      {/* Model Flow */}
+      <SectionCard
+        id="flow"
+        title="How the Model Works"
+        subtitle="End-to-end flow from raw data to probabilistic outputs"
+      >
+        <div className="space-y-3">
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            Each morning the pipeline moves data through four stages. Raw inputs from four
+            external sources are transformed into 12 numerical features, passed through a
+            gradient-boosted regressor, and converted into calibrated probabilities via a
+            joint score distribution. The final outputs are compared against market-implied
+            odds to identify edges.
+          </p>
+          {/* Flow diagram */}
+          <div className="mt-4 flex flex-col gap-2 md:flex-row md:items-stretch md:gap-0">
+            {flowNodes.map((node, i) => (
+              <div key={node.group} className="flex min-w-0 md:flex-1 md:flex-col">
+                {/* Node card */}
+                <div className={`rounded-sm border ${node.color} p-3 flex-1`}>
+                  <p className={`mb-2 font-mono text-[10px] uppercase tracking-widest font-semibold ${node.labelColor}`}>
+                    {node.group}
+                  </p>
+                  <ul className="space-y-1.5">
+                    {node.items.map((item) => (
+                      <li key={item.label}>
+                        <p className="text-xs font-medium leading-tight">{item.label}</p>
+                        <p className="text-[10px] text-muted-foreground leading-snug">{item.sub}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                {/* Arrow between nodes */}
+                {i < flowNodes.length - 1 && (
+                  <>
+                    {/* Mobile: vertical arrow below */}
+                    <div className="flex justify-center py-1 md:hidden">
+                      <span className="text-muted-foreground text-sm">↓</span>
+                    </div>
+                    {/* Desktop: horizontal arrow to the right */}
+                    <div className="hidden md:flex md:items-center md:justify-center md:w-6 md:shrink-0">
+                      <span className="text-muted-foreground text-sm">→</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       </SectionCard>
