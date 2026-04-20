@@ -461,7 +461,7 @@ def _warn_flag_error(fn_name: str, exc: Exception) -> None:
         print(f"  WARNING: {fn_name} raised {type(exc).__name__}: {exc} — returning 'No Play'")
 
 
-def flag_ev(row, threshold=0.03):
+def flag_ev(row, threshold=0.045):
     try:
         our_prob = american_to_prob(row["our_odds"])
         book_prob = american_to_prob(row["moneyline"])
@@ -474,7 +474,7 @@ def flag_ev(row, threshold=0.03):
         return "No Play"
 
 
-def flag_runline_ev(row, threshold=0.03):
+def flag_runline_ev(row, threshold=0.045):
     """Flag a run line play if our model's cover probability (from the joint
     negative-binomial distribution, accounting for the book's actual spread)
     beats the book's implied cover probability by at least `threshold`.
@@ -491,7 +491,7 @@ def flag_runline_ev(row, threshold=0.03):
         return "No Play"
 
 
-def flag_total_play(row, threshold=0.03):
+def flag_total_play(row, threshold=0.045):
     """Flag Over/Under based on joint-distribution probabilities vs book odds."""
     try:
         over_prob_book = american_to_prob(row.get("total_over_odds"))
