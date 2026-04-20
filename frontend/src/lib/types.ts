@@ -44,6 +44,9 @@ export interface ModelEvaluation {
   run_line_correct: number;
   run_line_predictions: number;
   run_line_accuracy: number;
+  totals_correct: number | null;
+  totals_predictions: number | null;
+  totals_accuracy: number | null;
   average_total_diff: number;
   average_win_prob: number;
   // Regression metrics
