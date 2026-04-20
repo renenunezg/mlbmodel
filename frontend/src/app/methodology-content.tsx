@@ -218,23 +218,15 @@ export function MethodologyContent() {
         <div className="space-y-6 text-sm">
           <div className="border-l-2 border-border pl-4">
             <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground mb-1">April 2026</p>
-            <p className="font-medium mb-1.5">Pipeline output persistence and observability</p>
+            <p className="font-medium mb-1.5">Switched win probability from Poisson to negative binomial</p>
             <p className="text-muted-foreground leading-relaxed">
-              Prior to this update, the model output table was rebuilt from scratch on each
-              pipeline run using a replace-on-write strategy. While operationally simple, this
-              approach silently dropped all database-level configuration — row-level security
-              policies, indexes, and access controls — on every execution, requiring manual
-              re-application each time. Storage was refactored to use incremental upserts
-              against the existing table structure, ensuring that schema-level configuration
-              survives across daily runs.
-            </p>
-            <p className="text-muted-foreground leading-relaxed mt-2">
-              Additionally, the expected value classification logic — the functions that assign
-              Over/Under, moneyline, and run-line plays to each game — previously swallowed
-              exceptions silently, making it impossible to distinguish between a game with no
-              applicable play and one where classification failed on unexpected input. Exception
-              handling was added to surface these failures explicitly, improving diagnostic
-              visibility on edge-case games such as postponements and doubleheaders.
+              The original model derived win probabilities from a Poisson distribution, which
+              assumes variance equals the mean. MLB run scoring doesn&apos;t hold to that: games
+              are more spread out than Poisson predicts, so the model was systematically
+              overconfident. Replacing it with a negative binomial (dispersion r = 6, fit to
+              historical run distributions) brings the tails in line with reality. A 6.7 vs
+              3.3 expected run difference now produces roughly 77% win probability instead
+              of the previous 87%.
             </p>
           </div>
         </div>
