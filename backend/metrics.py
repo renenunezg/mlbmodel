@@ -165,7 +165,9 @@ def probabilistic_summary(probs, outcomes, xr_preds=None, actual_runs=None):
         "sharpness": sharpness(probs),
     }
     if xr_preds is not None and actual_runs is not None:
-        result["interval_coverage_80"] = prediction_interval_coverage(xr_preds, actual_runs)
+        result["interval_coverage_50"] = prediction_interval_coverage(xr_preds, actual_runs, level=0.50)
+        result["interval_coverage_80"] = prediction_interval_coverage(xr_preds, actual_runs, level=0.80)
+        result["interval_coverage_90"] = prediction_interval_coverage(xr_preds, actual_runs, level=0.90)
     return result
 
 
