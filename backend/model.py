@@ -898,9 +898,15 @@ def main():
         lambda x: round(x * 0.25, 6) if pd.notna(x) else np.nan
     )
 
-    # Confidence from quarter-Kelly (replaces ad-hoc edge differences)
-    final_output["ml_confidence"] = final_output["kelly_quarter_ml"]
-    final_output["run_line_confidence"] = final_output["kelly_quarter_rl"]
+    # Displayed edge = implied-probability diff used by flag_ev / flag_runline_ev.
+    # Must match the threshold logic so cards and +EV badges agree.
+    final_output["ml_confidence"] = (
+        final_output["our_odds"].apply(american_to_prob)
+        - final_output["moneyline"].apply(american_to_prob)
+    )
+    final_output["run_line_confidence"] = (
+        final_output["p_cover"] - final_output["spread_odds"].apply(american_to_prob)
+    )
 
     final_output["high_variance_flag"] = predictions.get("std_last5", pd.Series(dtype=float)).apply(
         lambda x: "Yes" if pd.notna(x) and x > 4.0 else "No"
