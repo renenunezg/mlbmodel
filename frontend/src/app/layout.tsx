@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Lora } from "next/font/google";
 import "./globals.css";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Nav } from "@/components/nav";
 
 const geistSans = Geist({
@@ -45,6 +47,8 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col overflow-x-hidden">
         <Nav />
         {children}
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
