@@ -28,42 +28,39 @@ export function EvBadge({ prediction }: EvBadgeProps) {
   const totalLine = prediction.total != null ? ` ${prediction.total}` : "";
 
   return (
-    <div className="flex items-start gap-0.5 font-mono text-xs font-medium whitespace-nowrap">
+    <div className="flex items-center gap-1 font-mono text-xs font-medium whitespace-nowrap">
       {/* Slot 1: ML Kelly % */}
-      <div className="inline-block w-10 text-right">
-        {mlValue ? (
-          <>
-            <div className="text-positive">{mlValue}</div>
-            <div className="text-[10px] font-normal text-muted-foreground">Kelly</div>
-          </>
-        ) : null}
+      <div className="w-10 text-center">
+        <div className="tabular-nums">{mlValue ? <span className="text-positive">{mlValue}</span> : <span className="invisible">—</span>}</div>
+        <div className="text-[10px] font-normal text-muted-foreground">{mlValue ? "Kelly" : <span className="invisible">—</span>}</div>
       </div>
 
-      {/* Slot 2: Run line spread value + RL label */}
-      <div className="inline-block w-8 text-right">
-        {rl ? (
-          <>
-            <div className="text-accent-blue">{fmtSpread(prediction.spread)}</div>
-            <div className="text-[10px] font-normal text-muted-foreground">RL</div>
-          </>
-        ) : null}
+      {/* Slot 2: Run line spread + RL label */}
+      <div className="w-8 text-center">
+        <div className="tabular-nums">{rl ? <span className="text-accent-blue">{fmtSpread(prediction.spread)}</span> : <span className="invisible">—</span>}</div>
+        <div className="text-[10px] font-normal text-muted-foreground">{rl ? "RL" : <span className="invisible">—</span>}</div>
       </div>
 
-      {/* Slot 3: Totals direction + O/U label, or VAR */}
-      <div className="inline-block w-10 text-right">
-        {isOver ? (
+      {/* Slot 3: Totals + O/U label, or VAR */}
+      <div className="w-10 text-center">
+        {isOver || isUnder ? (
           <>
-            <div className="text-accent-amber">O{totalLine}</div>
-            <div className="text-[10px] font-normal text-muted-foreground">O/U</div>
-          </>
-        ) : isUnder ? (
-          <>
-            <div className="text-accent-amber">U{totalLine}</div>
+            <div className={isOver ? "text-accent-amber" : "text-accent-amber"}>
+              {isOver ? `O${totalLine}` : `U${totalLine}`}
+            </div>
             <div className="text-[10px] font-normal text-muted-foreground">O/U</div>
           </>
         ) : variance ? (
-          <div className="text-negative">VAR</div>
-        ) : null}
+          <>
+            <div className="text-negative">VAR</div>
+            <div className="text-[10px] font-normal text-muted-foreground invisible">—</div>
+          </>
+        ) : (
+          <>
+            <div className="invisible">—</div>
+            <div className="text-[10px] invisible">—</div>
+          </>
+        )}
       </div>
     </div>
   );
