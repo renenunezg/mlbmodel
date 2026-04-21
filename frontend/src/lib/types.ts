@@ -17,6 +17,9 @@ export interface ModelOutput {
   run_line_ev_flag: string;
   ml_confidence: number | null;
   run_line_confidence: number | null;
+  kelly_quarter_ml: number | null;
+  kelly_quarter_rl: number | null;
+  kelly_quarter_total: number | null;
   high_variance_flag: string;
 }
 
@@ -58,7 +61,9 @@ export interface ModelEvaluation {
   brier_score: number | null;
   log_loss: number | null;
   sharpness: number | null;
+  interval_coverage_50: number | null;
   interval_coverage_80: number | null;
+  interval_coverage_90: number | null;
   // Financial metrics
   roi: number | null;
   sharpe: number | null;

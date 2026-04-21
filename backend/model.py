@@ -491,7 +491,7 @@ def flag_runline_ev(row, threshold=0.045):
         return "No Play"
 
 
-def flag_total_play(row, threshold=0.045):
+def flag_total_play(row, threshold=0.065):
     """Flag Over/Under based on joint-distribution probabilities vs book odds."""
     try:
         over_prob_book = american_to_prob(row.get("total_over_odds"))
