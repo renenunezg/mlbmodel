@@ -64,7 +64,7 @@ export function AccuracyChart({ data }: AccuracyChartProps) {
           name="ML Accuracy"
           stroke="#2d7a4f"
           strokeWidth={1.5}
-          dot={{ r: 2 }}
+          dot={false}
           activeDot={{ r: 3 }}
         />
         <Line
@@ -73,7 +73,7 @@ export function AccuracyChart({ data }: AccuracyChartProps) {
           name="Run Line"
           stroke="#4a6fa5"
           strokeWidth={1.5}
-          dot={{ r: 2 }}
+          dot={false}
           activeDot={{ r: 3 }}
         />
         <Line
@@ -82,7 +82,7 @@ export function AccuracyChart({ data }: AccuracyChartProps) {
           name="Totals"
           stroke="#9b59b6"
           strokeWidth={1.5}
-          dot={{ r: 2 }}
+          dot={false}
           activeDot={{ r: 3 }}
         />
         <Line
@@ -92,7 +92,7 @@ export function AccuracyChart({ data }: AccuracyChartProps) {
           stroke="#b08a30"
           strokeWidth={1.5}
           strokeDasharray="4 2"
-          dot={{ r: 2 }}
+          dot={false}
           activeDot={{ r: 3 }}
         />
       </LineChart>

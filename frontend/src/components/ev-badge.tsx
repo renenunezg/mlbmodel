@@ -23,13 +23,13 @@ export function EvBadge({ prediction }: EvBadgeProps) {
   const totalLine = prediction.total != null ? ` ${prediction.total}` : "";
 
   return (
-    <div className="flex items-center gap-1 font-mono text-xs font-medium">
+    <div className="flex items-center gap-0.5 font-mono text-xs font-medium whitespace-nowrap">
       {/* Slot 1: ML — Kelly % when +EV */}
       <span className="inline-block w-10 text-right">
         {mlLabel ? <span className="text-positive">{mlLabel}</span> : null}
       </span>
       {/* Slot 2: Run line */}
-      <span className="inline-block w-4 text-right">
+      <span className="inline-block w-5 text-right">
         {rl ? <span className="text-accent-blue">RL</span> : null}
       </span>
       {/* Slot 3: Totals with line, or VAR */}
