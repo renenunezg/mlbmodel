@@ -213,7 +213,7 @@ export function MethodologyContent() {
       <SectionCard
         id="changelog"
         title="Model Changelog"
-        subtitle="Significant updates to model behavior, inference, and data handling — in chronological order"
+        subtitle="Significant updates to model behavior, inference, and data handling, in chronological order"
       >
         <div className="space-y-6 text-sm">
           <div className="border-l-2 border-border pl-4">

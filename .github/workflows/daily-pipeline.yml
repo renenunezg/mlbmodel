@@ -2,9 +2,17 @@ name: Daily MLB Pipeline
 
 on:
   schedule:
-    # Run at 6:00 AM PST / 7:00 AM PDT (14:00 UTC) daily — before 9 AM games
+    # Primary: 6:00 AM PST / 7:00 AM PDT (14:00 UTC) — before 9 AM games
     - cron: "0 14 * * *"
+    # Backup 30 min later: GitHub's scheduled workflows can be skipped/delayed
+    # under load. Pipeline is idempotent (all DB ops keyed on game_pk) so a
+    # second run is safe. The concurrency group below prevents overlap.
+    - cron: "30 14 * * *"
   workflow_dispatch: # Allow manual trigger
+
+concurrency:
+  group: daily-pipeline
+  cancel-in-progress: false
 
 jobs:
   run-pipeline:

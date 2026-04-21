@@ -13,6 +13,7 @@ import { MetricLineChart } from "@/components/metric-line-chart";
 import { CalibrationChart } from "@/components/calibration-chart";
 import { EquityCurveChart } from "@/components/equity-curve-chart";
 import { FeatureImportanceChart } from "@/components/feature-importance-chart";
+import { ResidualsChart } from "@/components/residuals-chart";
 import {
   Table,
   TableBody,
@@ -27,6 +28,7 @@ interface PerformanceTabsProps {
   calibration: CalibrationBin[];
   featureImportance: FeatureImportance[];
   edgeBuckets: EdgeBucket[];
+  residuals: number[];
 }
 
 function pct(value: number | null | undefined): string {
@@ -50,6 +52,7 @@ export function PerformanceTabs({
   calibration,
   featureImportance,
   edgeBuckets,
+  residuals,
 }: PerformanceTabsProps) {
   // Split evaluations by window type
   const dailyEvals = evaluations.filter(
@@ -342,17 +345,19 @@ export function PerformanceTabs({
         </div>
 
         <div className="border-t border-border pt-6">
-          <h2 className="font-heading text-lg mb-4">Daily Metric Stability</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <h3 className="text-sm font-medium mb-2">MAE (daily)</h3>
-              <MetricLineChart data={dailyEvals} dataKey="mae" name="MAE" color="#b08a30" />
-            </div>
-            <div>
-              <h3 className="text-sm font-medium mb-2">Brier Score (daily)</h3>
-              <MetricLineChart data={dailyEvals} dataKey="brier_score" name="Brier" color="#2d7a4f" />
-            </div>
-          </div>
+          <h2 className="font-heading text-lg mb-4">MAE Over Time</h2>
+          <MetricLineChart data={dailyEvals} dataKey="mae" name="MAE" color="#b08a30" />
+        </div>
+
+        <div className="border-t border-border pt-6">
+          <h2 className="font-heading text-lg mb-4">Residual Distribution</h2>
+          {residuals.length > 0 ? (
+            <ResidualsChart residuals={residuals} />
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              No graded games yet.
+            </p>
+          )}
         </div>
       </TabsContent>
     </Tabs>
