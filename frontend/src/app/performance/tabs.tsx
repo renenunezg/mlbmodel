@@ -337,9 +337,19 @@ export function PerformanceTabs({
           <h2 className="font-heading text-lg mb-4">Prediction Interval Coverage</h2>
           <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-baseline gap-x-4 gap-y-3 font-mono text-sm">
             <KpiCard
+              label="50% Interval"
+              value={pct(latest?.interval_coverage_50)}
+              sub="Target: 50%"
+            />
+            <KpiCard
               label="80% Interval"
               value={pct(latest?.interval_coverage_80)}
-              sub="% of actual outcomes inside the predicted 80% NB interval"
+              sub="Target: 80%"
+            />
+            <KpiCard
+              label="90% Interval"
+              value={pct(latest?.interval_coverage_90)}
+              sub="Target: 90%"
             />
           </div>
         </div>
