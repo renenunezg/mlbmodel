@@ -21,7 +21,7 @@ function TeamRow({
   const isFinal = score != null;
 
   return (
-    <div className="grid grid-cols-[1fr_2.75rem_2.75rem_2.75rem_4.5rem] sm:grid-cols-[1fr_3.5rem_3.5rem_3.5rem_7rem_5.5rem] items-center gap-x-1.5 py-1.5 font-mono text-sm">
+    <div className="grid grid-cols-[1fr_2.75rem_2.75rem_2.75rem_6rem] sm:grid-cols-[1fr_3.5rem_3.5rem_3.5rem_7rem_7rem] items-center gap-x-1.5 py-1.5 font-mono text-sm">
       {/* Team + Starter */}
       <div className="min-w-0">
         <div className="flex items-center gap-2">
