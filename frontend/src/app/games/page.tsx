@@ -1,7 +1,8 @@
 import { supabase } from "@/lib/supabase";
-import type { ModelOutput, GameMatchup } from "@/lib/types";
+import type { ModelOutput, GameMatchup, GameInfo } from "@/lib/types";
 import { GamesLive } from "@/components/games-live";
 import { SummaryStats } from "@/components/summary-stats";
+import { GameCardUnavailable } from "@/components/game-card-unavailable";
 
 export const revalidate = 300;
 
@@ -10,13 +11,16 @@ export default async function Page() {
     timeZone: "America/Los_Angeles",
   }); // "YYYY-MM-DD"
 
-  const { data: predictions } = await supabase
-    .from("model_outputs")
-    .select("*")
-    .eq("date", today)
-    .order("game_pk");
+  const [{ data: predictions }, { data: allGames }] = await Promise.all([
+    supabase.from("model_outputs").select("*").eq("date", today).order("game_pk"),
+    supabase
+      .from("games")
+      .select("game_pk, game_date, home_team, away_team, venue, start_time, home_score, away_score, status")
+      .eq("game_date", today)
+      .order("start_time"),
+  ]);
 
-  if (!predictions || predictions.length === 0) {
+  if ((!predictions || predictions.length === 0) && (!allGames || allGames.length === 0)) {
     return (
       <main className="mx-auto max-w-6xl px-4 py-8">
         <h1 className="font-heading text-2xl tracking-tight">
@@ -30,25 +34,19 @@ export default async function Page() {
     );
   }
 
-  const gamePks = [...new Set(predictions.map((p: ModelOutput) => p.game_pk))];
+  const predictionPks = new Set((predictions ?? []).map((p: ModelOutput) => p.game_pk));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const gameMap = new Map((allGames ?? []).map((g: any) => [g.game_pk, g]));
 
-  const { data: games } = await supabase
-    .from("games")
-    .select(
-      "game_pk, game_date, home_team, away_team, venue, start_time, home_score, away_score, status"
-    )
-    .in("game_pk", gamePks);
-
-  const gameMap = new Map(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (games || []).map((g: any) => [g.game_pk, g])
-  );
-
-  const matchups: GameMatchup[] = gamePks
-    .map((pk) => {
+  const matchups: GameMatchup[] = (predictions ?? [])
+    .reduce((acc: number[], p: ModelOutput) => {
+      if (!acc.includes(p.game_pk)) acc.push(p.game_pk);
+      return acc;
+    }, [])
+    .map((pk: number) => {
       const game = gameMap.get(pk);
       if (!game) return null;
-      const rows = predictions.filter((p: ModelOutput) => p.game_pk === pk);
+      const rows = (predictions ?? []).filter((p: ModelOutput) => p.game_pk === pk);
       const away = rows.find((r: ModelOutput) => r.team === game.away_team);
       const home = rows.find((r: ModelOutput) => r.team === game.home_team);
       if (!away || !home) return null;
@@ -67,6 +65,11 @@ export default async function Page() {
       };
     })
     .filter(Boolean) as GameMatchup[];
+
+  const unavailableGames: GameInfo[] = (allGames ?? []).filter(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (g: any) => !predictionPks.has(g.game_pk)
+  ) as GameInfo[];
 
   matchups.sort((a, b) => {
     const aHasEv =
@@ -100,6 +103,14 @@ export default async function Page() {
       </div>
 
       <GamesLive initial={matchups} />
+
+      {unavailableGames.length > 0 && (
+        <div className="mt-4 space-y-3">
+          {unavailableGames.map((game) => (
+            <GameCardUnavailable key={game.game_pk} game={game} />
+          ))}
+        </div>
+      )}
     </main>
   );
 }
