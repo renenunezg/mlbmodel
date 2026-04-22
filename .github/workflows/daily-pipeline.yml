@@ -2,12 +2,10 @@ name: Daily MLB Pipeline
 
 on:
   schedule:
-    # Primary: 6:00 AM PST / 7:00 AM PDT (14:00 UTC) — before 9 AM games
-    - cron: "0 14 * * *"
-    # Backup 30 min later: GitHub's scheduled workflows can be skipped/delayed
-    # under load. Pipeline is idempotent (all DB ops keyed on game_pk) so a
-    # second run is safe. The concurrency group below prevents overlap.
-    - cron: "30 14 * * *"
+    # Primary: 5:00 AM PDT (12:00 UTC) — GitHub delay ~1hr → runs ~6 AM PDT
+    - cron: "0 12 * * *"
+    # Backup 30 min later in case primary is delayed or queued
+    - cron: "30 12 * * *"
   workflow_dispatch: # Allow manual trigger
 
 concurrency:
