@@ -17,6 +17,46 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost:5432/mlbmodel")
 engine = create_engine(DATABASE_URL)
 
+# Single source of truth for +EV thresholds. Used by flag_ev / flag_runline_ev / flag_total_play.
+# Totals bar is higher because total-runs markets are noisier than sides.
+EV_THRESHOLDS = {
+    "ml": 0.045,
+    "rl": 0.045,
+    "totals": 0.065,
+}
+
+# Dynamic starter/bullpen inning-share constants. See load_training_data for usage.
+LEAGUE_STARTER_IP = 5.2
+LEAGUE_STARTER_SHARE = round(LEAGUE_STARTER_IP / 9, 3)  # ~0.578
+LEAGUE_BULLPEN_RHP_SHARE = 0.6
+STARTER_SHARE_MIN, STARTER_SHARE_MAX = 0.35, 0.78
+
+
+def compute_starter_inning_share(avg_ip_per_start):
+    """Starter inning share = avg IP/start / 9, clamped to [0.35, 0.78].
+
+    Returns league mean when input is NaN or missing. Accepts scalar or pandas Series.
+    """
+    if isinstance(avg_ip_per_start, pd.Series):
+        share = (pd.to_numeric(avg_ip_per_start, errors="coerce") / 9.0).clip(
+            lower=STARTER_SHARE_MIN, upper=STARTER_SHARE_MAX,
+        )
+        return share.fillna(LEAGUE_STARTER_SHARE)
+    if avg_ip_per_start is None or pd.isna(avg_ip_per_start):
+        return LEAGUE_STARTER_SHARE
+    return float(np.clip(avg_ip_per_start / 9.0, STARTER_SHARE_MIN, STARTER_SHARE_MAX))
+
+
+def blend_batting_split(vs_r, vs_l, opp_handedness, starter_share, bullpen_rhp_share):
+    """Blend a batting split (OPS/ISO/K%) across the starter + bullpen portions.
+
+    starter portion faces opp_handedness (known); bullpen portion faces a mix
+    determined by bullpen_rhp_share. All inputs may be scalars or arrays.
+    """
+    split_vs_starter = np.where(opp_handedness == "R", vs_r, vs_l)
+    split_vs_bullpen = bullpen_rhp_share * vs_r + (1 - bullpen_rhp_share) * vs_l
+    return starter_share * split_vs_starter + (1 - starter_share) * split_vs_bullpen
+
 # 12 features for the XGBoost model
 FEATURE_COLS = [
     'xfip',               # starter xFIP (computed from Statcast)
@@ -66,31 +106,45 @@ def load_training_data():
         print("  ERROR: probable_starters is empty — cannot proceed.")
         return pd.DataFrame()
 
-    # Merge in pitcher stats (xfip, whip) via pitcher_id (MLB player ID)
+    # Merge in pitcher stats (xfip, whip, avg_ip_per_start) via pitcher_id (MLB player ID)
     sp_stats = _safe_read_table("pitcher_stats")
+    sp_cols = ["pitcher_id", "xfip", "whip"]
+    if not sp_stats.empty and "avg_ip_per_start" in sp_stats.columns:
+        sp_cols.append("avg_ip_per_start")
     if not sp_stats.empty and "pitcher_id" in sp_stats.columns and "pitcher_id" in starters.columns:
         starters = pd.merge(
             starters,
-            sp_stats[["pitcher_id", "xfip", "whip"]],
+            sp_stats[sp_cols],
             on="pitcher_id",
             how="left",
         )
     else:
         starters["xfip"] = np.nan
         starters["whip"] = np.nan
+        starters["avg_ip_per_start"] = np.nan
 
-    # Merge in bullpen stats (xfip, k_9)
+    if "avg_ip_per_start" not in starters.columns:
+        starters["avg_ip_per_start"] = np.nan
+
+    # Merge in bullpen stats (xfip, k_9, rhp_ip_share)
     bp_stats = _safe_read_table("bullpen_stats")
+    bp_cols = ["team", "xfip", "k_9"]
+    if not bp_stats.empty and "rhp_ip_share" in bp_stats.columns:
+        bp_cols.append("rhp_ip_share")
     if not bp_stats.empty:
         starters = pd.merge(
             starters,
-            bp_stats[["team", "xfip", "k_9"]].rename(columns={"xfip": "xfip_bullpen", "k_9": "bullpen_k_9"}),
+            bp_stats[bp_cols].rename(columns={"xfip": "xfip_bullpen", "k_9": "bullpen_k_9"}),
             on="team",
             how="left",
         )
     else:
         starters["xfip_bullpen"] = np.nan
         starters["bullpen_k_9"] = np.nan
+        starters["rhp_ip_share"] = np.nan
+
+    if "rhp_ip_share" not in starters.columns:
+        starters["rhp_ip_share"] = np.nan
 
     # Load batting splits from unified team_batting table
     batting = _safe_read_table("team_batting")
@@ -110,17 +164,59 @@ def load_training_data():
             for col in ["ops", "iso", "k_pct"]:
                 starters[f"{col}{suffix}"] = np.nan
 
-    # Self-merge to get opponent pitcher handedness
-    opp = starters[["game_pk", "team", "handedness"]].rename(
-        columns={"team": "opp_team", "handedness": "opp_handedness"}
+    # Self-merge to get opponent info: pitcher handedness, starter avg IP/start
+    # (for dynamic inning-share blend), and opp team's bullpen RHP IP share.
+    # Use left join so games with only one known starter aren't dropped — missing
+    # opponent handedness defaults to "R" (league-average ~70% of starters are RHP).
+    opp = starters[["game_pk", "team", "handedness", "avg_ip_per_start", "rhp_ip_share"]].rename(
+        columns={
+            "team": "opp_team",
+            "handedness": "opp_handedness",
+            "avg_ip_per_start": "opp_avg_ip_per_start",
+            "rhp_ip_share": "opp_rhp_ip_share",
+        }
     )
-    starters = pd.merge(starters, opp, on="game_pk")
-    starters = starters[starters["team"] != starters["opp_team"]]
+    starters = pd.merge(starters, opp, on="game_pk", how="left")
+    starters = starters[starters["team"] != starters["opp_team"].fillna("")]
+    starters["opp_handedness"] = starters["opp_handedness"].fillna("R")
 
-    # Blend batting splits: ~60% of innings face the starter (known handedness),
-    # ~40% the bullpen (~60% RHP league-wide regardless of starter).
-    STARTER_INNING_SHARE = 0.6
-    BULLPEN_RHP_SHARE = 0.6
+    # ---- Dynamic starter/bullpen inning share ----
+    # Replaces the old fixed 0.6/0.4 blend. Inning share derives from the opposing
+    # starter's avg IP per start; bullpen RHP share is the opposing team's actual
+    # bullpen RHP IP share. Both fall back to league-average when sample is thin.
+
+    opp_ip = pd.to_numeric(starters["opp_avg_ip_per_start"], errors="coerce")
+    starter_fallback_mask = opp_ip.isna()
+    starter_share = compute_starter_inning_share(opp_ip)
+    starters["starter_inning_share"] = starter_share
+
+    bullpen_rhp = pd.to_numeric(starters["opp_rhp_ip_share"], errors="coerce")
+    bullpen_fallback_mask = bullpen_rhp.isna()
+    bullpen_rhp = bullpen_rhp.fillna(LEAGUE_BULLPEN_RHP_SHARE)
+    starters["bullpen_rhp_share"] = bullpen_rhp
+
+    # Logging — surface silent fallback if it dominates the slate.
+    n = len(starters)
+    if n > 0:
+        ss_frac = float(starter_fallback_mask.mean())
+        bp_frac = float(bullpen_fallback_mask.mean())
+        print(
+            f"  starter_inning_share: min={starter_share.min():.3f} "
+            f"mean={starter_share.mean():.3f} max={starter_share.max():.3f} "
+            f"std={starter_share.std():.3f} fallback={ss_frac:.1%}"
+        )
+        print(
+            f"  bullpen_rhp_share: min={bullpen_rhp.min():.3f} "
+            f"mean={bullpen_rhp.mean():.3f} max={bullpen_rhp.max():.3f} "
+            f"std={bullpen_rhp.std():.3f} fallback={bp_frac:.1%}"
+        )
+        if ss_frac > 0.5:
+            print(f"  WARNING: {ss_frac:.0%} of rows fell back to league-mean starter inning share — check avg_ip_per_start in pitcher_stats")
+        if bp_frac > 0.5:
+            print(f"  WARNING: {bp_frac:.0%} of rows fell back to league-mean bullpen RHP share — check rhp_ip_share in bullpen_stats")
+
+    # Blend batting splits vs the opposing starter (known handedness) and the
+    # opposing bullpen (distribution from opp_rhp_ip_share).
     for stat, vs_r_col, vs_l_col in [
         ("batting_ops", "ops_vs_r", "ops_vs_l"),
         ("batting_iso", "iso_vs_r", "iso_vs_l"),
@@ -128,11 +224,8 @@ def load_training_data():
     ]:
         vs_r = starters.get(vs_r_col, pd.Series(np.nan, index=starters.index))
         vs_l = starters.get(vs_l_col, pd.Series(np.nan, index=starters.index))
-        split_vs_starter = np.where(starters["opp_handedness"] == "R", vs_r, vs_l)
-        split_vs_bullpen = BULLPEN_RHP_SHARE * vs_r + (1 - BULLPEN_RHP_SHARE) * vs_l
-        starters[stat] = (
-            STARTER_INNING_SHARE * split_vs_starter
-            + (1 - STARTER_INNING_SHARE) * split_vs_bullpen
+        starters[stat] = blend_batting_split(
+            vs_r, vs_l, starters["opp_handedness"].values, starter_share, bullpen_rhp,
         )
 
     # Load park factors and merge based on home team
@@ -461,7 +554,7 @@ def _warn_flag_error(fn_name: str, exc: Exception) -> None:
         print(f"  WARNING: {fn_name} raised {type(exc).__name__}: {exc} — returning 'No Play'")
 
 
-def flag_ev(row, threshold=0.045):
+def flag_ev(row, threshold=EV_THRESHOLDS["ml"]):
     try:
         our_prob = american_to_prob(row["our_odds"])
         book_prob = american_to_prob(row["moneyline"])
@@ -474,7 +567,7 @@ def flag_ev(row, threshold=0.045):
         return "No Play"
 
 
-def flag_runline_ev(row, threshold=0.045):
+def flag_runline_ev(row, threshold=EV_THRESHOLDS["rl"]):
     """Flag a run line play if our model's cover probability (from the joint
     negative-binomial distribution, accounting for the book's actual spread)
     beats the book's implied cover probability by at least `threshold`.
@@ -491,7 +584,7 @@ def flag_runline_ev(row, threshold=0.045):
         return "No Play"
 
 
-def flag_total_play(row, threshold=0.065):
+def flag_total_play(row, threshold=EV_THRESHOLDS["totals"]):
     """Flag Over/Under based on joint-distribution probabilities vs book odds."""
     try:
         over_prob_book = american_to_prob(row.get("total_over_odds"))

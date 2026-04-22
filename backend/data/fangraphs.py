@@ -76,10 +76,13 @@ def _identify_starters(pitch_df: pd.DataFrame) -> set:
     return starters
 
 
-def _compute_pitcher_stats(pitch_df: pd.DataFrame, pitcher_ids: set = None) -> pd.DataFrame:
+def _compute_pitcher_stats(pitch_df: pd.DataFrame, pitcher_ids: set = None,
+                            starter_ids: set = None) -> pd.DataFrame:
     """Compute xFIP, WHIP, K/9, BB/9 from pitch-level Statcast data.
 
     If pitcher_ids is provided, only compute for those pitchers.
+    If starter_ids is provided, also computes avg_ip_per_start (IP per game started)
+    for pitchers in that set.
     """
     # Filter to plate appearances (events)
     pa_df = pitch_df[pitch_df["events"].notna()].copy()
@@ -89,6 +92,20 @@ def _compute_pitcher_stats(pitch_df: pd.DataFrame, pitcher_ids: set = None) -> p
 
     if pa_df.empty:
         return pd.DataFrame()
+
+    # Pre-compute IP per (pitcher, game) so we can derive avg IP per start for starters.
+    # This is also what the 60/40 blend replacement uses to weight starter vs bullpen innings.
+    per_game_outs = None
+    if starter_ids is not None and pa_df["pitcher"].isin(starter_ids).any():
+        out_events = {
+            "strikeout", "field_out", "force_out", "grounded_into_double_play",
+            "double_play", "triple_play", "sac_fly", "sac_bunt",
+            "fielders_choice_out", "caught_stealing_2b", "caught_stealing_3b",
+            "caught_stealing_home",
+        }
+        dp_events = {"grounded_into_double_play", "double_play"}
+        pa_df["_outs"] = pa_df["events"].isin(out_events).astype(int) + pa_df["events"].isin(dp_events).astype(int)
+        per_game_outs = pa_df.groupby(["pitcher", "game_pk"])["_outs"].sum()
 
     # Compute per-pitcher stats
     rows = []
@@ -136,10 +153,23 @@ def _compute_pitcher_stats(pitch_df: pd.DataFrame, pitcher_ids: set = None) -> p
         # Pitcher's team is the fielding team (top of inning = home pitching).
         team = group["home_team"].iloc[0] if group["inning_topbot"].iloc[0] == "Top" else group["away_team"].iloc[0]
 
+        # Pitcher throwing hand (for bullpen RHP-share aggregation).
+        p_throws = group["p_throws"].iloc[0] if "p_throws" in group.columns and not group["p_throws"].empty else None
+
+        # Avg IP per start — only meaningful for starters. Counts games where this
+        # pitcher recorded at least 6 outs (2 IP) to exclude bullpen appearances.
+        avg_ip_per_start = np.nan
+        if per_game_outs is not None and pitcher_id in starter_ids:
+            pg = per_game_outs.loc[pitcher_id]
+            pg = pg[pg >= 6]  # real starts only
+            if len(pg) > 0:
+                avg_ip_per_start = round(float(pg.mean()) / 3, 2)
+
         rows.append({
             "pitcher_name": pitcher_name,
             "pitcher_id": pitcher_id,
             "team": normalize_team(team) if team else None,
+            "p_throws": p_throws,
             "ip": round(ip, 1),
             "fip": round(fip, 2) if pd.notna(fip) else np.nan,
             "xfip": round(xfip, 2) if pd.notna(xfip) else np.nan,
@@ -147,6 +177,7 @@ def _compute_pitcher_stats(pitch_df: pd.DataFrame, pitcher_ids: set = None) -> p
             "k_9": round(k_9, 2) if pd.notna(k_9) else np.nan,
             "bb_9": round(bb_9, 2) if pd.notna(bb_9) else np.nan,
             "hr_9": round(hr_9, 2) if pd.notna(hr_9) else np.nan,
+            "avg_ip_per_start": avg_ip_per_start,
         })
 
     return pd.DataFrame(rows)
@@ -219,7 +250,9 @@ def fetch_pitcher_stats(season: int = None) -> pd.DataFrame:
     if not pitch_df.empty:
         starter_ids = _identify_starters(pitch_df)
         print(f"  Identified {len(starter_ids)} starting pitchers")
-        current_stats = _compute_pitcher_stats(pitch_df, pitcher_ids=starter_ids)
+        current_stats = _compute_pitcher_stats(
+            pitch_df, pitcher_ids=starter_ids, starter_ids=starter_ids,
+        )
 
     # Get prior-season stats as fallback
     prior_stats = _get_prior_season_pitcher_stats()
@@ -233,10 +266,15 @@ def fetch_pitcher_stats(season: int = None) -> pd.DataFrame:
         print(f"  Using {len(prior_stats)} prior-season pitcher stats as fallback")
         prior_stats["season"] = season
         prior_stats["role"] = "starter"
+        prior_stats = prior_stats.drop(columns=["p_throws"], errors="ignore")
         return prior_stats
 
     current_stats["season"] = season
     current_stats["role"] = "starter"
+
+    # p_throws is only needed internally (for bullpen RHP-share aggregation);
+    # the pitcher_stats DB table has no such column.
+    current_stats = current_stats.drop(columns=["p_throws"], errors="ignore")
 
     if prior_stats.empty:
         return current_stats
@@ -248,6 +286,7 @@ def fetch_pitcher_stats(season: int = None) -> pd.DataFrame:
     if not prior_fallback.empty:
         prior_fallback["season"] = season
         prior_fallback["role"] = "starter"
+        prior_fallback = prior_fallback.drop(columns=["p_throws"], errors="ignore")
         print(f"  Added {len(prior_fallback)} prior-season pitcher stats as fallback")
         return pd.concat([current_stats, prior_fallback], ignore_index=True)
 
@@ -282,6 +321,13 @@ def fetch_bullpen_stats(season: int = None) -> pd.DataFrame:
             return np.nan
         return np.average(g.loc[mask, col], weights=g.loc[mask, "ip"])
 
+    def _rhp_ip_share(g):
+        total_ip = g["ip"].sum()
+        if total_ip <= 0:
+            return np.nan
+        rhp_ip = g.loc[g["p_throws"] == "R", "ip"].sum()
+        return rhp_ip / total_ip
+
     team_stats = df.groupby("team").apply(
         lambda g: pd.Series({
             "ip": g["ip"].sum(),
@@ -290,6 +336,7 @@ def fetch_bullpen_stats(season: int = None) -> pd.DataFrame:
             "whip": _ip_weighted(g, "whip"),
             "k_9": _ip_weighted(g, "k_9"),
             "bb_9": _ip_weighted(g, "bb_9"),
+            "rhp_ip_share": _rhp_ip_share(g),
         })
     ).reset_index()
 
@@ -299,6 +346,7 @@ def fetch_bullpen_stats(season: int = None) -> pd.DataFrame:
     for col in ["ip", "xfip", "fip", "whip", "k_9", "bb_9"]:
         if col in team_stats.columns:
             team_stats[col] = team_stats[col].round(2)
+    team_stats["rhp_ip_share"] = team_stats["rhp_ip_share"].round(3)
 
     return team_stats
 

@@ -1,0 +1,49 @@
+name: Nightly Model Evaluation
+
+on:
+  schedule:
+    # 11 PM PST / midnight PDT (07:00 UTC) — after West Coast games end.
+    # Any game still running into extras is skipped (evaluate_model joins on
+    # status='Final') and picked up by the morning pipeline run instead.
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-eval
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable IPv6 via Cloudflare WARP
+        uses: fscarmen/warp-on-actions@v1.4
+        with:
+          stack: dual
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Resolve Supabase host to IPv4
+        run: |
+          IPV4=$(dig +short A db.zgirspbdvzikzaeqytvf.supabase.co | head -1)
+          echo "Resolved to $IPV4"
+          echo "$IPV4 db.zgirspbdvzikzaeqytvf.supabase.co" | sudo tee -a /etc/hosts
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run evaluation
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PYTHONPATH: "."
+        run: python -m backend.evaluate_model

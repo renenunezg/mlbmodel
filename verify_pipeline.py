@@ -152,6 +152,60 @@ def main():
         check(f"model_calibration has bins ({cal_count})",
               cal_count >= 5, warning_only=is_early)
 
+        # --- Dynamic starter/bullpen inning-share checks ---
+
+        # 14. bullpen_stats.rhp_ip_share populated for the active slate
+        bp_coverage = conn.execute(text("""
+            SELECT
+              COUNT(*) AS total,
+              COUNT(rhp_ip_share) AS with_share
+            FROM bullpen_stats
+        """)).fetchone()
+        if bp_coverage and bp_coverage[0] > 0:
+            frac = bp_coverage[1] / bp_coverage[0]
+            check(f"rhp_ip_share populated ({bp_coverage[1]}/{bp_coverage[0]})",
+                  frac >= 0.9, warning_only=is_early)
+        else:
+            check("rhp_ip_share populated", False, warning_only=is_early)
+
+        # 15. rhp_ip_share values are within [0, 1]
+        bp_bounds = conn.execute(text("""
+            SELECT MIN(rhp_ip_share), MAX(rhp_ip_share)
+            FROM bullpen_stats
+            WHERE rhp_ip_share IS NOT NULL
+        """)).fetchone()
+        if bp_bounds and bp_bounds[0] is not None:
+            check(f"rhp_ip_share in [0,1] (min={bp_bounds[0]:.3f}, max={bp_bounds[1]:.3f})",
+                  bp_bounds[0] >= 0.0 and bp_bounds[1] <= 1.0)
+        else:
+            check("rhp_ip_share bounds", False, warning_only=is_early)
+
+        # 16. rhp_ip_share has meaningful variance across teams
+        # (std > 0.03 — catches a bug where everything collapses to a constant)
+        bp_std = conn.execute(text("""
+            SELECT STDDEV(rhp_ip_share) FROM bullpen_stats WHERE rhp_ip_share IS NOT NULL
+        """)).scalar()
+        check(f"rhp_ip_share has variance across teams (std={bp_std:.4f})"
+              if bp_std is not None else "rhp_ip_share has variance across teams",
+              bp_std is not None and bp_std > 0.03, warning_only=is_early)
+
+        # 17. pitcher_stats.avg_ip_per_start is populated for starters on today's slate
+        ip_coverage = conn.execute(text("""
+            SELECT
+              COUNT(*) AS total,
+              COUNT(avg_ip_per_start) AS with_ip
+            FROM pitcher_stats
+            WHERE role = 'starter'
+              AND pitcher_id IN (SELECT pitcher_id FROM probable_starters WHERE pitcher_id IS NOT NULL)
+        """)).fetchone()
+        if ip_coverage and ip_coverage[0] > 0:
+            frac = ip_coverage[1] / ip_coverage[0]
+            check(f"avg_ip_per_start populated for today's starters ({ip_coverage[1]}/{ip_coverage[0]})",
+                  frac >= 0.5, warning_only=is_early)
+        else:
+            check("avg_ip_per_start populated for today's starters",
+                  False, warning_only=is_early)
+
     print(f"\n{'=' * 50}")
     print(f"Results: {CHECKS_PASSED} passed, {CHECKS_FAILED} failed, {WARNINGS} warnings")
 

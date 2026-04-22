@@ -217,6 +217,22 @@ export function MethodologyContent() {
       >
         <div className="space-y-6 text-sm">
           <div className="border-l-2 border-border pl-4">
+            <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground mb-1">April 21, 2026</p>
+            <p className="font-medium mb-1.5">Dynamic starter/bullpen inning split, replacing the static 60/40 assumption</p>
+            <p className="text-muted-foreground leading-relaxed">
+              The batting-split features (OPS, ISO, K%) blend a team&apos;s numbers vs the
+              opposing starter&apos;s hand with their numbers vs the opposing bullpen. Previously
+              that blend was fixed at 60% starter innings / 40% bullpen, with the bullpen portion
+              assumed to be 60% RHP league-wide. Both assumptions are now data-driven per game.
+              Starter share is derived from the opposing starter&apos;s trailing average IP per
+              start (clamped to a realistic range), so an opener or short-leash starter produces
+              a smaller starter portion. Bullpen RHP share is the opposing team&apos;s actual
+              reliever RHP IP share from current-season Statcast data. Both fall back to
+              league-average values when sample size is thin. No new model features were added;
+              this change only re-weights the inputs to the existing three batting features.
+            </p>
+          </div>
+          <div className="border-l-2 border-border pl-4">
             <p className="font-mono text-xs uppercase tracking-wider text-muted-foreground mb-1">April 20, 2026</p>
             <p className="font-medium mb-1.5">Raised the +EV threshold from 3% to 4.5% across all three markets</p>
             <p className="text-muted-foreground leading-relaxed">
@@ -369,13 +385,15 @@ export function MethodologyContent() {
             and removes a scraping dependency.
           </p>
           <p className="leading-relaxed text-muted-foreground">
-            Batting split features use a <strong>60/40 handedness blend</strong>: 60% weight
-            on the team&apos;s splits vs the starting pitcher&apos;s hand (known pre-game from
-            probable starters), 40% vs a league-average bullpen assumed to be 60% RHP. The
-            bullpen portion cannot be predicted — reliever handedness and usage are unknown
-            until the game unfolds — so a fixed league-average prior is used as a stand-in.
-            This approximates the real plate appearance split across a full game. Early-season
-            fallbacks use league-average values when fewer than 10 games of data exist.
+            Batting split features use a <strong>dynamic starter/bullpen handedness blend</strong>.
+            The starter portion weights the team&apos;s split vs the opposing starter&apos;s hand
+            (known pre-game from probable starters), with weight equal to that starter&apos;s
+            trailing average IP per start divided by 9, clamped to a realistic range. An opener
+            receives a smaller weight than a workhorse. The bullpen portion is weighted by the
+            opposing team&apos;s actual reliever RHP IP share from current-season Statcast data,
+            rather than a fixed 60% league assumption. When sample size is thin (a pitcher with
+            only one or two starts, or a team with very little relief data) the blend falls back
+            to league-average values so early-season predictions remain stable.
           </p>
 
           <Table>
