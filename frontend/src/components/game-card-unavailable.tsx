@@ -10,7 +10,8 @@ export function GameCardUnavailable({ game }: GameCardUnavailableProps) {
     ? new Date(game.start_time).toLocaleTimeString("en-US", {
         hour: "numeric",
         minute: "2-digit",
-      })
+        timeZone: "America/Los_Angeles",
+      }) + " PT"
     : null;
 
   return (

@@ -338,15 +338,20 @@ STEPS = [
     ("Evaluation", run_evaluation),
 ]
 
+# Nightly steps: evaluate yesterday's results, then refresh starters and
+# rerun predictions on existing DB data for tomorrow's games.
+# No Statcast fetch, no park factor reload, no odds — morning run handles those.
+NIGHTLY_STEPS = [
+    ("Evaluation", run_evaluation),
+    ("Schedule & scores", update_scores_and_schedule),
+    ("Model", run_model),
+]
 
-def main():
-    print(f"MLB Pipeline — {date.today()}")
-    print("=" * 50)
 
+def _run_steps(steps):
     t0 = time.time()
     failed = []
-
-    for name, fn in STEPS:
+    for name, fn in steps:
         print(f"\n>> {name}")
         try:
             step_t0 = time.time()
@@ -356,19 +361,33 @@ def main():
             print(f"   FAILED: {e}")
             traceback.print_exc()
             failed.append(name)
-
     elapsed = time.time() - t0
     print(f"\n{'=' * 50}")
     if failed:
         print(f"Pipeline finished in {elapsed:.0f}s with {len(failed)} error(s): {', '.join(failed)}")
-        return failed
     else:
         print(f"Pipeline finished in {elapsed:.0f}s — all steps OK")
-        return []
+    return failed
+
+
+def main():
+    print(f"MLB Pipeline — {date.today()}")
+    print("=" * 50)
+    return _run_steps(STEPS)
+
+
+def nightly():
+    print(f"MLB Nightly — {date.today()}")
+    print("=" * 50)
+    return _run_steps(NIGHTLY_STEPS)
 
 
 if __name__ == "__main__":
     import sys
-    failed = main()
+    mode = sys.argv[1] if len(sys.argv) > 1 else "full"
+    if mode == "nightly":
+        failed = nightly()
+    else:
+        failed = main()
     if failed:
         sys.exit(1)
