@@ -2,11 +2,8 @@ name: Daily MLB Pipeline
 
 on:
   schedule:
-    # Primary: 5:00 AM PDT (12:00 UTC) — GitHub delay ~1hr → runs ~6 AM PDT
     - cron: "0 12 * * *"
-    # Backup 30 min later in case primary is delayed or queued
-    - cron: "30 12 * * *"
-  workflow_dispatch: # Allow manual trigger
+  workflow_dispatch:
 
 concurrency:
   group: daily-pipeline

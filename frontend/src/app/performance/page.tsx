@@ -32,13 +32,11 @@ export default async function PerformancePage() {
       .order("date", { ascending: false })
       .limit(40),
     supabase
-      .from("model_outputs_season")
-      .select(
-        "team, expected_runs, games!inner(home_team, home_score, away_score, status)"
-      )
-      .eq("games.status", "Final")
-      .order("date", { ascending: false })
-      .limit(1000),
+      .from("games")
+      .select("game_pk, home_team, home_score, away_score")
+      .eq("status", "Final")
+      .order("game_date", { ascending: false })
+      .limit(500),
   ]);
 
   const evaluations = (evalRes.data ?? []) as ModelEvaluation[];
@@ -46,34 +44,34 @@ export default async function PerformancePage() {
   const featureImportance = (featRes.data ?? []) as FeatureImportance[];
   const edgeBuckets = (edgeRes.data ?? []) as EdgeBucket[];
 
-  type ResidualRow = {
-    team: string;
-    expected_runs: number | null;
-    games:
-      | {
-          home_team: string;
-          home_score: number | null;
-          away_score: number | null;
-          status: string;
-        }
-      | {
-          home_team: string;
-          home_score: number | null;
-          away_score: number | null;
-          status: string;
-        }[]
-      | null;
+  // Residuals: fetch model_outputs_season for graded game_pks and join client-side.
+  // PostgREST embedded !inner requires an FK constraint, which these tables lack.
+  type FinalGame = {
+    game_pk: number;
+    home_team: string;
+    home_score: number | null;
+    away_score: number | null;
   };
-  const residuals: number[] = ((residRes.data ?? []) as unknown as ResidualRow[])
-    .map((r) => {
-      const g = Array.isArray(r.games) ? r.games[0] : r.games;
-      if (!g || r.expected_runs == null) return null;
-      const actual =
-        r.team === g.home_team ? g.home_score : g.away_score;
-      if (actual == null) return null;
-      return actual - r.expected_runs;
-    })
-    .filter((v): v is number => v != null);
+  const finalGames = (residRes.data ?? []) as FinalGame[];
+  const gameByPk = new Map(finalGames.map((g) => [g.game_pk, g]));
+
+  let residuals: number[] = [];
+  if (finalGames.length > 0) {
+    const predRes = await supabase
+      .from("model_outputs_season")
+      .select("game_pk, team, expected_runs")
+      .in("game_pk", finalGames.map((g) => g.game_pk));
+
+    residuals = (predRes.data ?? [])
+      .map((r: { game_pk: number; team: string; expected_runs: number | null }) => {
+        const g = gameByPk.get(r.game_pk);
+        if (!g || r.expected_runs == null) return null;
+        const actual = r.team === g.home_team ? g.home_score : g.away_score;
+        if (actual == null) return null;
+        return actual - r.expected_runs;
+      })
+      .filter((v): v is number => v != null);
+  }
 
   if (evaluations.length === 0) {
     return (
