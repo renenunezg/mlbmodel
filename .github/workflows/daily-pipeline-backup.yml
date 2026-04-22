@@ -1,0 +1,84 @@
+name: Daily MLB Pipeline (Backup)
+
+# Runs 30 min after the primary daily-pipeline.yml. Checks whether today's
+# primary run already completed successfully; if so, exits immediately.
+# Otherwise, runs the full pipeline as a fallback.
+
+on:
+  schedule:
+    - cron: "30 12 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: daily-pipeline
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check if primary already succeeded today
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TODAY=$(date -u +%Y-%m-%d)
+          COUNT=$(gh run list \
+            --repo "${{ github.repository }}" \
+            --workflow daily-pipeline.yml \
+            --status success \
+            --created "$TODAY" \
+            --limit 1 \
+            --json databaseId \
+            --jq 'length')
+          echo "Primary successful runs today: $COUNT"
+          echo "should_run=$([ "$COUNT" = "0" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Skip notice
+        if: steps.check.outputs.should_run != 'true'
+        run: echo "Primary daily-pipeline already succeeded today — skipping backup."
+
+      - name: Enable IPv6 via Cloudflare WARP
+        if: steps.check.outputs.should_run == 'true'
+        uses: fscarmen/warp-on-actions@v1.4
+        with:
+          stack: dual
+
+      - name: Set up Python
+        if: steps.check.outputs.should_run == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Resolve Supabase host to IPv4
+        if: steps.check.outputs.should_run == 'true'
+        run: |
+          IPV4=$(dig +short A db.zgirspbdvzikzaeqytvf.supabase.co | head -1)
+          echo "Resolved to $IPV4"
+          echo "$IPV4 db.zgirspbdvzikzaeqytvf.supabase.co" | sudo tee -a /etc/hosts
+
+      - name: Install dependencies
+        if: steps.check.outputs.should_run == 'true'
+        run: pip install -r requirements.txt
+
+      - name: Run pipeline
+        if: steps.check.outputs.should_run == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          PYTHONPATH: "."
+        run: python pipeline.py
+
+      - name: Verify pipeline output
+        if: steps.check.outputs.should_run == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PYTHONPATH: "."
+        run: python verify_pipeline.py
