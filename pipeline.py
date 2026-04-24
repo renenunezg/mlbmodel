@@ -338,14 +338,14 @@ STEPS = [
     ("Evaluation", run_evaluation),
 ]
 
-# Nightly steps: evaluate yesterday's results, refresh starters, fetch odds
-# so today's cards show book lines immediately, then rerun predictions on
-# existing DB data. No Statcast fetch or park factor reload — morning handles those.
+# Nightly steps: refresh scores first so late west-coast games are Final
+# before evaluation, then eval yesterday, fetch odds, and rerun predictions.
+# No Statcast fetch or park factor reload — morning handles those.
 NIGHTLY_STEPS = [
-    ("Evaluation", run_evaluation),
     ("Schedule & scores", update_scores_and_schedule),
     ("Odds", fetch_and_load_odds),
     ("Model", run_model),
+    ("Evaluation", run_evaluation),
 ]
 
 

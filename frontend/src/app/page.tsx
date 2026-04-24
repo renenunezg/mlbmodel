@@ -13,7 +13,9 @@ export default function Page() {
 
       <div className="lg:grid lg:grid-cols-[180px_1fr] lg:gap-8">
         <TableOfContents />
-        <MethodologyContent />
+        <div className="text-justify hyphens-auto">
+          <MethodologyContent />
+        </div>
       </div>
     </main>
   );

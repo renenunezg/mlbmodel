@@ -21,7 +21,7 @@ function TeamRow({
   const isFinal = score != null;
 
   return (
-    <div className="grid grid-cols-[1fr_2.75rem_2.75rem_2.75rem_6rem] sm:grid-cols-[1fr_3.5rem_3.5rem_3.5rem_7rem_7rem] items-center gap-x-1.5 py-1.5 font-mono text-sm">
+    <div className="grid grid-cols-[1fr_2.75rem_2.75rem_2.75rem_6rem] md:grid-cols-[1fr_3.5rem_3.5rem_3.5rem_7rem_7rem] items-center gap-x-1.5 py-1.5 font-mono text-sm">
       {/* Team + Starter */}
       <div className="min-w-0">
         <div className="flex items-center gap-2">
@@ -76,7 +76,7 @@ function TeamRow({
       </div>
 
       {/* Odds: Model / Book */}
-      <div className="hidden text-center sm:block">
+      <div className="hidden text-center md:block">
         <div className="tabular-nums">
           <span>{formatOdds(prediction.our_odds)}</span>
           <span className="text-muted-foreground mx-0.5">/</span>
@@ -151,7 +151,7 @@ export function GameCard({ matchup }: GameCardProps) {
       className={cn(hasEvPlay && "border-l-2 border-l-positive")}
     >
       <CardHeader className="border-b pb-2">
-        <div className="flex items-baseline justify-between gap-2">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
           <div className="flex items-center gap-2">
             <span className="font-mono text-sm font-semibold">
               {matchup.away_team} @ {matchup.home_team}

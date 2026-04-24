@@ -117,9 +117,9 @@ export function PerformanceTabs({
           <KpiCard label="Brier" value={fmt(latest?.brier_score)} />
           <KpiCard label="MAE" value={fmt(latest?.mae)} />
           <KpiCard
-            label="Overall"
+            label="Pick Acc"
             value={pct(latest?.total_accuracy)}
-            sub={`${latest?.total_correct ?? 0}/${latest?.total_predictions ?? 0}`}
+            sub={`model picks winner (${latest?.total_correct ?? 0}/${latest?.total_predictions ?? 0})`}
           />
         </div>
 
@@ -134,7 +134,7 @@ export function PerformanceTabs({
             <TableHeader>
               <TableRow>
                 <TableHead>Date</TableHead>
-                <TableHead>Overall</TableHead>
+                <TableHead>Pick Acc</TableHead>
                 <TableHead>ML</TableHead>
                 <TableHead>Run Line</TableHead>
                 <TableHead>Totals</TableHead>
