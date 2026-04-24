@@ -7,6 +7,7 @@ const contact = [
   { label: "Email", value: "renenunezgalaviz@gmail.com", href: "mailto:renenunezgalaviz@gmail.com" },
   { label: "GitHub", value: "github.com/renenunezg", href: "https://github.com/renenunezg" },
   { label: "LinkedIn", value: "linkedin.com/in/renenunezg", href: "https://linkedin.com/in/renenunezg" },
+  { label: "Twitter", value: "@nunezanalytics", href: "https://twitter.com/nunezanalytics" },
 ];
 
 export default function AboutPage() {
