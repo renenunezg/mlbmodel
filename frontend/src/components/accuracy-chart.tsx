@@ -88,7 +88,7 @@ export function AccuracyChart({ data }: AccuracyChartProps) {
         <Line
           type="monotone"
           dataKey="total_accuracy"
-          name="Overall"
+          name="Pick Acc"
           stroke="#b08a30"
           strokeWidth={1.5}
           strokeDasharray="4 2"
