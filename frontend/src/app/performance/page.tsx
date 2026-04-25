@@ -6,12 +6,13 @@ import type {
   EdgeBucket,
 } from "@/lib/types";
 import { PerformanceTabs } from "./tabs";
+import { LastUpdated } from "@/components/last-updated";
 
 export const revalidate = 300;
 
 export default async function PerformancePage() {
   // Fetch all data in parallel
-  const [evalRes, calRes, featRes, edgeRes, residRes] = await Promise.all([
+  const [evalRes, calRes, featRes, edgeRes, residRes, latestRes] = await Promise.all([
     supabase
       .from("model_evaluation")
       .select("*")
@@ -37,9 +38,15 @@ export default async function PerformancePage() {
       .eq("status", "Final")
       .order("game_date", { ascending: false })
       .limit(500),
+    supabase
+      .from("model_evaluation")
+      .select("created_at")
+      .order("created_at", { ascending: false })
+      .limit(1),
   ]);
 
   const evaluations = (evalRes.data ?? []) as ModelEvaluation[];
+  const lastUpdated: string | null = latestRes.data?.[0]?.created_at ?? null;
   const calibration = (calRes.data ?? []) as CalibrationBin[];
   const featureImportance = (featRes.data ?? []) as FeatureImportance[];
   const edgeBuckets = (edgeRes.data ?? []) as EdgeBucket[];
@@ -89,9 +96,15 @@ export default async function PerformancePage() {
 
   return (
     <main className="mx-auto w-full max-w-5xl min-w-0 px-4 py-8 space-y-6">
-      <h1 className="font-heading text-2xl tracking-tight">
-        Model Performance
-      </h1>
+      <div className="flex items-start justify-between gap-4">
+        <h1 className="font-heading text-2xl tracking-tight">
+          Model Performance
+        </h1>
+        <LastUpdated
+          timestamp={lastUpdated}
+          schedule="Updates nightly ~midnight PT"
+        />
+      </div>
       <PerformanceTabs
         evaluations={evaluations}
         calibration={calibration}
