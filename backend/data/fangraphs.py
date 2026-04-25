@@ -27,7 +27,11 @@ _statcast_cache: dict[str, pd.DataFrame] = {}
 
 
 def _get_statcast_range(start_date: date = None) -> pd.DataFrame:
-    """Fetch Statcast pitch-level data from start_date to today. Cached per session.
+    """Fetch Statcast pitch-level data from start_date to today.
+
+    Uses a per-season parquet cache on disk. Subsequent runs only fetch the
+    delta since the last cached date, then merge and re-save. Falls back to
+    full fetch if the cache is missing or corrupt.
 
     Defaults to March 25 of the current year (safely before any opening day).
     """
@@ -42,19 +46,65 @@ def _get_statcast_range(start_date: date = None) -> pd.DataFrame:
         print(f"  Using cached Statcast data: {len(df)} pitches")
         return df
 
-    print(f"  Fetching Statcast data: {start_dt} to {end_dt}...")
-    df = statcast(start_dt=str(start_dt), end_dt=str(end_dt))
+    # Disk cache only used for the default season range; explicit start_date skips it.
+    use_disk_cache = start_date is None
+    cache_path = CACHE_DIR / f"statcast_{end_dt.year}.parquet"
 
-    if df.empty:
-        print("  Warning: no Statcast data returned.")
+    cached_df = pd.DataFrame()
+    fetch_from = start_dt
+
+    if use_disk_cache and cache_path.exists():
+        try:
+            cached_df = pd.read_parquet(cache_path)
+            if "game_date" in cached_df.columns and not cached_df.empty:
+                max_cached = pd.to_datetime(cached_df["game_date"]).max().date()
+                # Overlap by one day in case the most recent day was partial
+                fetch_from = max(start_dt, max_cached)
+                print(f"  Loaded {len(cached_df)} cached pitches through {max_cached}")
+            else:
+                cached_df = pd.DataFrame()
+        except Exception as e:
+            print(f"  Cache read failed ({e}); refetching from scratch")
+            cached_df = pd.DataFrame()
+
+    if fetch_from > end_dt:
+        print(f"  Cache up to date through {end_dt}; no fetch needed")
+        df = cached_df
     else:
-        # Filter to regular season only (exclude spring training, etc.)
-        if "game_type" in df.columns:
-            pre_filter = len(df)
-            df = df[df["game_type"] == "R"]
-            if len(df) < pre_filter:
-                print(f"  Filtered to regular season: {len(df)} pitches (dropped {pre_filter - len(df)} spring training)")
-        print(f"  Got {len(df)} pitches across {df['game_pk'].nunique()} games")
+        print(f"  Fetching Statcast data: {fetch_from} to {end_dt}...")
+        new_df = statcast(start_dt=str(fetch_from), end_dt=str(end_dt))
+
+        if not new_df.empty and "game_type" in new_df.columns:
+            pre_filter = len(new_df)
+            new_df = new_df[new_df["game_type"] == "R"]
+            if len(new_df) < pre_filter:
+                print(f"  Filtered to regular season: dropped {pre_filter - len(new_df)} non-R pitches")
+
+        if not cached_df.empty and not new_df.empty:
+            df = pd.concat([cached_df, new_df], ignore_index=True)
+            dedupe_cols = [c for c in ["game_pk", "at_bat_number", "pitch_number"] if c in df.columns]
+            if dedupe_cols:
+                pre = len(df)
+                df = df.drop_duplicates(subset=dedupe_cols, keep="last")
+                if len(df) < pre:
+                    print(f"  Deduped overlap: removed {pre - len(df)} duplicate pitches")
+        elif not new_df.empty:
+            df = new_df
+        else:
+            df = cached_df
+
+        if df.empty:
+            print("  Warning: no Statcast data available.")
+        else:
+            print(f"  Total: {len(df)} pitches across {df['game_pk'].nunique()} games")
+
+        if use_disk_cache and not df.empty:
+            try:
+                CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                df.to_parquet(cache_path, index=False)
+                print(f"  Saved cache to {cache_path}")
+            except Exception as e:
+                print(f"  Cache save failed ({e}); continuing without persisting")
 
     _statcast_cache[cache_key] = df
     return df
