@@ -2,6 +2,7 @@ import { supabase } from "@/lib/supabase";
 import { ModelOutput, GameInfo } from "@/lib/types";
 import { cn, formatDate, formatOdds, formatRuns, formatPct } from "@/lib/utils";
 import Filters from "@/components/filters";
+import { LastUpdated } from "@/components/last-updated";
 import {
   Table,
   TableHeader,
@@ -63,10 +64,17 @@ export default async function HistoryPage({
   if (team) rq = rq.eq("team", team);
 
   // Run both main queries in parallel
-  const [{ data: rows, count, error }, { data: rRows }] = await Promise.all([
+  const [{ data: rows, count, error }, { data: rRows }, { data: latest }] = await Promise.all([
     query,
     rq,
+    supabase
+      .from("games")
+      .select("updated_at")
+      .order("updated_at", { ascending: false })
+      .limit(1),
   ]);
+
+  const lastUpdated: string | null = latest?.[0]?.updated_at ?? null;
 
   const predictions: ModelOutput[] = rows ?? [];
   const totalRows = count ?? 0;
@@ -155,7 +163,13 @@ export default async function HistoryPage({
 
   return (
     <main className="mx-auto w-full max-w-6xl min-w-0 px-4 py-8 space-y-6">
-      <h1 className="font-heading text-2xl tracking-tight">Season History</h1>
+      <div className="flex items-start justify-between gap-4">
+        <h1 className="font-heading text-2xl tracking-tight">Season History</h1>
+        <LastUpdated
+          timestamp={lastUpdated}
+          schedule="Predictions ~5 AM PT • Results scored overnight"
+        />
+      </div>
 
       <Filters />
 
