@@ -47,6 +47,15 @@ jobs:
         if: steps.check.outputs.should_run != 'true'
         run: echo "Primary daily-pipeline already succeeded today — skipping backup."
 
+      - name: Cache Statcast parquet data
+        if: steps.check.outputs.should_run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: cache
+          key: statcast-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            statcast-${{ runner.os }}-
+
       - name: Set up Python
         if: steps.check.outputs.should_run == 'true'
         uses: actions/setup-python@v5
