@@ -13,6 +13,9 @@ concurrency:
   group: daily-pipeline
   cancel-in-progress: false
 
+permissions:
+  actions: read
+
 jobs:
   backup:
     runs-on: ubuntu-latest
@@ -44,25 +47,12 @@ jobs:
         if: steps.check.outputs.should_run != 'true'
         run: echo "Primary daily-pipeline already succeeded today — skipping backup."
 
-      - name: Enable IPv6 via Cloudflare WARP
-        if: steps.check.outputs.should_run == 'true'
-        uses: fscarmen/warp-on-actions@v1.4
-        with:
-          stack: dual
-
       - name: Set up Python
         if: steps.check.outputs.should_run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.13"
           cache: "pip"
-
-      - name: Resolve Supabase host to IPv4
-        if: steps.check.outputs.should_run == 'true'
-        run: |
-          IPV4=$(dig +short A db.zgirspbdvzikzaeqytvf.supabase.co | head -1)
-          echo "Resolved to $IPV4"
-          echo "$IPV4 db.zgirspbdvzikzaeqytvf.supabase.co" | sudo tee -a /etc/hosts
 
       - name: Install dependencies
         if: steps.check.outputs.should_run == 'true'
