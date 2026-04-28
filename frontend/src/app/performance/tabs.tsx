@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import type {
   ModelEvaluation,
   CalibrationBin,
@@ -130,52 +131,7 @@ export function PerformanceTabs({
 
         <div className="border-t border-border pt-6">
           <h2 className="font-heading text-lg mb-4">Evaluation History</h2>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Pick Acc</TableHead>
-                <TableHead>ML</TableHead>
-                <TableHead>Run Line</TableHead>
-                <TableHead>Totals</TableHead>
-                <TableHead className="text-right">MAE</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {[...dailyEvals].reverse().map((row) => (
-                <TableRow key={row.date}>
-                  <TableCell className="font-medium">{row.date}</TableCell>
-                  <TableCell>
-                    {row.total_correct}/{row.total_predictions}{" "}
-                    <span className="text-muted-foreground">
-                      ({pct(row.total_accuracy)})
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    {row.ml_correct}/{row.ml_predictions}{" "}
-                    <span className="text-muted-foreground">
-                      ({pct(row.ml_accuracy)})
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    {row.run_line_correct}/{row.run_line_predictions}{" "}
-                    <span className="text-muted-foreground">
-                      ({pct(row.run_line_accuracy)})
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    {row.totals_correct ?? "—"}/{row.totals_predictions ?? "—"}{" "}
-                    <span className="text-muted-foreground">
-                      ({pct(row.totals_accuracy)})
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right font-mono tabular-nums">
-                    {fmt(row.mae)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <EvalHistoryTable rows={dailyEvals} />
         </div>
       </TabsContent>
 
@@ -371,5 +327,131 @@ export function PerformanceTabs({
         </div>
       </TabsContent>
     </Tabs>
+  );
+}
+
+const WINDOW_LABELS = [
+  { key: "7", label: "Last 7" },
+  { key: "30", label: "Last 30" },
+  { key: "season", label: "Season" },
+] as const;
+
+const PAGE_SIZE = 25;
+
+function EvalHistoryTable({ rows }: { rows: ModelEvaluation[] }) {
+  const [windowKey, setWindowKey] =
+    useState<(typeof WINDOW_LABELS)[number]["key"]>("30");
+  const [page, setPage] = useState(0);
+
+  const filtered = useMemo(() => {
+    const sorted = [...rows].sort((a, b) => (a.date < b.date ? 1 : -1));
+    if (windowKey === "season") return sorted;
+    const days = Number(windowKey);
+    return sorted.slice(0, days);
+  }, [rows, windowKey]);
+
+  const totalPages =
+    windowKey === "season"
+      ? Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+      : 1;
+  const visible =
+    windowKey === "season"
+      ? filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+      : filtered;
+
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="inline-flex rounded-sm border border-border p-0.5 text-xs font-mono">
+          {WINDOW_LABELS.map((w) => (
+            <button
+              key={w.key}
+              type="button"
+              onClick={() => {
+                setWindowKey(w.key);
+                setPage(0);
+              }}
+              className={`px-3 py-1 transition-colors ${
+                windowKey === w.key
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {w.label}
+            </button>
+          ))}
+        </div>
+        {windowKey === "season" && totalPages > 1 ? (
+          <div className="flex items-center gap-2 font-mono text-xs">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="px-2 py-1 text-muted-foreground hover:text-foreground disabled:opacity-30"
+            >
+              {"<"}
+            </button>
+            <span className="text-muted-foreground">
+              {page + 1} / {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              className="px-2 py-1 text-muted-foreground hover:text-foreground disabled:opacity-30"
+            >
+              {">"}
+            </button>
+          </div>
+        ) : null}
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Date</TableHead>
+            <TableHead>Pick Acc</TableHead>
+            <TableHead>ML</TableHead>
+            <TableHead>Run Line</TableHead>
+            <TableHead>Totals</TableHead>
+            <TableHead className="text-right">MAE</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {visible.map((row) => (
+            <TableRow key={row.date}>
+              <TableCell className="font-medium">{row.date}</TableCell>
+              <TableCell>
+                {row.total_correct}/{row.total_predictions}{" "}
+                <span className="text-muted-foreground">
+                  ({pct(row.total_accuracy)})
+                </span>
+              </TableCell>
+              <TableCell>
+                {row.ml_correct}/{row.ml_predictions}{" "}
+                <span className="text-muted-foreground">
+                  ({pct(row.ml_accuracy)})
+                </span>
+              </TableCell>
+              <TableCell>
+                {row.run_line_correct}/{row.run_line_predictions}{" "}
+                <span className="text-muted-foreground">
+                  ({pct(row.run_line_accuracy)})
+                </span>
+              </TableCell>
+              <TableCell>
+                {row.totals_correct ?? "—"}/
+                {row.totals_predictions ?? "—"}{" "}
+                <span className="text-muted-foreground">
+                  ({pct(row.totals_accuracy)})
+                </span>
+              </TableCell>
+              <TableCell className="text-right font-mono tabular-nums">
+                {fmt(row.mae ?? row.average_total_diff)}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }

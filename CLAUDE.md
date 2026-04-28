@@ -162,11 +162,11 @@ pytest          # 44 tests across kelly, metrics, win_prob, pitcher_split
 Key test file: `tests/test_pitcher_split.py` — covers blend math, fallback, clamp behavior.
 
 ## Known Issues
-- **Supabase RLS**: Before public deploy, enable Row Level Security on frontend-facing tables with SELECT-only policies for the `anon` role.
+- **Supabase RLS**: Enabled on every public table with a `public_read` policy granting SELECT to `anon` and `authenticated`. Writes go through `DATABASE_URL` (Python pipeline, bypasses RLS via the `postgres` role) or `SUPABASE_SERVICE_ROLE_KEY` (server-side Next.js endpoints like `/api/eval-game`).
 - **First-start pitcher cache**: Prior-season Statcast fetch takes ~30 min on first run. Cached to `cache/` directory after that.
 - **Statcast availability**: Baseball Savant data may be delayed 1-2 days at season start. Pipeline handles empty data gracefully.
 - **GitHub Actions delay**: Scheduled workflows run 30-60 min late under load. Morning pipeline scheduled at 12:00 UTC typically runs ~6 AM PT.
 
 ## Next Steps
-- **Production hardening**: Enable Supabase RLS, add error alerting (email/Slack on pipeline failure)
+- **Production hardening**: Add error alerting (email/Slack on pipeline failure)
 - **Model iteration**: Add features (weather, umpire, rest days), tune hyperparameters based on backtest results, consider ensemble methods
