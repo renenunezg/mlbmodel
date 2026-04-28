@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const links = [
   { href: "/", label: "Methodology" },
@@ -29,7 +30,7 @@ export function Nav() {
             })}
           </span>
         </div>
-        <div className="flex w-full gap-0 overflow-x-auto pb-0 sm:w-auto sm:overflow-visible">
+        <div className="flex w-full items-center gap-0 overflow-x-auto pb-0 sm:w-auto sm:overflow-visible">
           {links.map((link) => {
             const isActive =
               link.href === "/"
@@ -50,6 +51,9 @@ export function Nav() {
               </Link>
             );
           })}
+          <div className="ml-2 flex items-center">
+            <ThemeToggle />
+          </div>
         </div>
       </div>
     </nav>

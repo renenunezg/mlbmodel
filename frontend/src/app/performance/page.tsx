@@ -7,6 +7,7 @@ import type {
 } from "@/lib/types";
 import { PerformanceTabs } from "./tabs";
 import { LastUpdated } from "@/components/last-updated";
+import { RealtimeRefresh } from "@/components/realtime-refresh";
 
 export const revalidate = 300;
 
@@ -112,6 +113,7 @@ export default async function PerformancePage() {
         edgeBuckets={edgeBuckets}
         residuals={residuals}
       />
+      <RealtimeRefresh tables={["model_evaluation"]} />
     </main>
   );
 }
