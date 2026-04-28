@@ -3,6 +3,7 @@ import { ModelOutput, GameInfo } from "@/lib/types";
 import { cn, formatDate, formatOdds, formatRuns, formatPct } from "@/lib/utils";
 import Filters from "@/components/filters";
 import { LastUpdated } from "@/components/last-updated";
+import { RealtimeRefresh } from "@/components/realtime-refresh";
 import {
   Table,
   TableHeader,
@@ -163,6 +164,7 @@ export default async function HistoryPage({
 
   return (
     <main className="mx-auto w-full max-w-6xl min-w-0 px-4 py-8 space-y-6">
+      <RealtimeRefresh tables={["games", "model_outputs_season"]} />
       <div className="flex items-start justify-between gap-4">
         <h1 className="font-heading text-2xl tracking-tight">Season History</h1>
         <LastUpdated

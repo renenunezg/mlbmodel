@@ -35,9 +35,25 @@ function allFinal(matchups: GameMatchup[]): boolean {
 export function GamesLive({ initial }: { initial: GameMatchup[] }) {
   const [matchups, setMatchups] = useState<GameMatchup[]>(initial);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track which games we've already triggered eval-game for (per page load).
+  const evalFiredRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
+
+    async function fireEval(game_pk: number) {
+      if (evalFiredRef.current.has(game_pk)) return;
+      evalFiredRef.current.add(game_pk);
+      try {
+        await fetch("/api/eval-game", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ game_pk }),
+        });
+      } catch {
+        // Best-effort. Nightly batch reconciles.
+      }
+    }
 
     async function fetchOnce() {
       try {
@@ -45,9 +61,19 @@ export function GamesLive({ initial }: { initial: GameMatchup[] }) {
         if (!res.ok) return;
         const data = (await res.json()) as { scores?: LiveScore[] };
         if (cancelled || !data.scores) return;
-        setMatchups((prev) => mergeScores(prev, data.scores!));
+        setMatchups((prev) => {
+          const prevByPk = new Map(prev.map((m) => [m.game_pk, m]));
+          // Detect previously-not-final games that just flipped to Final.
+          for (const s of data.scores!) {
+            const before = prevByPk.get(s.game_pk);
+            if (before && before.status !== "Final" && s.status === "Final") {
+              fireEval(s.game_pk);
+            }
+          }
+          return mergeScores(prev, data.scores!);
+        });
       } catch {
-        // network blip — just wait for next tick
+        // network blip, wait for next tick
       }
     }
 
