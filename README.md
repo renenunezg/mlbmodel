@@ -7,7 +7,7 @@ function here as a calibration benchmark, not as a gambling application: sharp
 participants push lines toward true probabilities quickly, which makes them a
 higher-quality signal than most independently constructed models.
 
-The site is at [renenunez.work](https://renenunez.work). The methodology page
+The site is at [renenunez.dev](https://renenunez.dev). The methodology page
 describes the model in detail; this README covers what's in the repository and
 how to run it.
 
