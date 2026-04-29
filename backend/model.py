@@ -1,61 +1,43 @@
-import os
+"""XGBoost training, calibration, and prediction for expected runs.
+
+Just the model. Data loading is in data.py, NB simulation is in simulation.py,
+EV/Kelly are in strategy.py. The main() orchestrator at the bottom ties them
+together for the daily pipeline.
+"""
 import datetime
 from zoneinfo import ZoneInfo
 import pandas as pd
 import numpy as np
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 import xgboost as xgb
 import joblib
-from scipy.stats import nbinom
-from backend.kelly import american_to_decimal, kelly_fraction, compute_kelly_row
 from sklearn.model_selection import TimeSeriesSplit, GridSearchCV
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.isotonic import IsotonicRegression
 import warnings
+
+from backend.db import engine
+from backend.features import (
+    LEAGUE_AVG,
+    _safe_read_table,
+    load_training_data,
+    preprocess_data,
+)
+from backend.simulation import (
+    win_prob,
+    convert_to_odds,
+    american_to_prob,
+    apply_market_probs,
+)
+from backend.strategy import (
+    flag_ev,
+    flag_runline_ev,
+    flag_total_play,
+    apply_kelly_sizing,
+)
+
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost:5432/mlbmodel")
-engine = create_engine(DATABASE_URL)
-
-# Single source of truth for +EV thresholds. Used by flag_ev / flag_runline_ev / flag_total_play.
-# Totals bar is higher because total-runs markets are noisier than sides.
-EV_THRESHOLDS = {
-    "ml": 0.045,
-    "rl": 0.045,
-    "totals": 0.065,
-}
-
-# Dynamic starter/bullpen inning-share constants. See load_training_data for usage.
-LEAGUE_STARTER_IP = 5.2
-LEAGUE_STARTER_SHARE = round(LEAGUE_STARTER_IP / 9, 3)  # ~0.578
-LEAGUE_BULLPEN_RHP_SHARE = 0.6
-STARTER_SHARE_MIN, STARTER_SHARE_MAX = 0.35, 0.78
-
-
-def compute_starter_inning_share(avg_ip_per_start):
-    """Starter inning share = avg IP/start / 9, clamped to [0.35, 0.78].
-
-    Returns league mean when input is NaN or missing. Accepts scalar or pandas Series.
-    """
-    if isinstance(avg_ip_per_start, pd.Series):
-        share = (pd.to_numeric(avg_ip_per_start, errors="coerce") / 9.0).clip(
-            lower=STARTER_SHARE_MIN, upper=STARTER_SHARE_MAX,
-        )
-        return share.fillna(LEAGUE_STARTER_SHARE)
-    if avg_ip_per_start is None or pd.isna(avg_ip_per_start):
-        return LEAGUE_STARTER_SHARE
-    return float(np.clip(avg_ip_per_start / 9.0, STARTER_SHARE_MIN, STARTER_SHARE_MAX))
-
-
-def blend_batting_split(vs_r, vs_l, opp_handedness, starter_share, bullpen_rhp_share):
-    """Blend a batting split (OPS/ISO/K%) across the starter + bullpen portions.
-
-    starter portion faces opp_handedness (known); bullpen portion faces a mix
-    determined by bullpen_rhp_share. All inputs may be scalars or arrays.
-    """
-    split_vs_starter = np.where(opp_handedness == "R", vs_r, vs_l)
-    split_vs_bullpen = bullpen_rhp_share * vs_r + (1 - bullpen_rhp_share) * vs_l
-    return starter_share * split_vs_starter + (1 - starter_share) * split_vs_bullpen
 
 # 12 features for the XGBoost model
 FEATURE_COLS = [
@@ -72,278 +54,6 @@ FEATURE_COLS = [
     'park_factor',        # park factor (affects offense)
     'is_home',            # home field advantage (0/1)
 ]
-
-
-def _safe_read_table(table_name):
-    """Read a SQL table, returning empty DataFrame if table has no rows."""
-    try:
-        df = pd.read_sql_table(table_name, con=engine)
-        if df.empty:
-            print(f"  Warning: {table_name} is empty")
-        return df
-    except Exception as e:
-        print(f"  Warning: could not read {table_name}: {e}")
-        return pd.DataFrame()
-
-
-# League-average fallbacks for early season when stats tables are empty
-LEAGUE_AVG = {
-    "xfip": 4.20, "whip": 1.30, "xfip_bullpen": 4.10, "bullpen_k_9": 9.0,
-    "batting_ops": 0.720, "batting_iso": 0.160, "batting_k_pct": 22.0,
-    "park_factor": 100, "avg_last5": 4.5, "avg_last10": 4.5, "std_last5": 2.5,
-}
-
-
-def load_training_data():
-    """Load and merge all data sources into a single training DataFrame.
-
-    Handles early-season scenarios where tables may be empty or have
-    sparse data by falling back to league averages.
-    """
-    print("Loading training data...")
-    starters = _safe_read_table("probable_starters")
-    if starters.empty:
-        print("  ERROR: probable_starters is empty — cannot proceed.")
-        return pd.DataFrame()
-
-    # Merge in pitcher stats (xfip, whip, avg_ip_per_start) via pitcher_id (MLB player ID)
-    sp_stats = _safe_read_table("pitcher_stats")
-    sp_cols = ["pitcher_id", "xfip", "whip"]
-    if not sp_stats.empty and "avg_ip_per_start" in sp_stats.columns:
-        sp_cols.append("avg_ip_per_start")
-    if not sp_stats.empty and "pitcher_id" in sp_stats.columns and "pitcher_id" in starters.columns:
-        starters = pd.merge(
-            starters,
-            sp_stats[sp_cols],
-            on="pitcher_id",
-            how="left",
-        )
-    else:
-        starters["xfip"] = np.nan
-        starters["whip"] = np.nan
-        starters["avg_ip_per_start"] = np.nan
-
-    if "avg_ip_per_start" not in starters.columns:
-        starters["avg_ip_per_start"] = np.nan
-
-    # Merge in bullpen stats (xfip, k_9, rhp_ip_share)
-    bp_stats = _safe_read_table("bullpen_stats")
-    bp_cols = ["team", "xfip", "k_9"]
-    if not bp_stats.empty and "rhp_ip_share" in bp_stats.columns:
-        bp_cols.append("rhp_ip_share")
-    if not bp_stats.empty:
-        starters = pd.merge(
-            starters,
-            bp_stats[bp_cols].rename(columns={"xfip": "xfip_bullpen", "k_9": "bullpen_k_9"}),
-            on="team",
-            how="left",
-        )
-    else:
-        starters["xfip_bullpen"] = np.nan
-        starters["bullpen_k_9"] = np.nan
-        starters["rhp_ip_share"] = np.nan
-
-    if "rhp_ip_share" not in starters.columns:
-        starters["rhp_ip_share"] = np.nan
-
-    # Load batting splits from unified team_batting table
-    batting = _safe_read_table("team_batting")
-    bat_cols = ["team", "split", "ops", "iso", "k_pct"]
-    if not batting.empty:
-        batting = batting[[c for c in bat_cols if c in batting.columns]]
-        vs_r = batting[batting["split"] == "vs_rhp"].drop(columns=["split"]).rename(
-            columns={"ops": "ops_vs_r", "iso": "iso_vs_r", "k_pct": "k_pct_vs_r"}
-        )
-        vs_l = batting[batting["split"] == "vs_lhp"].drop(columns=["split"]).rename(
-            columns={"ops": "ops_vs_l", "iso": "iso_vs_l", "k_pct": "k_pct_vs_l"}
-        )
-        starters = pd.merge(starters, vs_r, on="team", how="left")
-        starters = pd.merge(starters, vs_l, on="team", how="left")
-    else:
-        for suffix in ["_vs_r", "_vs_l"]:
-            for col in ["ops", "iso", "k_pct"]:
-                starters[f"{col}{suffix}"] = np.nan
-
-    # Self-merge to get opponent info: pitcher handedness, starter avg IP/start
-    # (for dynamic inning-share blend), and opp team's bullpen RHP IP share.
-    # Use left join so games with only one known starter aren't dropped — missing
-    # opponent handedness defaults to "R" (league-average ~70% of starters are RHP).
-    opp = starters[["game_pk", "team", "handedness", "avg_ip_per_start", "rhp_ip_share"]].rename(
-        columns={
-            "team": "opp_team",
-            "handedness": "opp_handedness",
-            "avg_ip_per_start": "opp_avg_ip_per_start",
-            "rhp_ip_share": "opp_rhp_ip_share",
-        }
-    )
-    starters = pd.merge(starters, opp, on="game_pk", how="left")
-    starters = starters[starters["team"] != starters["opp_team"].fillna("")]
-    starters["opp_handedness"] = starters["opp_handedness"].fillna("R")
-
-    # ---- Dynamic starter/bullpen inning share ----
-    # Replaces the old fixed 0.6/0.4 blend. Inning share derives from the opposing
-    # starter's avg IP per start; bullpen RHP share is the opposing team's actual
-    # bullpen RHP IP share. Both fall back to league-average when sample is thin.
-
-    opp_ip = pd.to_numeric(starters["opp_avg_ip_per_start"], errors="coerce")
-    starter_fallback_mask = opp_ip.isna()
-    starter_share = compute_starter_inning_share(opp_ip)
-    starters["starter_inning_share"] = starter_share
-
-    bullpen_rhp = pd.to_numeric(starters["opp_rhp_ip_share"], errors="coerce")
-    bullpen_fallback_mask = bullpen_rhp.isna()
-    bullpen_rhp = bullpen_rhp.fillna(LEAGUE_BULLPEN_RHP_SHARE)
-    starters["bullpen_rhp_share"] = bullpen_rhp
-
-    # Logging — surface silent fallback if it dominates the slate.
-    n = len(starters)
-    if n > 0:
-        ss_frac = float(starter_fallback_mask.mean())
-        bp_frac = float(bullpen_fallback_mask.mean())
-        print(
-            f"  starter_inning_share: min={starter_share.min():.3f} "
-            f"mean={starter_share.mean():.3f} max={starter_share.max():.3f} "
-            f"std={starter_share.std():.3f} fallback={ss_frac:.1%}"
-        )
-        print(
-            f"  bullpen_rhp_share: min={bullpen_rhp.min():.3f} "
-            f"mean={bullpen_rhp.mean():.3f} max={bullpen_rhp.max():.3f} "
-            f"std={bullpen_rhp.std():.3f} fallback={bp_frac:.1%}"
-        )
-        if ss_frac > 0.5:
-            print(f"  WARNING: {ss_frac:.0%} of rows fell back to league-mean starter inning share — check avg_ip_per_start in pitcher_stats")
-        if bp_frac > 0.5:
-            print(f"  WARNING: {bp_frac:.0%} of rows fell back to league-mean bullpen RHP share — check rhp_ip_share in bullpen_stats")
-
-    # Blend batting splits vs the opposing starter (known handedness) and the
-    # opposing bullpen (distribution from opp_rhp_ip_share).
-    for stat, vs_r_col, vs_l_col in [
-        ("batting_ops", "ops_vs_r", "ops_vs_l"),
-        ("batting_iso", "iso_vs_r", "iso_vs_l"),
-        ("batting_k_pct", "k_pct_vs_r", "k_pct_vs_l"),
-    ]:
-        vs_r = starters.get(vs_r_col, pd.Series(np.nan, index=starters.index))
-        vs_l = starters.get(vs_l_col, pd.Series(np.nan, index=starters.index))
-        starters[stat] = blend_batting_split(
-            vs_r, vs_l, starters["opp_handedness"].values, starter_share, bullpen_rhp,
-        )
-
-    # Load park factors and merge based on home team
-    parks = _safe_read_table("park_factors")
-    if not parks.empty:
-        home_teams = starters[starters["is_home"] == True][["game_pk", "team"]].rename(columns={"team": "home_team"})
-        starters = pd.merge(starters, home_teams, on="game_pk", how="left")
-        home_parks = pd.merge(home_teams, parks, left_on="home_team", right_on="team", how="left")[["game_pk", "home_team", "park_factor"]]
-        # Audit: surface silent merge failures (unmapped home team names) as loud warnings.
-        unmapped = home_parks[home_parks["park_factor"].isna()]["home_team"].unique().tolist()
-        if unmapped:
-            print(f"  WARNING: park_factors missing for home teams {unmapped} — check team_mappings.py")
-        starters = pd.merge(starters, home_parks.drop(columns=["home_team"]), on="game_pk", how="left")
-    else:
-        starters["park_factor"] = 100
-
-    # Load completed games
-    games = _safe_read_table("games")
-    if not games.empty:
-        games = games[games["status"] == "Final"]
-        games = games.dropna(subset=["away_score", "home_score"])
-
-    if games.empty:
-        print("  Warning: no completed games — rolling averages will use league average")
-        starters["game_date"] = pd.NaT
-        starters["actual_runs"] = np.nan
-        starters["avg_last5"] = np.nan
-        starters["avg_last10"] = np.nan
-        starters["std_last5"] = np.nan
-    else:
-        starters = pd.merge(
-            starters,
-            games[["game_pk", "game_date", "away_team", "away_score", "home_team", "home_score"]].rename(
-                columns={"home_team": "game_home_team", "away_team": "game_away_team"}
-            ),
-            on="game_pk",
-            how="left",
-        )
-
-        starters["actual_runs"] = np.where(
-            starters["is_home"] == True,
-            starters["home_score"],
-            starters["away_score"],
-        )
-
-        # Rolling team run averages — strictly prior dates only. Games sharing a
-        # (team, game_date) inherit the window computed as of the first game on that date,
-        # so doubleheader game 2 never leaks its own result into its features.
-        games["game_date"] = pd.to_datetime(games["game_date"])
-        starters["game_date"] = pd.to_datetime(starters["game_date"])
-
-        home_runs = games[["game_pk", "game_date", "home_team", "home_score"]].rename(
-            columns={"home_team": "team", "home_score": "runs"}
-        )
-        away_runs = games[["game_pk", "game_date", "away_team", "away_score"]].rename(
-            columns={"away_team": "team", "away_score": "runs"}
-        )
-        team_games = pd.concat([home_runs, away_runs], ignore_index=True)
-        team_games = team_games.sort_values(["team", "game_date", "game_pk"]).reset_index(drop=True)
-
-        # Shift by 1 within each team so the window excludes the current row's runs
-        team_games["runs_shifted"] = team_games.groupby("team")["runs"].shift(1)
-
-        grp = team_games.groupby("team")["runs_shifted"]
-        team_games["avg_last5"] = grp.rolling(5, min_periods=1).mean().reset_index(level=0, drop=True)
-        team_games["avg_last10"] = grp.rolling(10, min_periods=1).mean().reset_index(level=0, drop=True)
-        team_games["std_last5"] = grp.rolling(5, min_periods=2).std().reset_index(level=0, drop=True)
-
-        # Doubleheader handling: all games on the same date share the FIRST game's rolling,
-        # so neither game sees the other's runs (matches old `game_date < current_date`).
-        for col in ["avg_last5", "avg_last10", "std_last5"]:
-            team_games[col] = team_games.groupby(["team", "game_date"])[col].transform("first")
-
-        starters = pd.merge(
-            starters,
-            team_games[["game_pk", "team", "avg_last5", "avg_last10", "std_last5"]],
-            on=["game_pk", "team"],
-            how="left",
-        )
-
-    # Filter for games with exactly 2 teams
-    starters = starters.groupby("game_pk").filter(lambda x: len(x) == 2)
-    starters = starters.sort_values(["game_pk", "is_home"]).reset_index(drop=True)
-
-    # Fill NaN features with league averages
-    for col, fallback in LEAGUE_AVG.items():
-        if col in starters.columns:
-            n_missing = starters[col].isna().sum()
-            if n_missing > 0:
-                print(f"  Filling {n_missing} NaN values in '{col}' with league avg ({fallback})")
-                starters[col] = starters[col].fillna(fallback)
-
-    starters["starter_whip"] = starters.get("whip", starters.get("starter_whip", LEAGUE_AVG["whip"]))
-
-    out_cols = [
-        "game_pk", "game_date", "team", "pitcher_name", "is_home",
-        "xfip", "starter_whip", "xfip_bullpen", "bullpen_k_9",
-        "batting_ops", "batting_iso", "batting_k_pct",
-        "park_factor", "actual_runs", "avg_last5", "avg_last10", "std_last5",
-    ]
-    result = starters[[c for c in out_cols if c in starters.columns]].copy()
-    result = result.rename(columns={"pitcher_name": "starter"})
-
-    print(f"  Loaded {len(result)} rows ({result['game_pk'].nunique()} games)")
-    return result
-
-
-def preprocess_data(df):
-    """Convert columns to numeric types."""
-    numeric_cols = [
-        "xfip", "xfip_bullpen", "starter_whip", "bullpen_k_9",
-        "batting_ops", "batting_iso", "batting_k_pct",
-        "avg_last5", "avg_last10", "std_last5", "park_factor",
-    ]
-    for col in numeric_cols:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-    return df
 
 
 def _train_simple(X, y):
@@ -428,184 +138,6 @@ def train_model_cv(X, y, n_splits=5):
     print(f"  Collected {n_oof}/{len(X)} OOF predictions for calibration")
 
     return grid_search.best_estimator_, fold_metrics, oof_preds, grid_search.best_params_
-
-
-# Negative binomial dispersion parameter.  Variance = lambda + lambda^2 / r.
-# r=6 is calibrated from MLB historical run distributions; it adds realistic
-# overdispersion compared to plain Poisson, producing less extreme win probs.
-NBINOM_R = 6.0
-
-
-def compute_game_probs(lambda_home, lambda_away, total_line=None, spread_home=None,
-                       max_runs=25, r=NBINOM_R):
-    """Full game-level probability dict from the joint negative-binomial run distribution.
-
-    Replaces the old magic `win_prob - 0.10` heuristic for run line and the
-    `±1 run` heuristic for totals — both are now derived directly from the joint
-    distribution, which naturally tightens in high-scoring environments and
-    widens in low-scoring ones.
-
-    Args:
-        lambda_home: expected runs for home team
-        lambda_away: expected runs for away team
-        total_line: book total runs line (for over/under). None → skip.
-        spread_home: signed spread from home team's perspective
-            (e.g. -1.5 = home favored by 1.5, +1.5 = home underdog). None → skip.
-        max_runs: truncation point for the run distribution (25 covers 99.9%+ of games)
-        r: negative binomial dispersion parameter (higher r → less overdispersion)
-
-    Returns dict with keys: p_home_win, p_away_win, p_home_cover, p_away_cover,
-    p_over, p_under. Keys whose input is missing are set to None.
-    Ties on the moneyline are allocated proportionally to expected runs
-    (extra-innings approximation). Pushes on run line / totals are split 50/50.
-    """
-    runs = np.arange(max_runs + 1)
-    h_probs = nbinom.pmf(runs, r, r / (r + lambda_home))
-    a_probs = nbinom.pmf(runs, r, r / (r + lambda_away))
-    # joint[h, a] = P(home scores h, away scores a)
-    joint = np.outer(h_probs, a_probs)
-
-    # Moneyline with proportional tie allocation
-    p_home_outright = float(np.tril(joint, k=-1).sum())  # h > a
-    p_away_outright = float(np.triu(joint, k=1).sum())   # a > h
-    p_tie = float(np.trace(joint))
-    total_lambda = lambda_home + lambda_away
-    home_tie_share = lambda_home / total_lambda if total_lambda > 0 else 0.5
-    p_home_win = p_home_outright + p_tie * home_tie_share
-    p_away_win = p_away_outright + p_tie * (1 - home_tie_share)
-
-    result = {
-        "p_home_win": round(p_home_win, 4),
-        "p_away_win": round(p_away_win, 4),
-        "p_home_cover": None,
-        "p_away_cover": None,
-        "p_over": None,
-        "p_under": None,
-    }
-
-    h_mat = runs[:, None]
-    a_mat = runs[None, :]
-
-    # Run line: home "covers" if home_runs + spread_home > away_runs. Pushes split 50/50.
-    if spread_home is not None and not pd.isna(spread_home):
-        margin = h_mat - a_mat
-        p_home_strict = float(joint[margin > -spread_home].sum())
-        p_push = float(joint[margin == -spread_home].sum())
-        p_away_strict = float(joint[margin < -spread_home].sum())
-        result["p_home_cover"] = round(p_home_strict + 0.5 * p_push, 4)
-        result["p_away_cover"] = round(p_away_strict + 0.5 * p_push, 4)
-
-    # Totals: over/under the book's total_line. Pushes split 50/50.
-    if total_line is not None and not pd.isna(total_line):
-        total_runs = h_mat + a_mat
-        p_over_strict = float(joint[total_runs > total_line].sum())
-        p_under_strict = float(joint[total_runs < total_line].sum())
-        p_push_total = float(joint[total_runs == total_line].sum())
-        result["p_over"] = round(p_over_strict + 0.5 * p_push_total, 4)
-        result["p_under"] = round(p_under_strict + 0.5 * p_push_total, 4)
-
-    return result
-
-
-def win_prob(lambda_a, lambda_b, max_runs=15, r=NBINOM_R):
-    """Backward-compatible: returns P(team A beats team B) as a float.
-
-    Thin wrapper around compute_game_probs so existing callers (backtest.py,
-    compute_predictions) continue to work. See compute_game_probs for the full
-    joint-distribution output.
-    """
-    probs = compute_game_probs(lambda_a, lambda_b, max_runs=max_runs, r=r)
-    return probs["p_home_win"]
-
-
-# Backward-compatible alias used by backtest.py
-poisson_win_prob = win_prob
-
-
-def convert_to_odds(p):
-    """Convert win probability to American odds."""
-    if p < 0.5:
-        return round(((1 - p) / p) * 100)
-    elif p > 0.5:
-        return round(-(p / (1 - p)) * 100) if p < 1 else -1000
-    else:
-        return 100
-
-
-def american_to_prob(odds):
-    """Convert American odds to implied probability."""
-    if pd.isna(odds):
-        return np.nan
-    odds = float(odds)
-    if odds > 0:
-        return 100 / (odds + 100)
-    else:
-        return abs(odds) / (abs(odds) + 100)
-
-
-# Dedupe warnings so a systematic issue doesn't spam stdout once per row.
-_flag_warnings_seen: set[tuple[str, str]] = set()
-
-
-def _warn_flag_error(fn_name: str, exc: Exception) -> None:
-    key = (fn_name, f"{type(exc).__name__}: {exc}")
-    if key not in _flag_warnings_seen:
-        _flag_warnings_seen.add(key)
-        print(f"  WARNING: {fn_name} raised {type(exc).__name__}: {exc} — returning 'No Play'")
-
-
-def flag_ev(row, threshold=EV_THRESHOLDS["ml"]):
-    try:
-        our_prob = american_to_prob(row["our_odds"])
-        book_prob = american_to_prob(row["moneyline"])
-        if pd.isna(book_prob):
-            return "No Play"
-        edge = our_prob - book_prob
-        return row["team"] if edge >= threshold else "No Play"
-    except Exception as e:
-        _warn_flag_error("flag_ev", e)
-        return "No Play"
-
-
-def flag_runline_ev(row, threshold=EV_THRESHOLDS["rl"]):
-    """Flag a run line play if our model's cover probability (from the joint
-    negative-binomial distribution, accounting for the book's actual spread)
-    beats the book's implied cover probability by at least `threshold`.
-    """
-    try:
-        book_prob = american_to_prob(row["spread_odds"])
-        model_prob = row.get("p_cover")
-        if pd.isna(book_prob) or pd.isna(model_prob):
-            return "No Play"
-        edge = model_prob - book_prob
-        return row["team"] if edge >= threshold else "No Play"
-    except Exception as e:
-        _warn_flag_error("flag_runline_ev", e)
-        return "No Play"
-
-
-def flag_total_play(row, threshold=EV_THRESHOLDS["totals"]):
-    """Flag Over/Under based on joint-distribution probabilities vs book odds."""
-    try:
-        over_prob_book = american_to_prob(row.get("total_over_odds"))
-        under_prob_book = american_to_prob(row.get("total_under_odds"))
-        p_over = row.get("p_over")
-        p_under = row.get("p_under")
-        if pd.notna(p_over) and pd.notna(over_prob_book) and (p_over - over_prob_book) >= threshold:
-            return "Over"
-        if pd.notna(p_under) and pd.notna(under_prob_book) and (p_under - under_prob_book) >= threshold:
-            return "Under"
-        # Fallback when book over/under odds missing: use diff heuristic so the UI
-        # still surfaces directional model disagreement with the line.
-        if pd.isna(over_prob_book) and pd.isna(under_prob_book) and pd.notna(row.get("total_diff")):
-            if row["total_diff"] >= 1:
-                return "Over"
-            if row["total_diff"] <= -1:
-                return "Under"
-        return "No Play"
-    except Exception as e:
-        _warn_flag_error("flag_total_play", e)
-        return "No Play"
 
 
 def compute_predictions(df, model, calibrator=None, use_existing_xR=False):
@@ -713,55 +245,6 @@ def _get_table_columns(table_name):
             {"t": table_name},
         )
         return {row[0] for row in result}
-
-
-def _apply_market_probs(df):
-    """Compute p_cover / p_over / p_under per row from the joint NB distribution,
-    using the book's actual total_line and spread (pulled from the row's odds columns).
-
-    Expected columns on df: game_pk, team, is_home, xR, total, spread.
-    Adds columns: p_cover, p_over, p_under.
-    """
-    df = df.copy()
-    df["p_cover"] = np.nan
-    df["p_over"] = np.nan
-    df["p_under"] = np.nan
-
-    for game_pk, group in df.groupby("game_pk"):
-        if len(group) != 2:
-            continue
-        rows = group.sort_values("is_home", ascending=True)
-        away_row = rows.iloc[0]
-        home_row = rows.iloc[1]
-        lambda_away = max(float(away_row["xR"]), 0.5)
-        lambda_home = max(float(home_row["xR"]), 0.5)
-
-        total_line = home_row.get("total")
-        if pd.isna(total_line):
-            total_line = None
-        # spread is stored per-row, signed from that row's team perspective.
-        # We want the spread from the HOME team's perspective.
-        spread_home = home_row.get("spread")
-        if pd.isna(spread_home):
-            spread_home = None
-
-        probs = compute_game_probs(
-            lambda_home, lambda_away,
-            total_line=total_line,
-            spread_home=spread_home,
-        )
-
-        home_idx = rows.index[rows["is_home"] == 1]
-        away_idx = rows.index[rows["is_home"] == 0]
-
-        if probs["p_home_cover"] is not None:
-            df.loc[home_idx, "p_cover"] = probs["p_home_cover"]
-            df.loc[away_idx, "p_cover"] = probs["p_away_cover"]
-        if probs["p_over"] is not None:
-            df.loc[group.index, "p_over"] = probs["p_over"]
-            df.loc[group.index, "p_under"] = probs["p_under"]
-
-    return df
 
 
 def _upsert_season_outputs(df):
@@ -955,41 +438,14 @@ def main():
 
     # Joint-distribution market probabilities (p_cover, p_over, p_under) from
     # the book's actual total line and spread.
-    final_output = _apply_market_probs(final_output)
+    final_output = apply_market_probs(final_output)
 
     final_output["total_play"] = final_output.apply(flag_total_play, axis=1)
     final_output["ev_flag"] = final_output.apply(flag_ev, axis=1)
     final_output["run_line_ev_flag"] = final_output.apply(flag_runline_ev, axis=1)
 
-    # --- Kelly sizing ---
-    # Moneyline Kelly: model prob vs book moneyline
-    ml_kelly = final_output.apply(
-        lambda row: compute_kelly_row(row["win_prob"], row["moneyline"]), axis=1
-    )
-    final_output["kelly_full_ml"] = ml_kelly.apply(lambda x: x[0])
-    final_output["kelly_quarter_ml"] = ml_kelly.apply(lambda x: x[1])
-
-    # Run line Kelly: model p_cover vs book spread odds
-    rl_kelly = final_output.apply(
-        lambda row: compute_kelly_row(row.get("p_cover"), row.get("spread_odds")), axis=1
-    )
-    final_output["kelly_full_rl"] = rl_kelly.apply(lambda x: x[0])
-    final_output["kelly_quarter_rl"] = rl_kelly.apply(lambda x: x[1])
-
-    # Totals Kelly: model p_over vs book over odds, model p_under vs book under odds
-    final_output["kelly_full_total"] = final_output.apply(
-        lambda row: (
-            kelly_fraction(row.get("p_over"), american_to_decimal(row.get("total_over_odds")))
-            if row.get("total_play") == "Over"
-            else kelly_fraction(row.get("p_under"), american_to_decimal(row.get("total_under_odds")))
-            if row.get("total_play") == "Under"
-            else 0.0
-        ),
-        axis=1,
-    )
-    final_output["kelly_quarter_total"] = final_output["kelly_full_total"].apply(
-        lambda x: round(x * 0.25, 6) if pd.notna(x) else np.nan
-    )
+    # Kelly sizing for ML / RL / totals
+    final_output = apply_kelly_sizing(final_output)
 
     # Displayed edge = implied-probability diff used by flag_ev / flag_runline_ev.
     # Must match the threshold logic so cards and +EV badges agree.
