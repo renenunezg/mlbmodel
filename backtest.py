@@ -25,7 +25,9 @@ from backend.data.fangraphs import (
     _identify_starters,
 )
 from backend.data.savant import _static_park_factors
-from backend.model import FEATURE_COLS, LEAGUE_AVG, poisson_win_prob
+from backend.model import FEATURE_COLS
+from backend.features import LEAGUE_AVG
+from backend.simulation import poisson_win_prob
 from backend.team_mappings import normalize_team
 
 CACHE_DIR = Path("backtest_cache")

@@ -1,6 +1,6 @@
 """Tests for win probability and joint-distribution computations."""
 import numpy as np
-from backend.model import win_prob, compute_game_probs
+from backend.simulation import win_prob, compute_game_probs
 
 
 def test_win_prob_symmetric():

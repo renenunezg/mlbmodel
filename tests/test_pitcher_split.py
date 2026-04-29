@@ -3,7 +3,7 @@ import math
 import numpy as np
 import pandas as pd
 
-from backend.model import (
+from backend.features import (
     LEAGUE_STARTER_SHARE,
     LEAGUE_BULLPEN_RHP_SHARE,
     STARTER_SHARE_MIN,
