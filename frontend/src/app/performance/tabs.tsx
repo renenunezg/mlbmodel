@@ -262,53 +262,7 @@ export function PerformanceTabs({
         <div className="border-t border-border pt-6">
           <h2 className="font-heading text-lg mb-4">Daily History</h2>
           {dailyEvals.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead className="text-right">Bets</TableHead>
-                  <TableHead className="text-right">Stakes</TableHead>
-                  <TableHead className="text-right">P&amp;L</TableHead>
-                  <TableHead className="text-right">ROI</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {[...dailyEvals]
-                  .sort((a, b) => (a.date < b.date ? 1 : -1))
-                  .slice(0, 30)
-                  .map((d) => {
-                    const bets =
-                      (d.ml_predictions ?? 0) +
-                      (d.run_line_predictions ?? 0) +
-                      (d.totals_predictions ?? 0);
-                    const roiClass =
-                      d.roi == null
-                        ? ""
-                        : d.roi > 0
-                        ? "text-emerald-500"
-                        : d.roi < 0
-                        ? "text-rose-500"
-                        : "";
-                    return (
-                      <TableRow key={d.date}>
-                        <TableCell className="font-medium">{d.date}</TableCell>
-                        <TableCell className="text-right font-mono tabular-nums">
-                          {bets}
-                        </TableCell>
-                        <TableCell className="text-right font-mono tabular-nums">
-                          {fmt(d.total_staked_units, 2)}u
-                        </TableCell>
-                        <TableCell className="text-right font-mono tabular-nums">
-                          {fmtSigned(d.net_profit_units)}u
-                        </TableCell>
-                        <TableCell className={`text-right font-mono tabular-nums ${roiClass}`}>
-                          {pct(d.roi)}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-              </TableBody>
-            </Table>
+            <DailyBettingHistory rows={dailyEvals} />
           ) : (
             <p className="text-muted-foreground text-sm">
               No daily history yet.
@@ -534,6 +488,120 @@ function EvalHistoryTable({ rows }: { rows: ModelEvaluation[] }) {
               </TableCell>
             </TableRow>
           ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+function DailyBettingHistory({ rows }: { rows: ModelEvaluation[] }) {
+  const [windowKey, setWindowKey] =
+    useState<(typeof WINDOW_LABELS)[number]["key"]>("30");
+  const [page, setPage] = useState(0);
+
+  const filtered = useMemo(() => {
+    const sorted = [...rows].sort((a, b) => (a.date < b.date ? 1 : -1));
+    if (windowKey === "season") return sorted;
+    return sorted.slice(0, Number(windowKey));
+  }, [rows, windowKey]);
+
+  const totalPages =
+    windowKey === "season"
+      ? Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+      : 1;
+  const visible =
+    windowKey === "season"
+      ? filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+      : filtered;
+
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="inline-flex rounded-sm border border-border p-0.5 text-xs font-mono">
+          {WINDOW_LABELS.map((w) => (
+            <button
+              key={w.key}
+              type="button"
+              onClick={() => {
+                setWindowKey(w.key);
+                setPage(0);
+              }}
+              className={`px-3 py-1 transition-colors ${
+                windowKey === w.key
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {w.label}
+            </button>
+          ))}
+        </div>
+        {windowKey === "season" && totalPages > 1 ? (
+          <div className="flex items-center gap-2 font-mono text-xs">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="px-2 py-1 text-muted-foreground hover:text-foreground disabled:opacity-30"
+            >
+              {"<"}
+            </button>
+            <span className="text-muted-foreground">
+              {page + 1} / {totalPages}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              className="px-2 py-1 text-muted-foreground hover:text-foreground disabled:opacity-30"
+            >
+              {">"}
+            </button>
+          </div>
+        ) : null}
+      </div>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Date</TableHead>
+            <TableHead className="text-right">Bets</TableHead>
+            <TableHead className="text-right">Stakes</TableHead>
+            <TableHead className="text-right">P&amp;L</TableHead>
+            <TableHead className="text-right">ROI</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {visible.map((d) => {
+            const bets =
+              (d.ml_predictions ?? 0) +
+              (d.run_line_predictions ?? 0) +
+              (d.totals_predictions ?? 0);
+            const roiClass =
+              d.roi == null
+                ? ""
+                : d.roi > 0
+                ? "text-emerald-500"
+                : d.roi < 0
+                ? "text-rose-500"
+                : "";
+            return (
+              <TableRow key={d.date}>
+                <TableCell className="font-medium">{d.date}</TableCell>
+                <TableCell className="text-right font-mono tabular-nums">
+                  {bets}
+                </TableCell>
+                <TableCell className="text-right font-mono tabular-nums">
+                  {fmt(d.total_staked_units, 2)}u
+                </TableCell>
+                <TableCell className="text-right font-mono tabular-nums">
+                  {fmtSigned(d.net_profit_units)}u
+                </TableCell>
+                <TableCell className={`text-right font-mono tabular-nums ${roiClass}`}>
+                  {pct(d.roi)}
+                </TableCell>
+              </TableRow>
+            );
+          })}
         </TableBody>
       </Table>
     </div>
