@@ -61,17 +61,10 @@ export function GamesLive({ initial }: { initial: GameMatchup[] }) {
         if (!res.ok) return;
         const data = (await res.json()) as { scores?: LiveScore[] };
         if (cancelled || !data.scores) return;
-        setMatchups((prev) => {
-          const prevByPk = new Map(prev.map((m) => [m.game_pk, m]));
-          // Detect previously-not-final games that just flipped to Final.
-          for (const s of data.scores!) {
-            const before = prevByPk.get(s.game_pk);
-            if (before && before.status !== "Final" && s.status === "Final") {
-              fireEval(s.game_pk);
-            }
-          }
-          return mergeScores(prev, data.scores!);
-        });
+        for (const s of data.scores) {
+          if (s.status === "Final") fireEval(s.game_pk);
+        }
+        setMatchups((prev) => mergeScores(prev, data.scores!));
       } catch {
         // network blip, wait for next tick
       }

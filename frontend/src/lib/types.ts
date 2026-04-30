@@ -72,6 +72,20 @@ export interface ModelEvaluation {
   total_staked_units: number | null;
   net_profit_units: number | null;
   equity_end_units: number | null;
+  // Segment metrics
+  roi_favorites: number | null;
+  roi_underdogs: number | null;
+  n_favorites: number | null;
+  n_underdogs: number | null;
+  favorites_correct: number | null;
+  underdogs_correct: number | null;
+  avg_ml_line: number | null;
+  overs_correct: number | null;
+  overs_predictions: number | null;
+  unders_correct: number | null;
+  unders_predictions: number | null;
+  overs_roi: number | null;
+  unders_roi: number | null;
 }
 
 export interface CalibrationBin {

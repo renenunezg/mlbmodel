@@ -48,6 +48,12 @@ function fmtSigned(value: number | null | undefined, decimals = 2): string {
   return value >= 0 ? `+${s}` : s;
 }
 
+function fmtAmerican(value: number | null | undefined): string {
+  if (value == null) return "\u2014";
+  const r = Math.round(value);
+  return r > 0 ? `+${r}` : `${r}`;
+}
+
 export function PerformanceTabs({
   evaluations,
   calibration,
@@ -219,6 +225,27 @@ export function PerformanceTabs({
             value={`${fmtSigned(latest?.net_profit_units)}u`}
             sub={`${fmt(latest?.total_staked_units, 2)}u staked`}
           />
+          <KpiCard
+            label="Favorites"
+            value={pct(latest?.roi_favorites)}
+            sub={`(${latest?.favorites_correct ?? 0}-${(latest?.n_favorites ?? 0) - (latest?.favorites_correct ?? 0)})`}
+          />
+          <KpiCard
+            label="Underdogs"
+            value={pct(latest?.roi_underdogs)}
+            sub={`(${latest?.underdogs_correct ?? 0}-${(latest?.n_underdogs ?? 0) - (latest?.underdogs_correct ?? 0)})`}
+          />
+          <KpiCard label="Avg Line" value={fmtAmerican(latest?.avg_ml_line)} />
+          <KpiCard
+            label="Overs"
+            value={pct(latest?.overs_roi)}
+            sub={`(${latest?.overs_correct ?? 0}-${(latest?.overs_predictions ?? 0) - (latest?.overs_correct ?? 0)})`}
+          />
+          <KpiCard
+            label="Unders"
+            value={pct(latest?.unders_roi)}
+            sub={`(${latest?.unders_correct ?? 0}-${(latest?.unders_predictions ?? 0) - (latest?.unders_correct ?? 0)})`}
+          />
         </div>
 
         <div className="border-t border-border pt-6">
@@ -228,6 +255,63 @@ export function PerformanceTabs({
           ) : (
             <p className="text-muted-foreground text-sm">
               No equity data yet.
+            </p>
+          )}
+        </div>
+
+        <div className="border-t border-border pt-6">
+          <h2 className="font-heading text-lg mb-4">Daily History</h2>
+          {dailyEvals.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead className="text-right">Bets</TableHead>
+                  <TableHead className="text-right">Stakes</TableHead>
+                  <TableHead className="text-right">P&amp;L</TableHead>
+                  <TableHead className="text-right">ROI</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {[...dailyEvals]
+                  .sort((a, b) => (a.date < b.date ? 1 : -1))
+                  .slice(0, 30)
+                  .map((d) => {
+                    const bets =
+                      (d.ml_predictions ?? 0) +
+                      (d.run_line_predictions ?? 0) +
+                      (d.totals_predictions ?? 0);
+                    const roiClass =
+                      d.roi == null
+                        ? ""
+                        : d.roi > 0
+                        ? "text-emerald-500"
+                        : d.roi < 0
+                        ? "text-rose-500"
+                        : "";
+                    return (
+                      <TableRow key={d.date}>
+                        <TableCell className="font-medium">{d.date}</TableCell>
+                        <TableCell className="text-right font-mono tabular-nums">
+                          {bets}
+                        </TableCell>
+                        <TableCell className="text-right font-mono tabular-nums">
+                          {fmt(d.total_staked_units, 2)}u
+                        </TableCell>
+                        <TableCell className="text-right font-mono tabular-nums">
+                          {fmtSigned(d.net_profit_units)}u
+                        </TableCell>
+                        <TableCell className={`text-right font-mono tabular-nums ${roiClass}`}>
+                          {pct(d.roi)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              No daily history yet.
             </p>
           )}
         </div>
