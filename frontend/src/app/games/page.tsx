@@ -1,3 +1,4 @@
+import { createClient } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import type { ModelOutput, GameMatchup, GameInfo } from "@/lib/types";
 import { GamesLive } from "@/components/games-live";
@@ -5,6 +6,7 @@ import { SummaryStats } from "@/components/summary-stats";
 import { GameCardUnavailable } from "@/components/game-card-unavailable";
 import { LastUpdated } from "@/components/last-updated";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
+import { runEvalForGame } from "@/lib/eval-game";
 import type { LiveScore } from "@/app/api/live-scores/route";
 
 // Re-render every 30s so SSR includes fresh live scores from MLB API
@@ -65,6 +67,31 @@ export default async function Page() {
   ]);
 
   const lastUpdated: string | null = latest?.[0]?.updated_at ?? null;
+
+  // Trigger eval for any game MLB shows Final that DB hasn't caught up on.
+  // Rides Next's SSR cache (revalidate = 30) so it fires at most ~2x/min.
+  const sbUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const sbServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (sbUrl && sbServiceKey && allGames) {
+    const sbAdmin = createClient(sbUrl, sbServiceKey, {
+      auth: { persistSession: false },
+    });
+    const triggers: Promise<unknown>[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const g of allGames as any[]) {
+      const mlbFinal = liveScores.get(g.game_pk)?.abstract_state === "Final";
+      const dbFinal =
+        g.status === "Final" && g.home_score != null && g.away_score != null;
+      if (mlbFinal && !dbFinal) {
+        triggers.push(
+          runEvalForGame(sbAdmin, g.game_pk).catch((e) =>
+            console.error("eval trigger failed", g.game_pk, e),
+          ),
+        );
+      }
+    }
+    if (triggers.length > 0) await Promise.allSettled(triggers);
+  }
 
   if ((!predictions || predictions.length === 0) && (!allGames || allGames.length === 0)) {
     return (

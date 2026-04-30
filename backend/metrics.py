@@ -282,6 +282,55 @@ def hit_rate_by_edge_bucket(ledger, buckets=(0.03, 0.05, 0.10, 0.20)):
     return results
 
 
+def segment_summary(ledger):
+    """Bet-segment metrics: favorites/underdogs (ML only) and totals over/under.
+
+    Expects optional columns:
+      - american_odds (numeric, present for ML rows)
+      - totals_side ("over" | "under", present for total rows)
+    Missing columns are tolerated; segments collapse to zero counts.
+    """
+    out = {
+        "roi_favorites": None, "n_favorites": 0, "favorites_correct": 0,
+        "roi_underdogs": None, "n_underdogs": 0, "underdogs_correct": 0,
+        "avg_ml_line": None,
+        "overs_correct": 0, "overs_predictions": 0, "overs_roi": None,
+        "unders_correct": 0, "unders_predictions": 0, "unders_roi": None,
+    }
+    if ledger is None or ledger.empty:
+        return out
+
+    if "american_odds" in ledger.columns:
+        ml = ledger[ledger["american_odds"].notna()].copy()
+        if not ml.empty:
+            favs = ml[ml["american_odds"] < 0]
+            dogs = ml[ml["american_odds"] > 0]
+            for label, sub in (("favorites", favs), ("underdogs", dogs)):
+                n = int(len(sub))
+                out[f"n_{label}"] = n
+                if n > 0:
+                    staked = float(sub["stake"].sum())
+                    pnl = float(sub["payout"].sum() - staked)
+                    out[f"roi_{label}"] = round(pnl / staked, 4) if staked > 0 else None
+                    correct_key = "favorites_correct" if label == "favorites" else "underdogs_correct"
+                    out[correct_key] = int(sub["won"].sum())
+            out["avg_ml_line"] = round(float(ml["american_odds"].mean()), 2)
+
+    if "totals_side" in ledger.columns:
+        for side in ("over", "under"):
+            sub = ledger[ledger["totals_side"] == side]
+            n = int(len(sub))
+            key = "overs" if side == "over" else "unders"
+            out[f"{key}_predictions"] = n
+            if n > 0:
+                wins = int(sub["won"].sum())
+                staked = float(sub["stake"].sum())
+                pnl = float(sub["payout"].sum() - staked)
+                out[f"{key}_correct"] = wins
+                out[f"{key}_roi"] = round(pnl / staked, 4) if staked > 0 else None
+    return out
+
+
 def financial_summary(ledger):
     """All financial metrics in one dict."""
     eq = equity_curve_from_ledger(ledger)

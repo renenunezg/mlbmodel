@@ -16,6 +16,27 @@ export type EvalRow = {
   actual_win: 0 | 1;
   actual_margin: number;
   game_total: number;
+  moneyline?: number | null;
+  kelly_quarter_ml?: number | null;
+  kelly_quarter_total?: number | null;
+  total_over_odds?: number | null;
+  total_under_odds?: number | null;
+};
+
+export type SegmentRow = {
+  roi_favorites: number | null;
+  n_favorites: number;
+  favorites_correct: number;
+  roi_underdogs: number | null;
+  n_underdogs: number;
+  underdogs_correct: number;
+  avg_ml_line: number | null;
+  overs_correct: number;
+  overs_predictions: number;
+  overs_roi: number | null;
+  unders_correct: number;
+  unders_predictions: number;
+  unders_roi: number | null;
 };
 
 export type BaseRow = {
@@ -134,4 +155,112 @@ export function computeBaseRow(rows: EvalRow[]): BaseRow {
     average_total_diff: runs_mae != null ? round4(runs_mae) : null,
     average_win_prob: win_prob_mean != null ? round4(win_prob_mean) : null,
   };
+}
+
+function americanToDecimal(american: number): number {
+  return american > 0 ? 1 + american / 100 : 1 + 100 / Math.abs(american);
+}
+
+export function computeSegmentRow(rows: EvalRow[]): SegmentRow {
+  const out: SegmentRow = {
+    roi_favorites: null,
+    n_favorites: 0,
+    favorites_correct: 0,
+    roi_underdogs: null,
+    n_underdogs: 0,
+    underdogs_correct: 0,
+    avg_ml_line: null,
+    overs_correct: 0,
+    overs_predictions: 0,
+    overs_roi: null,
+    unders_correct: 0,
+    unders_predictions: 0,
+    unders_roi: null,
+  };
+
+  const mlBets = dedupeByGamePk(
+    rows.filter((r) => r.ev_flag === r.team && r.moneyline != null),
+  );
+  if (mlBets.length > 0) {
+    let mlSum = 0;
+    let favStake = 0,
+      favPayout = 0,
+      favN = 0,
+      favWins = 0;
+    let dogStake = 0,
+      dogPayout = 0,
+      dogN = 0,
+      dogWins = 0;
+    for (const r of mlBets) {
+      const am = r.moneyline as number;
+      mlSum += am;
+      const dec = americanToDecimal(am);
+      let stake = r.kelly_quarter_ml ?? 0;
+      if (stake <= 0) stake = 0.01;
+      const won = r.actual_win === 1;
+      const payout = won ? stake * dec : 0;
+      if (am < 0) {
+        favN += 1;
+        favStake += stake;
+        favPayout += payout;
+        if (won) favWins += 1;
+      } else if (am > 0) {
+        dogN += 1;
+        dogStake += stake;
+        dogPayout += payout;
+        if (won) dogWins += 1;
+      }
+    }
+    out.n_favorites = favN;
+    out.favorites_correct = favWins;
+    out.n_underdogs = dogN;
+    out.underdogs_correct = dogWins;
+    out.roi_favorites =
+      favStake > 0 ? round4((favPayout - favStake) / favStake) : null;
+    out.roi_underdogs =
+      dogStake > 0 ? round4((dogPayout - dogStake) / dogStake) : null;
+    out.avg_ml_line = Math.round((mlSum / mlBets.length) * 100) / 100;
+  }
+
+  const totalBets = dedupeByGamePk(
+    rows.filter((r) => r.total_play === "Over" || r.total_play === "Under"),
+  );
+  let oN = 0,
+    oWins = 0,
+    oStake = 0,
+    oPayout = 0;
+  let uN = 0,
+    uWins = 0,
+    uStake = 0,
+    uPayout = 0;
+  for (const r of totalBets) {
+    const dir = r.total_play.toLowerCase();
+    const v = calcTotalPick(r);
+    if (v == null) continue;
+    const am = dir === "over" ? r.total_over_odds : r.total_under_odds;
+    if (am == null) continue;
+    const dec = americanToDecimal(am);
+    let stake = r.kelly_quarter_total ?? 0;
+    if (stake <= 0) stake = 0.01;
+    const payout = v === 1 ? stake * dec : 0;
+    if (dir === "over") {
+      oN += 1;
+      oWins += v;
+      oStake += stake;
+      oPayout += payout;
+    } else {
+      uN += 1;
+      uWins += v;
+      uStake += stake;
+      uPayout += payout;
+    }
+  }
+  out.overs_predictions = oN;
+  out.overs_correct = oWins;
+  out.overs_roi = oStake > 0 ? round4((oPayout - oStake) / oStake) : null;
+  out.unders_predictions = uN;
+  out.unders_correct = uWins;
+  out.unders_roi = uStake > 0 ? round4((uPayout - uStake) / uStake) : null;
+
+  return out;
 }
