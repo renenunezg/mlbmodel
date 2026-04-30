@@ -26,6 +26,7 @@ from backend.metrics import (
     probabilistic_summary,
     calibration_curve,
     financial_summary,
+    segment_summary,
     equity_curve_from_ledger,
     hit_rate_by_edge_bucket,
 )
@@ -89,6 +90,8 @@ def _build_bet_ledger(eval_df):
                 "decimal_odds": float(dec_odds), "won": won,
                 "payout": float(stake * dec_odds) if won else 0.0,
                 "edge": float(edge) if pd.notna(edge) else 0.0,
+                "american_odds": float(r["moneyline"]),
+                "totals_side": None,
             })
 
         # Run line bets
@@ -107,6 +110,8 @@ def _build_bet_ledger(eval_df):
                 "decimal_odds": float(dec_odds), "won": won,
                 "payout": float(stake * dec_odds) if won else 0.0,
                 "edge": float(edge) if pd.notna(edge) else 0.0,
+                "american_odds": None,
+                "totals_side": None,
             })
 
         # Totals bets
@@ -129,11 +134,14 @@ def _build_bet_ledger(eval_df):
                     "decimal_odds": float(dec_odds), "won": won,
                     "payout": float(stake * dec_odds) if won else 0.0,
                     "edge": float(edge) if pd.notna(edge) else 0.0,
+                    "american_odds": None,
+                    "totals_side": direction,
                 })
 
     return pd.DataFrame(rows) if rows else pd.DataFrame(
         columns=["date", "bet_type", "team", "game_pk", "stake",
-                 "decimal_odds", "won", "payout", "edge"]
+                 "decimal_odds", "won", "payout", "edge",
+                 "american_odds", "totals_side"]
     )
 
 
@@ -390,6 +398,7 @@ def main(model=None, cv_metrics=None, best_params=None):
             window_ledger = pd.DataFrame(columns=ledger.columns if not ledger.empty else [])
 
         fin = financial_summary(window_ledger) if not window_ledger.empty else {}
+        seg = segment_summary(window_ledger)
 
         # Equity end
         eq = equity_curve_from_ledger(window_ledger)
@@ -399,6 +408,7 @@ def main(model=None, cv_metrics=None, best_params=None):
             **reg,
             **prob,
             **fin,
+            **seg,
             "equity_end_units": round(equity_end, 4),
         }
         # Remove residual_ sub-keys from the DB row (they don't have columns)
