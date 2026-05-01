@@ -5,12 +5,19 @@ EV/Kelly are in strategy.py. The main() orchestrator at the bottom ties them
 together for the daily pipeline.
 """
 import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 import pandas as pd
 import numpy as np
 from sqlalchemy import text
 import xgboost as xgb
 import joblib
+
+# Persisted model artifacts live in models/ at the repo root.
+_MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
+_MODELS_DIR.mkdir(parents=True, exist_ok=True)
+XGB_MODEL_PATH = _MODELS_DIR / "xgb_model.json"
+CALIBRATOR_PATH = _MODELS_DIR / "isotonic_calibrator.pkl"
 from sklearn.model_selection import TimeSeriesSplit, GridSearchCV
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from sklearn.isotonic import IsotonicRegression
@@ -39,7 +46,7 @@ from backend.strategy import (
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
-# 12 features for the XGBoost model
+# 14 features for the XGBoost model
 FEATURE_COLS = [
     'xfip',               # starter xFIP (computed from Statcast)
     'xfip_bullpen',       # bullpen xFIP
@@ -53,6 +60,8 @@ FEATURE_COLS = [
     'std_last5',          # rolling 5-game std dev (volatility signal)
     'park_factor',        # park factor (affects offense)
     'is_home',            # home field advantage (0/1)
+    'own_bp_outs_2d',     # own bullpen reliever outs in prior 2 days (rest signal)
+    'opp_bp_outs_2d',     # opposing bullpen reliever outs in prior 2 days (fatigue signal)
 ]
 
 
@@ -359,8 +368,8 @@ def main():
     # Save model and fit calibrator if we trained one
     calibrator = None
     if model is not None:
-        model.save_model("xgb_model.json")
-        print("Model trained and saved to xgb_model.json")
+        model.save_model(str(XGB_MODEL_PATH))
+        print(f"Model trained and saved to {XGB_MODEL_PATH}")
 
         # Fit isotonic calibrator on OUT-OF-FOLD predictions (leak-free).
         # Rows that were never in a validation fold have NaN xR and get dropped.
@@ -377,8 +386,8 @@ def main():
                 train_preds = compute_predictions(cal_df, model, calibrator=None, use_existing_xR=True)
                 calibrator = fit_calibrator(train_preds)
                 if calibrator is not None:
-                    joblib.dump(calibrator, "isotonic_calibrator.pkl")
-                    print("  Calibrator saved to isotonic_calibrator.pkl")
+                    joblib.dump(calibrator, CALIBRATOR_PATH)
+                    print(f"  Calibrator saved to {CALIBRATOR_PATH}")
             else:
                 print(f"  Only {len(cal_df)} paired OOF rows — skipping calibration (need >= 800)")
         else:

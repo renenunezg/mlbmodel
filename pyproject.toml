@@ -1,0 +1,16 @@
+[project]
+name = "mlbmodel"
+version = "0.1.0"
+description = "MLB expected-runs model with +EV betting analysis."
+requires-python = ">=3.11"
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# Project is consumed as a set of importable subpackages, not via a console
+# script. Listing them here lets `pip install -e .` make `backend`, `analysis`,
+# and `scripts` importable from anywhere — no more sys.path hacks at the top
+# of analysis scripts.
+packages = ["backend", "backend.data", "analysis", "scripts"]
