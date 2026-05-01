@@ -21,6 +21,9 @@ LEAGUE_AVG = {
     "xfip": 4.20, "whip": 1.30, "xfip_bullpen": 4.10, "bullpen_k_9": 9.0,
     "batting_ops": 0.720, "batting_iso": 0.160, "batting_k_pct": 22.0,
     "park_factor": 100, "avg_last5": 4.5, "avg_last10": 4.5, "std_last5": 2.5,
+    # Reliever outs in prior 2 days. League norm derived from analysis cache:
+    # mean ~17 outs / 2-day window across 826 (date, team) rows.
+    "own_bp_outs_2d": 17.0, "opp_bp_outs_2d": 17.0,
 }
 
 
@@ -274,6 +277,64 @@ def load_training_data():
             how="left",
         )
 
+    # Bullpen rest features: reliever outs in prior 2 days, for own team and opponent.
+    # Source: bullpen_daily table (one row per (date, team), reliever_outs aggregated
+    # from MLB boxscores). The lookback is strictly prior — game date itself is
+    # excluded so we never leak today's bullpen usage into a feature.
+    bp_daily = _safe_read_table("bullpen_daily")
+    if not bp_daily.empty and "game_date" in starters.columns:
+        bp_daily["game_date"] = pd.to_datetime(bp_daily["game_date"])
+        starters["game_date"] = pd.to_datetime(starters["game_date"])
+
+        def _prior_outs(team_col: str, label: str, days: int = 2) -> pd.Series:
+            out = []
+            bp_idx = bp_daily.set_index(["team", "game_date"])["reliever_outs"]
+            for _, r in starters.iterrows():
+                t = r[team_col]
+                d = r["game_date"]
+                if pd.isna(t) or pd.isna(d):
+                    out.append(np.nan); continue
+                window_dates = [d - pd.Timedelta(days=k) for k in range(1, days + 1)]
+                total = 0; any_match = False
+                for wd in window_dates:
+                    try:
+                        total += int(bp_idx.loc[(t, wd)]); any_match = True
+                    except KeyError:
+                        pass
+                # If a team had ZERO games in window (legit off-day), 0 is correct.
+                # If we have NO bullpen_daily rows for that team at all, fall back to NaN.
+                if not any_match and (t not in bp_daily["team"].values):
+                    out.append(np.nan)
+                else:
+                    out.append(total)
+            return pd.Series(out, index=starters.index, dtype=float)
+
+        # Need opponent team per row. Use game_home/away from earlier merge if present;
+        # otherwise derive from the games table.
+        if "game_home_team" in starters.columns and "game_away_team" in starters.columns:
+            starters["opp_team"] = np.where(
+                starters["is_home"] == True,
+                starters["game_away_team"],
+                starters["game_home_team"],
+            )
+        else:
+            games_lookup = _safe_read_table("games")[["game_pk", "home_team", "away_team"]]
+            starters = starters.merge(games_lookup, on="game_pk", how="left")
+            starters["opp_team"] = np.where(
+                starters["is_home"] == True, starters["away_team"], starters["home_team"],
+            )
+
+        starters["own_bp_outs_2d"] = _prior_outs("team", "own", days=2)
+        starters["opp_bp_outs_2d"] = _prior_outs("opp_team", "opp", days=2)
+        n_own_missing = starters["own_bp_outs_2d"].isna().sum()
+        n_opp_missing = starters["opp_bp_outs_2d"].isna().sum()
+        if n_own_missing or n_opp_missing:
+            print(f"  bullpen_daily lookups: own missing={n_own_missing}, opp missing={n_opp_missing}")
+    else:
+        print("  bullpen_daily empty — falling back to league avg for own_bp_outs_2d / opp_bp_outs_2d")
+        starters["own_bp_outs_2d"] = np.nan
+        starters["opp_bp_outs_2d"] = np.nan
+
     # Filter for games with exactly 2 teams
     starters = starters.groupby("game_pk").filter(lambda x: len(x) == 2)
     starters = starters.sort_values(["game_pk", "is_home"]).reset_index(drop=True)
@@ -293,6 +354,7 @@ def load_training_data():
         "xfip", "starter_whip", "xfip_bullpen", "bullpen_k_9",
         "batting_ops", "batting_iso", "batting_k_pct",
         "park_factor", "actual_runs", "avg_last5", "avg_last10", "std_last5",
+        "own_bp_outs_2d", "opp_bp_outs_2d",
     ]
     result = starters[[c for c in out_cols if c in starters.columns]].copy()
     result = result.rename(columns={"pitcher_name": "starter"})
@@ -307,6 +369,7 @@ def preprocess_data(df):
         "xfip", "xfip_bullpen", "starter_whip", "bullpen_k_9",
         "batting_ops", "batting_iso", "batting_k_pct",
         "avg_last5", "avg_last10", "std_last5", "park_factor",
+        "own_bp_outs_2d", "opp_bp_outs_2d",
     ]
     for col in numeric_cols:
         if col in df.columns:
