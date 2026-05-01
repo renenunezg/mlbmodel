@@ -219,7 +219,15 @@ export function computeSegmentRow(rows: EvalRow[]): SegmentRow {
       favStake > 0 ? round4((favPayout - favStake) / favStake) : null;
     out.roi_underdogs =
       dogStake > 0 ? round4((dogPayout - dogStake) / dogStake) : null;
-    out.avg_ml_line = Math.round((mlSum / mlBets.length) * 100) / 100;
+    let pSum = 0;
+    for (const r of mlBets) {
+      const am = r.moneyline as number;
+      pSum += am > 0 ? 100 / (am + 100) : -am / (-am + 100);
+    }
+    const meanP = pSum / mlBets.length;
+    const avgAmerican =
+      meanP >= 0.5 ? (-100 * meanP) / (1 - meanP) : (100 * (1 - meanP)) / meanP;
+    out.avg_ml_line = Math.round(avgAmerican * 100) / 100;
   }
 
   const totalBets = dedupeByGamePk(

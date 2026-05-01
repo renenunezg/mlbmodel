@@ -314,7 +314,16 @@ def segment_summary(ledger):
                     out[f"roi_{label}"] = round(pnl / staked, 4) if staked > 0 else None
                     correct_key = "favorites_correct" if label == "favorites" else "underdogs_correct"
                     out[correct_key] = int(sub["won"].sum())
-            out["avg_ml_line"] = round(float(ml["american_odds"].mean()), 2)
+            # Average via implied probability — averaging American odds directly is
+            # meaningless because of the discontinuity at ±100.
+            odds = ml["american_odds"].astype(float)
+            implied = np.where(odds > 0, 100.0 / (odds + 100.0), -odds / (-odds + 100.0))
+            mean_p = float(np.mean(implied))
+            if mean_p >= 0.5:
+                avg_american = -100.0 * mean_p / (1.0 - mean_p)
+            else:
+                avg_american = 100.0 * (1.0 - mean_p) / mean_p
+            out["avg_ml_line"] = round(avg_american, 2)
 
     if "totals_side" in ledger.columns:
         for side in ("over", "under"):
