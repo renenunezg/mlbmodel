@@ -118,11 +118,31 @@ export function PerformanceTabs({
       {/* ============================================================ */}
       <TabsContent value="overview" className="space-y-8">
         <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-baseline gap-x-4 gap-y-3 font-mono text-sm">
-          <KpiCard label="ROI" value={pct(latest?.roi)} />
-          <KpiCard label="Sharpe" value={fmt(latest?.sharpe, 2)} />
-          <KpiCard label="Max DD" value={pct(latest?.max_drawdown)} />
-          <KpiCard label="Brier" value={fmt(latest?.brier_score)} />
-          <KpiCard label="MAE" value={fmt(latest?.mae)} />
+          <KpiCard
+            label="ROI"
+            value={pct(latest?.roi)}
+            tooltip="Profit per dollar risked. ROI = total P&L ÷ total stakes. 13% ROI means 13¢ profit per $1 staked, on average — not 13% of your bankroll."
+          />
+          <KpiCard
+            label="Sharpe"
+            value={fmt(latest?.sharpe, 2)}
+            tooltip="Risk-adjusted return: mean daily P&L ÷ std dev of daily P&L. >1 is good, >2 excellent."
+          />
+          <KpiCard
+            label="Max DD"
+            value={pct(latest?.max_drawdown)}
+            tooltip="Maximum drawdown: largest peak-to-trough decline in cumulative units. The deepest hole the model dug during a losing stretch."
+          />
+          <KpiCard
+            label="Brier"
+            value={fmt(latest?.brier_score)}
+            tooltip="Mean squared error of probabilistic predictions vs binary outcomes. Lower is better; 0.25 is the coin-flip baseline."
+          />
+          <KpiCard
+            label="MAE"
+            value={fmt(latest?.mae)}
+            tooltip="Mean absolute error of expected runs vs actual runs. Lower is better; ~2.5 is typical for MLB run prediction."
+          />
           <KpiCard
             label="Pick Acc"
             value={pct(latest?.total_accuracy)}
@@ -216,14 +236,31 @@ export function PerformanceTabs({
       {/* ============================================================ */}
       <TabsContent value="betting" className="space-y-8">
         <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-baseline gap-x-4 gap-y-3 font-mono text-sm">
-          <KpiCard label="ROI" value={pct(latest?.roi)} />
-          <KpiCard label="Sharpe" value={fmt(latest?.sharpe, 2)} />
-          <KpiCard label="Sortino" value={fmt(latest?.sortino, 2)} />
-          <KpiCard label="Max Drawdown" value={pct(latest?.max_drawdown)} />
+          <KpiCard
+            label="ROI"
+            value={pct(latest?.roi)}
+            tooltip="Profit per dollar risked. ROI = total P&L ÷ total stakes. 13% ROI means the model returns 13¢ profit on every $1 staked, on average. Independent of bankroll size."
+          />
+          <KpiCard
+            label="Sharpe"
+            value={fmt(latest?.sharpe, 2)}
+            tooltip="Risk-adjusted return: mean daily P&L ÷ std dev of daily P&L. Higher is better. >1 is good, >2 is excellent."
+          />
+          <KpiCard
+            label="Sortino"
+            value={fmt(latest?.sortino, 2)}
+            tooltip="Like Sharpe but penalizes only downside volatility. Better metric for asymmetric strategies (gambling, where upside variance is fine)."
+          />
+          <KpiCard
+            label="Max Drawdown"
+            value={pct(latest?.max_drawdown)}
+            tooltip="Largest peak-to-trough decline in cumulative units. A 20% drawdown means at the worst stretch you were down 20% from your previous high."
+          />
           <KpiCard
             label="P&L"
             value={`${fmtSigned(latest?.net_profit_units)}u`}
             sub={`${fmt(latest?.total_staked_units, 2)}u staked`}
+            tooltip="Net profit in units. 1 unit = your chosen bankroll size — if your bankroll is $100, 1u = $100. Stakes shown below are TOTAL summed across all bets in the window, not a single bet. Bankroll never compounds; each bet is sized as a fraction of a fixed 1u."
           />
           <KpiCard
             label="Favorites"
@@ -560,6 +597,9 @@ function DailyBettingHistory({ rows }: { rows: ModelEvaluation[] }) {
           </div>
         ) : null}
       </div>
+      <p className="text-xs text-muted-foreground mb-2 font-mono">
+        Stakes = total units risked summed across all bets that day (not per-bet). 1u = your bankroll. ROI = P&amp;L ÷ Stakes.
+      </p>
       <Table>
         <TableHeader>
           <TableRow>

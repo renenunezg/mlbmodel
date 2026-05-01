@@ -20,6 +20,7 @@ load_dotenv()
 from backend.db import engine
 from backend.data.mlb_api import fetch_schedule, fetch_probable_starters
 from backend.data.fangraphs import fetch_pitcher_stats, fetch_bullpen_stats, fetch_team_batting
+from backend.data.bullpen_daily import update_bullpen_daily
 from backend.data.savant import fetch_park_factors
 from backend.data.odds_api import fetch_odds
 
@@ -332,6 +333,7 @@ def run_evaluation():
 STEPS = [
     ("Schedule & scores", update_scores_and_schedule),
     ("Statcast stats", fetch_statcast_stats),
+    ("Bullpen daily", update_bullpen_daily),
     ("Park factors", fetch_and_load_park_factors),
     ("Odds", fetch_and_load_odds),
     ("Model", run_model),
@@ -343,6 +345,7 @@ STEPS = [
 # No Statcast fetch or park factor reload — morning handles those.
 NIGHTLY_STEPS = [
     ("Schedule & scores", update_scores_and_schedule),
+    ("Bullpen daily", update_bullpen_daily),
     ("Odds", fetch_and_load_odds),
     ("Model", run_model),
     ("Evaluation", run_evaluation),
