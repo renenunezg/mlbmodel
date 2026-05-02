@@ -57,10 +57,17 @@ export default async function HistoryPage({
       ? new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0]
       : "";
 
-  // Build record query (runs in parallel with main pagination query)
+  // Build record query (runs in parallel with main pagination query).
+  // Pull odds + market probabilities so we can revalidate the +EV threshold
+  // here — ev_flag values stored in model_outputs_season can be sub-threshold
+  // due to win_prob rounding or stale odds snapshots.
   let rq = supabase
     .from("model_outputs_season")
-    .select("game_pk, team, win_prob, ev_flag, run_line_ev_flag, total_play, our_total, total");
+    .select(
+      "game_pk, team, win_prob, ev_flag, run_line_ev_flag, total_play, our_total, total, " +
+      "moneyline, spread, spread_odds, p_cover, p_over, p_under, total_over_odds, total_under_odds, " +
+      "kelly_quarter_ml, kelly_quarter_rl, kelly_quarter_total"
+    );
   if (periodDate) rq = rq.gte("date", periodDate);
   if (team) rq = rq.eq("team", team);
 
@@ -105,10 +112,22 @@ export default async function HistoryPage({
     recordGamesMap[g.game_pk] = g;
   }
 
-  // Tally records
+  // Tally records. Mirrors backend/strategy.py thresholds and
+  // backend/evaluate_model.py's _calc_run_line_pick / _calc_total_pick logic
+  // so the History records reconcile with the Performance eval.
+  const ML_THRESHOLD = 0.045;
+  const RL_THRESHOLD = 0.045;
+  const TOT_THRESHOLD = 0.065;
+
+  function americanToImplied(odds: number | null): number | null {
+    if (odds == null) return null;
+    return odds > 0 ? 100 / (odds + 100) : -odds / (-odds + 100);
+  }
+
   let mlWins = 0, mlLosses = 0;
   let rlWins = 0, rlLosses = 0;
   let totalsWins = 0, totalsLosses = 0;
+  const seenTotalsPks = new Set<number>();
 
   for (const row of recordPredictions) {
     const game = recordGamesMap[row.game_pk];
@@ -122,24 +141,45 @@ export default async function HistoryPage({
     const won = teamScore > oppScore;
     const margin = teamScore - oppScore;
 
-    // ML record: only +EV picks
-    if (row.ev_flag !== "No Play") {
-      if (won) mlWins++; else mlLosses++;
+    if (row.ev_flag === row.team && (row.kelly_quarter_ml ?? 0) > 0) {
+      const book = americanToImplied(row.moneyline);
+      if (book != null && row.win_prob - book >= ML_THRESHOLD) {
+        if (won) mlWins++; else mlLosses++;
+      }
     }
 
-    // RL record: +EV run line picks, W = won by 2+ (covers -1.5)
-    if (row.run_line_ev_flag !== "No Play") {
-      if (margin >= 2) rlWins++; else rlLosses++;
+    if (row.run_line_ev_flag === row.team && row.spread != null && (row.kelly_quarter_rl ?? 0) > 0) {
+      const book = americanToImplied(row.spread_odds);
+      const pCover = (row as ModelOutput & { p_cover: number | null }).p_cover;
+      if (book != null && pCover != null && pCover - book >= RL_THRESHOLD) {
+        const covered = row.spread < 0
+          ? margin >= -row.spread
+          : (won || margin >= -row.spread);
+        if (covered) rlWins++; else rlLosses++;
+      }
     }
 
-    // Totals record: Over/Under plays
-    if (row.total_play === "Over" || row.total_play === "Under") {
-      const actualTotal = (game.home_score ?? 0) + (game.away_score ?? 0);
-      const bookTotal = row.total ?? 0;
-      if (row.total_play === "Over") {
-        if (actualTotal > bookTotal) totalsWins++; else if (actualTotal < bookTotal) totalsLosses++;
-      } else {
-        if (actualTotal < bookTotal) totalsWins++; else if (actualTotal > bookTotal) totalsLosses++;
+    if (
+      (row.total_play === "Over" || row.total_play === "Under")
+      && !seenTotalsPks.has(row.game_pk)
+      && (row.kelly_quarter_total ?? 0) > 0
+    ) {
+      const r = row as ModelOutput & {
+        p_over: number | null; p_under: number | null;
+        total_over_odds: number | null; total_under_odds: number | null;
+      };
+      const isOver = row.total_play === "Over";
+      const modelP = isOver ? r.p_over : r.p_under;
+      const book = americanToImplied(isOver ? r.total_over_odds : r.total_under_odds);
+      if (modelP != null && book != null && modelP - book >= TOT_THRESHOLD) {
+        seenTotalsPks.add(row.game_pk);
+        const actualTotal = (game.home_score ?? 0) + (game.away_score ?? 0);
+        const bookTotal = row.total ?? 0;
+        if (isOver) {
+          if (actualTotal > bookTotal) totalsWins++; else if (actualTotal < bookTotal) totalsLosses++;
+        } else {
+          if (actualTotal < bookTotal) totalsWins++; else if (actualTotal > bookTotal) totalsLosses++;
+        }
       }
     }
   }
