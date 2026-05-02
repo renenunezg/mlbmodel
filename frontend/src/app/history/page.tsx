@@ -87,7 +87,7 @@ export default async function HistoryPage({
   const predictions: ModelOutput[] = rows ?? [];
   const totalRows = count ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
-  const recordPredictions: ModelOutput[] = (rRows ?? []) as ModelOutput[];
+  const recordPredictions: ModelOutput[] = (rRows ?? []) as unknown as ModelOutput[];
 
   // Fetch games for both sets of pks in parallel
   const gamePks = [...new Set(predictions.map((p) => p.game_pk))];
