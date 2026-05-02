@@ -31,6 +31,7 @@ from backend.metrics import (
     hit_rate_by_edge_bucket,
 )
 from backend.model import FEATURE_COLS
+from backend.strategy import EV_THRESHOLDS
 
 
 def _calc_run_line_pick(row):
@@ -67,76 +68,96 @@ def _calc_total_pick(row):
 def _build_bet_ledger(eval_df):
     """Build a bet ledger from evaluated predictions.
 
-    Each row where ev_flag or run_line_ev_flag or total_play fired is a bet.
-    Stake = quarter-Kelly fraction of a 1-unit bankroll.
-    Payout = stake * decimal_odds if won, else 0.
+    A row counts as a bet only if the relevant ev_flag fired, the recomputed
+    edge still meets EV_THRESHOLDS (stored win_prob is rounded, so flag-time
+    edge can drift below threshold), and quarter-Kelly stake > 0. Totals are
+    deduped per game_pk because eval_df has one row per (game_pk, team).
     """
     rows = []
+    seen_total_pks = set()
 
     for _, r in eval_df.iterrows():
         date = r.get("game_date", r.get("date"))
 
-        # Moneyline bets
+        # Moneyline
         if r.get("ev_flag") == r.get("team") and pd.notna(r.get("moneyline")):
             dec_odds = american_to_decimal(r["moneyline"])
-            stake = r.get("kelly_quarter_ml", 0)
-            if pd.isna(stake) or stake <= 0:
-                stake = 0.01  # minimum bet
-            won = bool(r.get("actual_win") == 1)
-            edge = r.get("win_prob", 0.5) - (1 / dec_odds if dec_odds else 0.5)
-            rows.append({
-                "date": date, "bet_type": "ml", "team": r["team"],
-                "game_pk": r["game_pk"], "stake": float(stake),
-                "decimal_odds": float(dec_odds), "won": won,
-                "payout": float(stake * dec_odds) if won else 0.0,
-                "edge": float(edge) if pd.notna(edge) else 0.0,
-                "american_odds": float(r["moneyline"]),
-                "totals_side": None,
-            })
+            stake = r.get("kelly_quarter_ml")
+            wp = r.get("win_prob")
+            if (
+                dec_odds
+                and pd.notna(stake) and stake > 0
+                and pd.notna(wp)
+            ):
+                edge = float(wp) - 1.0 / dec_odds
+                if edge >= EV_THRESHOLDS["ml"]:
+                    won = bool(r.get("actual_win") == 1)
+                    rows.append({
+                        "date": date, "bet_type": "ml", "team": r["team"],
+                        "game_pk": r["game_pk"], "stake": float(stake),
+                        "decimal_odds": float(dec_odds), "won": won,
+                        "payout": float(stake * dec_odds) if won else 0.0,
+                        "edge": edge,
+                        "american_odds": float(r["moneyline"]),
+                        "totals_side": None,
+                    })
 
-        # Run line bets
+        # Run line
         if r.get("run_line_ev_flag") == r.get("team") and pd.notna(r.get("spread_odds")):
             dec_odds = american_to_decimal(r["spread_odds"])
-            stake = r.get("kelly_quarter_rl", 0)
-            if pd.isna(stake) or stake <= 0:
-                stake = 0.01
-            # Did the team cover?
-            rl_correct = _calc_run_line_pick(r)
-            won = bool(rl_correct == 1) if pd.notna(rl_correct) else False
-            edge = (r.get("p_cover") or 0.5) - (1 / dec_odds if dec_odds else 0.5)
-            rows.append({
-                "date": date, "bet_type": "rl", "team": r["team"],
-                "game_pk": r["game_pk"], "stake": float(stake),
-                "decimal_odds": float(dec_odds), "won": won,
-                "payout": float(stake * dec_odds) if won else 0.0,
-                "edge": float(edge) if pd.notna(edge) else 0.0,
-                "american_odds": None,
-                "totals_side": None,
-            })
+            stake = r.get("kelly_quarter_rl")
+            p_cover = r.get("p_cover")
+            if (
+                dec_odds
+                and pd.notna(stake) and stake > 0
+                and pd.notna(p_cover)
+            ):
+                edge = float(p_cover) - 1.0 / dec_odds
+                if edge >= EV_THRESHOLDS["rl"]:
+                    rl_correct = _calc_run_line_pick(r)
+                    won = bool(rl_correct == 1) if pd.notna(rl_correct) else False
+                    rows.append({
+                        "date": date, "bet_type": "rl", "team": r["team"],
+                        "game_pk": r["game_pk"], "stake": float(stake),
+                        "decimal_odds": float(dec_odds), "won": won,
+                        "payout": float(stake * dec_odds) if won else 0.0,
+                        "edge": edge,
+                        "american_odds": None,
+                        "totals_side": None,
+                    })
 
-        # Totals bets
-        if r.get("total_play") in ("Over", "Under") and pd.notna(r.get("game_total")):
+        # Totals (deduped per game_pk)
+        if (
+            r.get("total_play") in ("Over", "Under")
+            and pd.notna(r.get("game_total"))
+            and r["game_pk"] not in seen_total_pks
+        ):
             direction = r["total_play"].strip().lower()
             odds_col = "total_over_odds" if direction == "over" else "total_under_odds"
             book_odds = r.get(odds_col)
-            if pd.notna(book_odds):
+            stake = r.get("kelly_quarter_total")
+            model_p = r.get("p_over") if direction == "over" else r.get("p_under")
+            if (
+                pd.notna(book_odds)
+                and pd.notna(stake) and stake > 0
+                and pd.notna(model_p)
+            ):
                 dec_odds = american_to_decimal(book_odds)
-                stake = r.get("kelly_quarter_total", 0)
-                if pd.isna(stake) or stake <= 0:
-                    stake = 0.01
-                total_correct = _calc_total_pick(r)
-                won = bool(total_correct == 1) if pd.notna(total_correct) else False
-                model_p = r.get("p_over") if direction == "over" else r.get("p_under")
-                edge = (model_p or 0.5) - (1 / dec_odds if dec_odds else 0.5)
-                rows.append({
-                    "date": date, "bet_type": "total", "team": r["team"],
-                    "game_pk": r["game_pk"], "stake": float(stake),
-                    "decimal_odds": float(dec_odds), "won": won,
-                    "payout": float(stake * dec_odds) if won else 0.0,
-                    "edge": float(edge) if pd.notna(edge) else 0.0,
-                    "american_odds": None,
-                    "totals_side": direction,
-                })
+                if dec_odds:
+                    edge = float(model_p) - 1.0 / dec_odds
+                    if edge >= EV_THRESHOLDS["totals"]:
+                        seen_total_pks.add(r["game_pk"])
+                        total_correct = _calc_total_pick(r)
+                        won = bool(total_correct == 1) if pd.notna(total_correct) else False
+                        rows.append({
+                            "date": date, "bet_type": "total", "team": r["team"],
+                            "game_pk": r["game_pk"], "stake": float(stake),
+                            "decimal_odds": float(dec_odds), "won": won,
+                            "payout": float(stake * dec_odds) if won else 0.0,
+                            "edge": edge,
+                            "american_odds": None,
+                            "totals_side": direction,
+                        })
 
     return pd.DataFrame(rows) if rows else pd.DataFrame(
         columns=["date", "bet_type", "team", "game_pk", "stake",
@@ -238,32 +259,27 @@ def _write_experiment_run(cv_metrics, best_params):
         })
 
 
-def _compute_base_row(window_df):
-    """Compute accuracy counts for a given window of evaluated predictions."""
+def _compute_base_row(window_df, window_ledger):
+    """Accuracy counts for a window. Bet-level counts come from the ledger
+    so they always agree with the ROI / segment metrics."""
     total_correct = int((window_df["pred_win"] == window_df["actual_win"]).sum())
     total_predictions = len(window_df)
     runs_mae = abs(window_df["expected_runs"] - window_df["actual_runs"]).mean()
 
-    # Moneyline picks
-    ml_plays = window_df[window_df["ev_flag"] == window_df["team"]].drop_duplicates(subset=["game_pk"])
-    ml_correct = int((ml_plays["actual_win"] == 1).sum())
-    ml_total = len(ml_plays)
+    if window_ledger is not None and not window_ledger.empty:
+        ml_bets = window_ledger[window_ledger["bet_type"] == "ml"]
+        rl_bets = window_ledger[window_ledger["bet_type"] == "rl"]
+        totals_bets = window_ledger[window_ledger["bet_type"] == "total"]
+    else:
+        empty = pd.DataFrame(columns=["won"])
+        ml_bets = rl_bets = totals_bets = empty
+
+    ml_total = len(ml_bets); ml_correct = int(ml_bets["won"].sum()) if ml_total else 0
+    rl_total = len(rl_bets); rl_correct = int(rl_bets["won"].sum()) if rl_total else 0
+    totals_total = len(totals_bets); totals_correct = int(totals_bets["won"].sum()) if totals_total else 0
+
     ml_accuracy = ml_correct / ml_total if ml_total > 0 else np.nan
-
-    # Run line picks
-    rl_plays = window_df[window_df["run_line_ev_flag"] == window_df["team"]].drop_duplicates(subset=["game_pk"])
-    rl_plays = rl_plays.copy()
-    rl_plays["run_line_correct"] = rl_plays.apply(_calc_run_line_pick, axis=1)
-    rl_correct = int(rl_plays["run_line_correct"].sum()) if not rl_plays.empty else 0
-    rl_total = int(rl_plays["run_line_correct"].notna().sum())
     rl_accuracy = rl_correct / rl_total if rl_total > 0 else np.nan
-
-    # Totals picks (one row per game — dedupe on game_pk, take the row with a total_play)
-    totals_plays = window_df[window_df["total_play"].isin(["Over", "Under"])].drop_duplicates(subset=["game_pk"])
-    totals_plays = totals_plays.copy()
-    totals_plays["total_correct"] = totals_plays.apply(_calc_total_pick, axis=1)
-    totals_correct = int(totals_plays["total_correct"].sum()) if not totals_plays.empty else 0
-    totals_total = int(totals_plays["total_correct"].notna().sum())
     totals_accuracy = totals_correct / totals_total if totals_total > 0 else np.nan
 
     return {
@@ -379,8 +395,14 @@ def main(model=None, cv_metrics=None, best_params=None):
         if window_df.empty:
             continue
 
-        # Compute base_row per window so counts match the time period
-        base_row = _compute_base_row(window_df)
+        # Build window ledger first; base_row counts are derived from it.
+        if not ledger.empty:
+            window_dates = set(window_df["game_date"].dt.date)
+            window_ledger = ledger[ledger["date"].dt.date.isin(window_dates)]
+        else:
+            window_ledger = pd.DataFrame(columns=ledger.columns if not ledger.empty else [])
+
+        base_row = _compute_base_row(window_df, window_ledger)
 
         y_true = window_df["actual_runs"].values.astype(float)
         y_pred = window_df["expected_runs"].values.astype(float)
@@ -390,13 +412,7 @@ def main(model=None, cv_metrics=None, best_params=None):
         reg = regression_summary(y_true, y_pred)
         prob = probabilistic_summary(probs, outcomes, y_pred, y_true)
 
-        # Financial metrics for this window
-        if not ledger.empty:
-            window_dates = set(window_df["game_date"].dt.date)
-            window_ledger = ledger[ledger["date"].dt.date.isin(window_dates)]
-        else:
-            window_ledger = pd.DataFrame(columns=ledger.columns if not ledger.empty else [])
-
+        # Financial metrics for this window (window_ledger built above)
         fin = financial_summary(window_ledger) if not window_ledger.empty else {}
         seg = segment_summary(window_ledger)
 

@@ -86,6 +86,10 @@ export interface ModelEvaluation {
   unders_predictions: number | null;
   overs_roi: number | null;
   unders_roi: number | null;
+  roi_run_line: number | null;
+  n_run_line: number | null;
+  run_line_bets_correct: number | null;
+  predictions_rewritten: boolean | null;
 }
 
 export interface CalibrationBin {
