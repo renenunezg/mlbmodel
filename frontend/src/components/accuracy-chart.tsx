@@ -31,8 +31,8 @@ function formatPercent(value: number) {
 export function AccuracyChart({ data }: AccuracyChartProps) {
   const [isolated, setIsolated] = useState<SeriesKey | null>(null);
   const isHidden = (key: SeriesKey) => isolated !== null && isolated !== key;
-  const handleLegendClick = (entry: { dataKey?: string | number }) => {
-    const key = entry.dataKey as SeriesKey | undefined;
+  const handleLegendClick = (entry: { dataKey?: string | number | ((obj: unknown) => unknown) }) => {
+    const key = typeof entry.dataKey === "string" ? (entry.dataKey as SeriesKey) : null;
     if (!key) return;
     setIsolated((prev) => (prev === key ? null : key));
   };
