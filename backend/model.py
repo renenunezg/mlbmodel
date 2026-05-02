@@ -271,10 +271,18 @@ def _upsert_season_outputs(df):
     col_names = ", ".join(cols)
     update_set = ", ".join([f"{c} = EXCLUDED.{c}" for c in cols if c not in ("game_pk", "team")])
 
+    # Once a game leaves Preview (goes Live or Final), its prediction row is
+    # read-only. INSERTs for new game_pks are unaffected. Without this guard,
+    # a mid-day hand-run rewrites bets that were already in flight.
     sql = f"""
         INSERT INTO model_outputs_season ({col_names})
         VALUES ({placeholders})
         ON CONFLICT (game_pk, team) DO UPDATE SET {update_set}
+        WHERE EXISTS (
+            SELECT 1 FROM games g
+            WHERE g.game_pk = model_outputs_season.game_pk
+              AND g.status = 'Preview'
+        )
     """
 
     def _coerce(val):

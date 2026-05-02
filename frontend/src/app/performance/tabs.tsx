@@ -130,8 +130,8 @@ export function PerformanceTabs({
           />
           <KpiCard
             label="Max DD"
-            value={pct(latest?.max_drawdown)}
-            tooltip="Maximum drawdown: largest peak-to-trough decline in cumulative units. The deepest hole the model dug during a losing stretch."
+            value={latest?.max_drawdown != null ? `${fmtSigned(latest.max_drawdown)}u` : "—"}
+            tooltip="Worst peak-to-trough decline of cumulative P&L, in units. With flat 1u stake sizing (no compounding), drawdown is reported in absolute units rather than as a % of equity — a Kelly-style % would misrepresent a non-compounding strategy."
           />
           <KpiCard
             label="Brier"
@@ -253,8 +253,8 @@ export function PerformanceTabs({
           />
           <KpiCard
             label="Max Drawdown"
-            value={pct(latest?.max_drawdown)}
-            tooltip="Largest peak-to-trough decline in cumulative units. A 20% drawdown means at the worst stretch you were down 20% from your previous high."
+            value={latest?.max_drawdown != null ? `${fmtSigned(latest.max_drawdown)}u` : "—"}
+            tooltip="Worst peak-to-trough decline of cumulative P&L, in units. Stakes are flat fractions of a fixed 1u base (no compounding), so reporting drawdown as a % of running equity (the Kelly-style metric) would be misleading."
           />
           <KpiCard
             label="P&L"
@@ -271,6 +271,12 @@ export function PerformanceTabs({
             label="Underdogs"
             value={pct(latest?.roi_underdogs)}
             sub={`(${latest?.underdogs_correct ?? 0}-${(latest?.n_underdogs ?? 0) - (latest?.underdogs_correct ?? 0)})`}
+          />
+          <KpiCard
+            label="Run Line"
+            value={pct(latest?.roi_run_line)}
+            sub={`(${latest?.run_line_bets_correct ?? 0}-${(latest?.n_run_line ?? 0) - (latest?.run_line_bets_correct ?? 0)})`}
+            tooltip="Run-line bet ROI. Computed from the same ledger as the headline ROI; bets sized via quarter-Kelly on the model's cover probability vs. book spread odds."
           />
           <KpiCard label="Avg Line" value={fmtAmerican(latest?.avg_ml_line)} />
           <KpiCard
@@ -494,7 +500,17 @@ function EvalHistoryTable({ rows }: { rows: ModelEvaluation[] }) {
         <TableBody>
           {visible.map((row) => (
             <TableRow key={row.date}>
-              <TableCell className="font-medium">{row.date}</TableCell>
+              <TableCell className="font-medium">
+                {row.date}
+                {row.predictions_rewritten ? (
+                  <span
+                    className="ml-2 inline-block rounded-sm border border-amber-500/40 bg-amber-500/10 px-1.5 py-0 text-[10px] font-mono uppercase tracking-wider text-amber-600 dark:text-amber-400"
+                    title="Predictions for this day were overwritten by a later hand-run with a different model. Eval is computed against the rewritten predictions, not what was live on the day."
+                  >
+                    recomputed
+                  </span>
+                ) : null}
+              </TableCell>
               <TableCell>
                 {row.total_correct}/{row.total_predictions}{" "}
                 <span className="text-muted-foreground">

@@ -99,9 +99,9 @@ def test_max_drawdown_flat():
 
 def test_max_drawdown_known():
     eq = np.array([1.0, 1.1, 0.9, 1.0])
-    # Peak = 1.1, trough = 0.9 → DD = (0.9-1.1)/1.1 ≈ -0.1818
+    # Peak 1.1 to trough 0.9 = -0.2u (absolute, since stakes are flat 1u-based).
     dd = max_drawdown(eq)
-    assert abs(dd - (-0.1818)) < 0.001
+    assert abs(dd - (-0.2)) < 1e-9
 
 
 def test_equity_curve_from_ledger():
