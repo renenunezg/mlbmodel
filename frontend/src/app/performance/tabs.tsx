@@ -152,7 +152,7 @@ export function PerformanceTabs({
 
         <div className="border-t border-border pt-6">
           <h2 className="font-heading text-lg mb-4">Accuracy Over Time</h2>
-          <AccuracyChart data={dailyEvals} />
+          <AccuracyChart data={dailyEvals.filter((d) => d.date >= "2026-04-12")} />
         </div>
 
         <div className="border-t border-border pt-6">
