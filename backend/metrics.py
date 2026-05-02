@@ -225,15 +225,16 @@ def sortino_ratio(ledger, annual_factor=252):
 
 
 def max_drawdown(equity_curve):
-    """Maximum peak-to-trough percentage decline.
-
-    equity_curve: array-like of cumulative equity values.
+    """Worst peak-to-trough decline of cumulative P&L, in units.
+    Reported as units rather than % because stakes are flat fractions of a
+    fixed 1u base (no compounding), so a Kelly-style % of running equity
+    would misrepresent the strategy.
     """
     eq = np.asarray(equity_curve, dtype=float)
     if len(eq) < 2:
         return np.nan
     running_max = np.maximum.accumulate(eq)
-    drawdowns = (eq - running_max) / running_max
+    drawdowns = eq - running_max
     return round(float(drawdowns.min()), 4)
 
 
@@ -296,9 +297,20 @@ def segment_summary(ledger):
         "avg_ml_line": None,
         "overs_correct": 0, "overs_predictions": 0, "overs_roi": None,
         "unders_correct": 0, "unders_predictions": 0, "unders_roi": None,
+        "roi_run_line": None, "n_run_line": 0, "run_line_bets_correct": 0,
     }
     if ledger is None or ledger.empty:
         return out
+
+    if "bet_type" in ledger.columns:
+        rl = ledger[ledger["bet_type"] == "rl"]
+        n = int(len(rl))
+        out["n_run_line"] = n
+        if n > 0:
+            staked = float(rl["stake"].sum())
+            pnl = float(rl["payout"].sum() - staked)
+            out["roi_run_line"] = round(pnl / staked, 4) if staked > 0 else None
+            out["run_line_bets_correct"] = int(rl["won"].sum())
 
     if "american_odds" in ledger.columns:
         ml = ledger[ledger["american_odds"].notna()].copy()
