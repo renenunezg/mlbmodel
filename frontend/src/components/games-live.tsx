@@ -107,7 +107,7 @@ export function GamesLive({ initial }: { initial: GameMatchup[] }) {
   }, [allFinal(matchups)]);
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       {matchups.map((matchup) => (
         <GameCard key={matchup.game_pk} matchup={matchup} />
       ))}

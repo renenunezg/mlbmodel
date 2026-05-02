@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { ModelEvaluation } from "@/lib/types";
 import {
   LineChart,
@@ -16,6 +17,8 @@ interface AccuracyChartProps {
   data: ModelEvaluation[];
 }
 
+type SeriesKey = "ml_accuracy" | "run_line_accuracy" | "totals_accuracy" | "total_accuracy";
+
 function formatDateLabel(dateStr: string) {
   const date = new Date(dateStr + "T00:00:00");
   return date.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
@@ -26,6 +29,14 @@ function formatPercent(value: number) {
 }
 
 export function AccuracyChart({ data }: AccuracyChartProps) {
+  const [isolated, setIsolated] = useState<SeriesKey | null>(null);
+  const isHidden = (key: SeriesKey) => isolated !== null && isolated !== key;
+  const handleLegendClick = (entry: { dataKey?: string | number }) => {
+    const key = entry.dataKey as SeriesKey | undefined;
+    if (!key) return;
+    setIsolated((prev) => (prev === key ? null : key));
+  };
+
   return (
     <ResponsiveContainer width="100%" height={400}>
       <LineChart
@@ -57,7 +68,10 @@ export function AccuracyChart({ data }: AccuracyChartProps) {
             fontSize: "12px",
           }}
         />
-        <Legend wrapperStyle={{ fontFamily: "var(--font-geist-mono)", fontSize: "11px" }} />
+        <Legend
+          wrapperStyle={{ fontFamily: "var(--font-geist-mono)", fontSize: "11px", cursor: "pointer" }}
+          onClick={handleLegendClick}
+        />
         <Line
           type="monotone"
           dataKey="ml_accuracy"
@@ -66,6 +80,7 @@ export function AccuracyChart({ data }: AccuracyChartProps) {
           strokeWidth={1.5}
           dot={false}
           activeDot={{ r: 3 }}
+          hide={isHidden("ml_accuracy")}
         />
         <Line
           type="monotone"
@@ -75,6 +90,7 @@ export function AccuracyChart({ data }: AccuracyChartProps) {
           strokeWidth={1.5}
           dot={false}
           activeDot={{ r: 3 }}
+          hide={isHidden("run_line_accuracy")}
         />
         <Line
           type="monotone"
@@ -84,6 +100,7 @@ export function AccuracyChart({ data }: AccuracyChartProps) {
           strokeWidth={1.5}
           dot={false}
           activeDot={{ r: 3 }}
+          hide={isHidden("totals_accuracy")}
         />
         <Line
           type="monotone"
@@ -94,6 +111,7 @@ export function AccuracyChart({ data }: AccuracyChartProps) {
           strokeDasharray="4 2"
           dot={false}
           activeDot={{ r: 3 }}
+          hide={isHidden("total_accuracy")}
         />
       </LineChart>
     </ResponsiveContainer>
