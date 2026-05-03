@@ -1,6 +1,6 @@
 """Comprehensive model evaluation metrics: regression, probabilistic, financial.
 
-All functions are pure (no DB access) — they receive arrays/DataFrames and return
+All functions are pure (no DB access) - they receive arrays/DataFrames and return
 scalars or dicts. The caller (evaluate_model.py) is responsible for persistence.
 """
 import numpy as np
@@ -95,7 +95,7 @@ def log_loss(probs, outcomes, eps=1e-7):
 
 
 def sharpness(probs):
-    """Variance of predicted probabilities — measures decisiveness."""
+    """Variance of predicted probabilities - measures decisiveness."""
     probs = np.asarray(probs, dtype=float)
     valid = probs[~np.isnan(probs)]
     return float(np.var(valid)) if len(valid) > 0 else np.nan
@@ -326,7 +326,7 @@ def segment_summary(ledger):
                     out[f"roi_{label}"] = round(pnl / staked, 4) if staked > 0 else None
                     correct_key = "favorites_correct" if label == "favorites" else "underdogs_correct"
                     out[correct_key] = int(sub["won"].sum())
-            # Average via implied probability — averaging American odds directly is
+            # Average via implied probability - averaging American odds directly is
             # meaningless because of the discontinuity at ±100.
             odds = ml["american_odds"].astype(float)
             implied = np.where(odds > 0, 100.0 / (odds + 100.0), -odds / (-odds + 100.0))

@@ -18,7 +18,7 @@ model versions cleanly.
 ## Files to change
 
 ### 1. `backend/metrics.py`
-Add a new function (do **not** modify the existing one — it's used for the
+Add a new function (do **not** modify the existing one - it's used for the
 flat-bankroll measurement):
 
 ```python
@@ -78,8 +78,8 @@ Add `equity_end_compounded: number | null` to `ModelEvaluation` interface.
 
 ### 5. `frontend/src/components/equity-curve-chart.tsx`
 Currently plots `equity_end_units`. Update to plot **two lines**:
-- "Flat (1u bankroll, no compound)" — existing series
-- "Compounded (re-Kelly)" — new series
+- "Flat (1u bankroll, no compound)" - existing series
+- "Compounded (re-Kelly)" - new series
 
 Use distinct colors and a legend. Same y-axis (units). Both start at 1.0.
 
@@ -108,7 +108,7 @@ In the Betting tab KPI grid, add a new card:
 
 ### 8. Not in scope (intentional)
 - **Don't** change `kelly_quarter_*` or any other production sizing field.
-- **Don't** rip out the flat curve — it's still the right metric for cross-model comparison.
+- **Don't** rip out the flat curve - it's still the right metric for cross-model comparison.
 - **Don't** model sportsbook minimum bets unless we see the floor matter empirically (it shouldn't above ~$500 starting bankroll).
 
 ## Estimated effort

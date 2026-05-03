@@ -16,7 +16,7 @@ from backend.team_mappings import normalize_team
 import warnings
 warnings.filterwarnings("ignore")
 
-# FIP constant — league-wide reconciliation factor (~3.10-3.20 historically).
+# FIP constant - league-wide reconciliation factor (~3.10-3.20 historically).
 # Updated each season.
 DEFAULT_FIP_CONSTANT = 3.15
 
@@ -206,7 +206,7 @@ def _compute_pitcher_stats(pitch_df: pd.DataFrame, pitcher_ids: set = None,
         # Pitcher throwing hand (for bullpen RHP-share aggregation).
         p_throws = group["p_throws"].iloc[0] if "p_throws" in group.columns and not group["p_throws"].empty else None
 
-        # Avg IP per start — only meaningful for starters. Counts games where this
+        # Avg IP per start - only meaningful for starters. Counts games where this
         # pitcher recorded at least 6 outs (2 IP) to exclude bullpen appearances.
         avg_ip_per_start = np.nan
         if per_game_outs is not None and pitcher_id in starter_ids:
@@ -274,7 +274,7 @@ def _get_prior_season_pitcher_stats() -> pd.DataFrame:
     if "game_type" in pitch_df.columns:
         pitch_df = pitch_df[pitch_df["game_type"] == "R"]
 
-    # Compute stats for all pitchers (not just starters — they might start next year)
+    # Compute stats for all pitchers (not just starters - they might start next year)
     df = _compute_pitcher_stats(pitch_df)
     if df.empty:
         return pd.DataFrame()
@@ -353,7 +353,7 @@ def fetch_bullpen_stats(season: int = None) -> pd.DataFrame:
 
     pitch_df = _get_statcast_range()
     if pitch_df.empty:
-        print("No Statcast data — cannot compute bullpen stats.")
+        print("No Statcast data - cannot compute bullpen stats.")
         return pd.DataFrame(columns=["team", "xfip", "k_9", "season"])
 
     starter_ids = _identify_starters(pitch_df)
@@ -414,7 +414,7 @@ def fetch_team_batting(season: int = None) -> pd.DataFrame:
 
     pitch_df = _get_statcast_range()
     if pitch_df.empty:
-        print("No Statcast data — cannot compute team batting.")
+        print("No Statcast data - cannot compute team batting.")
         return pd.DataFrame(columns=["team", "split", "wrc_plus", "iso", "k_pct", "ops", "obp", "season"])
 
     pa_df = pitch_df[pitch_df["events"].notna()].copy()

@@ -1,14 +1,14 @@
 """Comeback-loss analysis.
 
 Question: of the games where our model's pick lost, what fraction were
-'comeback losses' — games where our pick was leading or tied through the
+'comeback losses' - games where our pick was leading or tied through the
 end of inning 5, and lost due to runs scored in innings 6-9+?
 
 If the share is high, bullpen volatility is hurting the model and a first-5
 or bullpen-aware framing might be worth exploring.
 
 Also produces a per-inning run distribution (how scoring is distributed
-across innings — context for the bullpen story).
+across innings - context for the bullpen story).
 
 Read-only.
 """
@@ -189,7 +189,7 @@ def main() -> None:
         f"| Pick was leading | {n_comeback} | **{pct_comeback:.1f}%** |\n"
         f"| Pick was tied    | {n_tied} | {pct_tied:.1f}% |\n"
         f"| Pick was trailing | {n_trailing} | {pct_trailing:.1f}% |\n\n"
-        f"**{pct_comeback:.1f}%** of model losses were *comeback losses* — pick led after 5, lost the game.\n\n"
+        f"**{pct_comeback:.1f}%** of model losses were *comeback losses* - pick led after 5, lost the game.\n\n"
         "## Comeback-loss rate by model confidence\n\n"
         f"| Confidence | Losses | Comeback losses | Comeback rate |\n|---|---|---|---|\n"
         + "".join(
@@ -198,11 +198,11 @@ def main() -> None:
         )
         + "\n"
         "## Files\n\n"
-        "- `comeback_breakdown.png` — bar chart of where losses come from\n"
-        "- `runs_per_inning.png` — total runs/game by inning (regulation)\n"
-        "- `runs_distribution_by_inning.png` — boxplot of runs per inning\n"
-        "- `comeback_rate_by_confidence.csv` — does it concentrate in high-confidence picks?\n"
-        "- `games_detail.csv` — per-game detail for follow-up\n"
+        "- `comeback_breakdown.png` - bar chart of where losses come from\n"
+        "- `runs_per_inning.png` - total runs/game by inning (regulation)\n"
+        "- `runs_distribution_by_inning.png` - boxplot of runs per inning\n"
+        "- `comeback_rate_by_confidence.csv` - does it concentrate in high-confidence picks?\n"
+        "- `games_detail.csv` - per-game detail for follow-up\n"
     )
     write_summary(out, "Comeback losses & inning run distribution", summary)
     print(f"\nLosses: {n_losses}  | Comeback losses: {n_comeback} ({pct_comeback:.1f}%)")

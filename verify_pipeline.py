@@ -39,7 +39,7 @@ def main():
     yesterday = today - timedelta(days=1)
     week_ago = today - timedelta(days=7)
 
-    print(f"Verification — {today}")
+    print(f"Verification - {today}")
     print("=" * 50)
 
     with engine.connect() as conn:
@@ -181,7 +181,7 @@ def main():
             check("rhp_ip_share bounds", False, warning_only=is_early)
 
         # 16. rhp_ip_share has meaningful variance across teams
-        # (std > 0.03 — catches a bug where everything collapses to a constant)
+        # (std > 0.03 - catches a bug where everything collapses to a constant)
         bp_std = conn.execute(text("""
             SELECT STDDEV(rhp_ip_share) FROM bullpen_stats WHERE rhp_ip_share IS NOT NULL
         """)).scalar()

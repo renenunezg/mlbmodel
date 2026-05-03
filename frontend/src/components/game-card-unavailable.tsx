@@ -41,19 +41,19 @@ export function GameCardUnavailable({ game }: GameCardUnavailableProps) {
                 </span>
               </div>
               <div className="text-center">
-                <div className="tabular-nums text-muted-foreground">—</div>
+                <div className="tabular-nums text-muted-foreground">-</div>
                 <div className="text-[10px] text-muted-foreground">xR</div>
               </div>
               <div className="text-center">
-                <div className="tabular-nums text-muted-foreground">—</div>
+                <div className="tabular-nums text-muted-foreground">-</div>
                 <div className="text-[10px] text-muted-foreground">Win</div>
               </div>
               <div className="text-center">
-                <div className="tabular-nums text-muted-foreground">—</div>
+                <div className="tabular-nums text-muted-foreground">-</div>
                 <div className="text-[10px] text-muted-foreground">Edge</div>
               </div>
               <div className="hidden text-center sm:block">
-                <div className="tabular-nums text-muted-foreground">—</div>
+                <div className="tabular-nums text-muted-foreground">-</div>
                 <div className="text-[10px] text-muted-foreground">Model / Book</div>
               </div>
               <div />

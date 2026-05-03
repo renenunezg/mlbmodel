@@ -31,14 +31,14 @@ export function EvBadge({ prediction }: EvBadgeProps) {
     <div className="flex items-center gap-1 font-mono text-xs font-medium whitespace-nowrap">
       {/* Slot 1: ML Kelly % */}
       <div className="w-10 text-center">
-        <div className="tabular-nums">{mlValue ? <span className="text-positive">{mlValue}</span> : <span className="invisible">—</span>}</div>
-        <div className="text-[10px] font-normal text-muted-foreground">{mlValue ? "Kelly" : <span className="invisible">—</span>}</div>
+        <div className="tabular-nums">{mlValue ? <span className="text-positive">{mlValue}</span> : <span className="invisible">-</span>}</div>
+        <div className="text-[10px] font-normal text-muted-foreground">{mlValue ? "Kelly" : <span className="invisible">-</span>}</div>
       </div>
 
       {/* Slot 2: Run line spread + RL label */}
       <div className="w-8 text-center">
-        <div className="tabular-nums">{rl ? <span className="text-accent-blue">{fmtSpread(prediction.spread)}</span> : <span className="invisible">—</span>}</div>
-        <div className="text-[10px] font-normal text-muted-foreground">{rl ? "RL" : <span className="invisible">—</span>}</div>
+        <div className="tabular-nums">{rl ? <span className="text-accent-blue">{fmtSpread(prediction.spread)}</span> : <span className="invisible">-</span>}</div>
+        <div className="text-[10px] font-normal text-muted-foreground">{rl ? "RL" : <span className="invisible">-</span>}</div>
       </div>
 
       {/* Slot 3: Totals + O/U label, or VAR */}
@@ -53,12 +53,12 @@ export function EvBadge({ prediction }: EvBadgeProps) {
         ) : variance ? (
           <>
             <div className="text-negative">VAR</div>
-            <div className="text-[10px] font-normal text-muted-foreground invisible">—</div>
+            <div className="text-[10px] font-normal text-muted-foreground invisible">-</div>
           </>
         ) : (
           <>
-            <div className="invisible">—</div>
-            <div className="text-[10px] invisible">—</div>
+            <div className="invisible">-</div>
+            <div className="text-[10px] invisible">-</div>
           </>
         )}
       </div>

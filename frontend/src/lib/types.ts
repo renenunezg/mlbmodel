@@ -127,7 +127,7 @@ export interface GameMatchup {
   home_score: number | null;
   away_score: number | null;
   status: string | null;
-  // Optional live fields — populated by /api/live-scores polling, not in DB
+  // Optional live fields - populated by /api/live-scores polling, not in DB
   current_inning?: number | null;
   inning_state?: string | null;
 }

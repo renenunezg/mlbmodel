@@ -26,7 +26,7 @@ def kelly_fraction(p_model, decimal_odds):
     """Full Kelly fraction: optimal bet size as fraction of bankroll.
 
     f* = (p * b - q) / b  where b = decimal_odds - 1, q = 1 - p.
-    Clipped to [0, 1] — never recommend shorting or betting > bankroll.
+    Clipped to [0, 1] - never recommend shorting or betting > bankroll.
     """
     if pd.isna(p_model) or pd.isna(decimal_odds):
         return np.nan

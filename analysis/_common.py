@@ -1,6 +1,6 @@
 """Shared utilities for analysis scripts.
 
-Read-only — do not write to the database from analysis code.
+Read-only - do not write to the database from analysis code.
 """
 from __future__ import annotations
 
