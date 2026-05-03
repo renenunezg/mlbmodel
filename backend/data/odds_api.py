@@ -106,7 +106,7 @@ def fetch_odds(books: list[str] = None) -> pd.DataFrame:
     # Log remaining API credits
     remaining = resp.headers.get("x-requests-remaining", "?")
     used = resp.headers.get("x-requests-used", "?")
-    print(f"Odds API credits — used: {used}, remaining: {remaining}")
+    print(f"Odds API credits - used: {used}, remaining: {remaining}")
 
     events = resp.json()
     rows = []

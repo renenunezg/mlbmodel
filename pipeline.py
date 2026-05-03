@@ -144,7 +144,7 @@ def update_scores_and_schedule():
         print("  No starters matched to games in DB")
         return
 
-    # Deduplicate — keep last entry per (game_pk, team) to avoid unique constraint violations
+    # Deduplicate - keep last entry per (game_pk, team) to avoid unique constraint violations
     starters = starters.drop_duplicates(subset=["game_pk", "team"], keep="last")
 
     with engine.begin() as conn:
@@ -225,7 +225,7 @@ def fetch_and_load_odds():
     """Fetch odds and match to game_pk via team name.
 
     The Odds API doesn't provide game_pk, so we match by team name against
-    today's/tomorrow's games. Doubleheaders are an edge case — team name alone
+    today's/tomorrow's games. Doubleheaders are an edge case - team name alone
     can't distinguish Game 1 vs Game 2, but game_pk keeps them separate in the DB
     once matched. For doubleheaders, the last game_pk wins (usually Game 2).
     """
@@ -262,7 +262,7 @@ def fetch_and_load_odds():
             return None
         if len(candidates) == 1:
             return candidates[0][0]
-        # Multiple games (doubleheader) — pick closest by start time
+        # Multiple games (doubleheader) - pick closest by start time
         if pd.notna(commence_time):
             ct = pd.to_datetime(commence_time)
             best_pk, best_diff = None, None
@@ -294,7 +294,7 @@ def fetch_and_load_odds():
     if "scraped_at" not in insert_df.columns:
         insert_df["scraped_at"] = pd.Timestamp.utcnow()
 
-    # Drop duplicate (game_pk, team, book) rows — keep last (most recent)
+    # Drop duplicate (game_pk, team, book) rows - keep last (most recent)
     key_cols = [c for c in ["game_pk", "team", "book"] if c in insert_df.columns]
     insert_df = insert_df.drop_duplicates(subset=key_cols, keep="last")
 
@@ -342,7 +342,7 @@ STEPS = [
 
 # Nightly steps: refresh scores first so late west-coast games are Final
 # before evaluation, then eval yesterday, fetch odds, and rerun predictions.
-# No Statcast fetch or park factor reload — morning handles those.
+# No Statcast fetch or park factor reload - morning handles those.
 NIGHTLY_STEPS = [
     ("Schedule & scores", update_scores_and_schedule),
     ("Bullpen daily", update_bullpen_daily),
@@ -370,18 +370,18 @@ def _run_steps(steps):
     if failed:
         print(f"Pipeline finished in {elapsed:.0f}s with {len(failed)} error(s): {', '.join(failed)}")
     else:
-        print(f"Pipeline finished in {elapsed:.0f}s — all steps OK")
+        print(f"Pipeline finished in {elapsed:.0f}s - all steps OK")
     return failed
 
 
 def main():
-    print(f"MLB Pipeline — {date.today()}")
+    print(f"MLB Pipeline - {date.today()}")
     print("=" * 50)
     return _run_steps(STEPS)
 
 
 def nightly():
-    print(f"MLB Nightly — {date.today()}")
+    print(f"MLB Nightly - {date.today()}")
     print("=" * 50)
     return _run_steps(NIGHTLY_STEPS)
 

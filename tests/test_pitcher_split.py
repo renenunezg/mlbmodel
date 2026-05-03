@@ -69,7 +69,7 @@ def test_blend_uses_opp_handedness_for_starter_portion():
 
 
 def test_blend_vectorized():
-    # Two rows: one vs RHP, one vs LHP — confirms array inputs work.
+    # Two rows: one vs RHP, one vs LHP - confirms array inputs work.
     result = blend_batting_split(
         vs_r=np.array([0.75, 0.80]),
         vs_l=np.array([0.70, 0.60]),

@@ -46,7 +46,7 @@ jobs:
 
       - name: Skip notice
         if: steps.check.outputs.should_run != 'true'
-        run: echo "Primary daily-pipeline already succeeded today — skipping backup."
+        run: echo "Primary daily-pipeline already succeeded today - skipping backup."
 
       - name: Cache Statcast parquet data
         if: steps.check.outputs.should_run == 'true'

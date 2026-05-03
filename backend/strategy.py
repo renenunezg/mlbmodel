@@ -27,7 +27,7 @@ def _warn_flag_error(fn_name: str, exc: Exception) -> None:
     key = (fn_name, f"{type(exc).__name__}: {exc}")
     if key not in _flag_warnings_seen:
         _flag_warnings_seen.add(key)
-        print(f"  WARNING: {fn_name} raised {type(exc).__name__}: {exc} — returning 'No Play'")
+        print(f"  WARNING: {fn_name} raised {type(exc).__name__}: {exc} - returning 'No Play'")
 
 
 def flag_ev(row, threshold=EV_THRESHOLDS["ml"]):

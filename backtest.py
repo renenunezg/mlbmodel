@@ -2,7 +2,7 @@
 Walk-forward backtesting for the MLB expected runs model.
 
 Fetches historical data, runs walk-forward validation, and reports metrics.
-All in-memory — no production DB writes.
+All in-memory - no production DB writes.
 
 Usage:
     python backtest.py --season 2025
@@ -268,7 +268,7 @@ def compute_features_for_window(
 def run_backtest(season: int, window_days: int = 7):
     """Run walk-forward backtest for a season."""
     t0 = time.time()
-    print(f"\nBacktest — {season} season (window={window_days} days)")
+    print(f"\nBacktest - {season} season (window={window_days} days)")
     print("=" * 60)
 
     # 1. Fetch games
@@ -410,7 +410,7 @@ def run_backtest(season: int, window_days: int = 7):
     preds_df = pd.concat(all_predictions, ignore_index=True)
 
     print(f"\n{'=' * 60}")
-    print(f"BACKTEST RESULTS — {season}")
+    print(f"BACKTEST RESULTS - {season}")
     print(f"{'=' * 60}")
     print(f"\nWindows: {len(metrics_df)}")
     print(f"Total games evaluated: {preds_df['game_pk'].nunique()}")

@@ -128,7 +128,7 @@ def plot_reliability(curves: dict[str, pd.DataFrame], path: Path) -> None:
     ax.set_xlim(0, 1); ax.set_ylim(0, 1)
     ax.set_xlabel("Predicted win probability")
     ax.set_ylabel("Observed win rate")
-    ax.set_title("Reliability curve — raw vs isotonic-calibrated")
+    ax.set_title("Reliability curve - raw vs isotonic-calibrated")
     ax.legend(loc="upper left")
     fig.tight_layout()
     fig.savefig(path)
@@ -194,10 +194,10 @@ def main() -> None:
         f"**Brier delta:** {metrics['raw_brier'] - metrics['calibrated_brier']:+.4f} "
         f"({(metrics['raw_brier'] - metrics['calibrated_brier']) / metrics['raw_brier'] * 100:+.2f}% improvement)\n\n"
         "## Files\n\n"
-        "- `reliability.png` — reliability curves overlaid for raw vs calibrated\n"
-        "- `win_prob_distribution.png` — histogram of predicted probs\n"
-        "- `reliability_{raw,calibrated}.csv` — per-bin observed vs predicted\n"
-        "- `metrics.csv` — Brier/log-loss summary\n"
+        "- `reliability.png` - reliability curves overlaid for raw vs calibrated\n"
+        "- `win_prob_distribution.png` - histogram of predicted probs\n"
+        "- `reliability_{raw,calibrated}.csv` - per-bin observed vs predicted\n"
+        "- `metrics.csv` - Brier/log-loss summary\n"
     )
     write_summary(out, "Calibration: raw NB vs isotonic", summary)
     print(f"\nWrote outputs to {out}")
