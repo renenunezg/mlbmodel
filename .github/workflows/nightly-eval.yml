@@ -2,7 +2,7 @@ name: Nightly Evaluation and Refresh
 
 on:
   schedule:
-    # 12 AM PDT / 11 PM PST (07:00 UTC) — "today" has rolled over so
+    # 12 AM PDT / 11 PM PST (07:00 UTC) - "today" has rolled over so
     # predictions land on the correct new-day date. Evaluates yesterday's
     # results, then refreshes starters and reruns predictions for the new day.
     - cron: "0 7 * * *"

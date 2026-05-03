@@ -74,7 +74,7 @@ def load_training_data():
     print("Loading training data...")
     starters = _safe_read_table("probable_starters")
     if starters.empty:
-        print("  ERROR: probable_starters is empty — cannot proceed.")
+        print("  ERROR: probable_starters is empty - cannot proceed.")
         return pd.DataFrame()
 
     # Merge in pitcher stats (xfip, whip, avg_ip_per_start) via pitcher_id (MLB player ID)
@@ -137,7 +137,7 @@ def load_training_data():
 
     # Self-merge to get opponent info: pitcher handedness, starter avg IP/start
     # (for dynamic inning-share blend), and opp team's bullpen RHP IP share.
-    # Use left join so games with only one known starter aren't dropped — missing
+    # Use left join so games with only one known starter aren't dropped - missing
     # opponent handedness defaults to "R" (league-average ~70% of starters are RHP).
     opp = starters[["game_pk", "team", "handedness", "avg_ip_per_start", "rhp_ip_share"]].rename(
         columns={
@@ -166,7 +166,7 @@ def load_training_data():
     bullpen_rhp = bullpen_rhp.fillna(LEAGUE_BULLPEN_RHP_SHARE)
     starters["bullpen_rhp_share"] = bullpen_rhp
 
-    # Logging — surface silent fallback if it dominates the slate.
+    # Logging - surface silent fallback if it dominates the slate.
     n = len(starters)
     if n > 0:
         ss_frac = float(starter_fallback_mask.mean())
@@ -182,9 +182,9 @@ def load_training_data():
             f"std={bullpen_rhp.std():.3f} fallback={bp_frac:.1%}"
         )
         if ss_frac > 0.5:
-            print(f"  WARNING: {ss_frac:.0%} of rows fell back to league-mean starter inning share — check avg_ip_per_start in pitcher_stats")
+            print(f"  WARNING: {ss_frac:.0%} of rows fell back to league-mean starter inning share - check avg_ip_per_start in pitcher_stats")
         if bp_frac > 0.5:
-            print(f"  WARNING: {bp_frac:.0%} of rows fell back to league-mean bullpen RHP share — check rhp_ip_share in bullpen_stats")
+            print(f"  WARNING: {bp_frac:.0%} of rows fell back to league-mean bullpen RHP share - check rhp_ip_share in bullpen_stats")
 
     # Blend batting splits vs the opposing starter (known handedness) and the
     # opposing bullpen (distribution from opp_rhp_ip_share).
@@ -208,7 +208,7 @@ def load_training_data():
         # Audit: surface silent merge failures (unmapped home team names) as loud warnings.
         unmapped = home_parks[home_parks["park_factor"].isna()]["home_team"].unique().tolist()
         if unmapped:
-            print(f"  WARNING: park_factors missing for home teams {unmapped} — check team_mappings.py")
+            print(f"  WARNING: park_factors missing for home teams {unmapped} - check team_mappings.py")
         starters = pd.merge(starters, home_parks.drop(columns=["home_team"]), on="game_pk", how="left")
     else:
         starters["park_factor"] = 100
@@ -220,7 +220,7 @@ def load_training_data():
         games = games.dropna(subset=["away_score", "home_score"])
 
     if games.empty:
-        print("  Warning: no completed games — rolling averages will use league average")
+        print("  Warning: no completed games - rolling averages will use league average")
         starters["game_date"] = pd.NaT
         starters["actual_runs"] = np.nan
         starters["avg_last5"] = np.nan
@@ -242,7 +242,7 @@ def load_training_data():
             starters["away_score"],
         )
 
-        # Rolling team run averages — strictly prior dates only. Games sharing a
+        # Rolling team run averages - strictly prior dates only. Games sharing a
         # (team, game_date) inherit the window computed as of the first game on that date,
         # so doubleheader game 2 never leaks its own result into its features.
         games["game_date"] = pd.to_datetime(games["game_date"])
@@ -279,7 +279,7 @@ def load_training_data():
 
     # Bullpen rest features: reliever outs in prior 2 days, for own team and opponent.
     # Source: bullpen_daily table (one row per (date, team), reliever_outs aggregated
-    # from MLB boxscores). The lookback is strictly prior — game date itself is
+    # from MLB boxscores). The lookback is strictly prior - game date itself is
     # excluded so we never leak today's bullpen usage into a feature.
     bp_daily = _safe_read_table("bullpen_daily")
     if not bp_daily.empty and "game_date" in starters.columns:
@@ -331,7 +331,7 @@ def load_training_data():
         if n_own_missing or n_opp_missing:
             print(f"  bullpen_daily lookups: own missing={n_own_missing}, opp missing={n_opp_missing}")
     else:
-        print("  bullpen_daily empty — falling back to league avg for own_bp_outs_2d / opp_bp_outs_2d")
+        print("  bullpen_daily empty - falling back to league avg for own_bp_outs_2d / opp_bp_outs_2d")
         starters["own_bp_outs_2d"] = np.nan
         starters["opp_bp_outs_2d"] = np.nan
 

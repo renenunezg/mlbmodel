@@ -34,7 +34,7 @@ def _ip_to_outs(ip_str: str | None) -> int:
         return 0
 
 
-_STARTER_MIN_OUTS = 9  # 3 IP — anything less means the "starter" was an opener
+_STARTER_MIN_OUTS = 9  # 3 IP - anything less means the "starter" was an opener
 
 
 def _classify_outs(outs_list: list[int]) -> tuple[int, int, int]:

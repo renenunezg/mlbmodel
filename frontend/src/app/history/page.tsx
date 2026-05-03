@@ -59,7 +59,7 @@ export default async function HistoryPage({
 
   // Build record query (runs in parallel with main pagination query).
   // Pull odds + market probabilities so we can revalidate the +EV threshold
-  // here — ev_flag values stored in model_outputs_season can be sub-threshold
+  // here - ev_flag values stored in model_outputs_season can be sub-threshold
   // due to win_prob rounding or stale odds snapshots.
   let rq = supabase
     .from("model_outputs_season")
@@ -330,13 +330,13 @@ export default async function HistoryPage({
                 >
                   <TableCell>{formatDate(row.date)}</TableCell>
                   <TableCell className="font-medium">{row.team}</TableCell>
-                  <TableCell>{row.starter ?? "—"}</TableCell>
+                  <TableCell>{row.starter ?? "-"}</TableCell>
                   <TableCell className="text-right">{formatRuns(row.expected_runs)}</TableCell>
                   <TableCell className="text-right">{formatPct(row.win_prob)}</TableCell>
                   <TableCell className="text-right">{formatOdds(row.our_odds)}</TableCell>
                   <TableCell className="text-right">{formatOdds(row.moneyline)}</TableCell>
                   <TableCell className="text-right tabular-nums">
-                    {isFinal && teamScore != null ? `${teamScore}` : "—"}
+                    {isFinal && teamScore != null ? `${teamScore}` : "-"}
                   </TableCell>
                   <TableCell className="text-center">
                     {won != null ? (
@@ -349,22 +349,22 @@ export default async function HistoryPage({
                         {won ? "W" : "L"}
                       </span>
                     ) : (
-                      "—"
+                      "-"
                     )}
                   </TableCell>
                   <TableCell className="text-center">
                     <span className={cellClass(mlWon, mlIsPlay)}>
-                      {mlIsPlay ? row.ev_flag : "—"}
+                      {mlIsPlay ? row.ev_flag : "-"}
                     </span>
                   </TableCell>
                   <TableCell className="text-center">
                     <span className={cellClass(rlWon, rlIsPlay)}>
-                      {rlIsPlay ? row.run_line_ev_flag : "—"}
+                      {rlIsPlay ? row.run_line_ev_flag : "-"}
                     </span>
                   </TableCell>
                   <TableCell className="text-center">
                     <span className={cellClass(totalsWon, totalsIsPlay)}>
-                      {totalsIsPlay ? row.total_play : "—"}
+                      {totalsIsPlay ? row.total_play : "-"}
                     </span>
                   </TableCell>
                 </TableRow>

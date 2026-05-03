@@ -1,7 +1,7 @@
 """Clean calibration diagnostic.
 
 Production stores `win_prob` as calibrated by whatever isotonic regressor was
-fit on the day of prediction — historical values are a mishmash of many
+fit on the day of prediction - historical values are a mishmash of many
 calibrators, and each was fit on a barely-sufficient OOF sample.
 
 This script asks the cleaner question: if we fit ONE isotonic calibrator
@@ -90,7 +90,7 @@ def cv_isotonic(df: pd.DataFrame, n_splits: int = 5) -> np.ndarray:
     GroupKFold by game_pk keeps both rows of a game in the same fold so the
     two complementary probs aren't split across train/test.
 
-    Renormalization is intentionally NOT applied here — we want to isolate
+    Renormalization is intentionally NOT applied here - we want to isolate
     'does isotonic itself help?' from 'does the renormalization step undo it?'.
     """
     probs = df["win_prob_raw"].to_numpy()
@@ -152,7 +152,7 @@ def plot_reliability(curves: dict, path: Path) -> None:
         )
     ax.set_xlim(0, 1); ax.set_ylim(0, 1)
     ax.set_xlabel("Predicted win probability"); ax.set_ylabel("Observed win rate")
-    ax.set_title("Reliability — raw vs CV-fit isotonic (with/without renormalization)")
+    ax.set_title("Reliability - raw vs CV-fit isotonic (with/without renormalization)")
     ax.legend(loc="upper left")
     fig.tight_layout(); fig.savefig(path); plt.close(fig)
 

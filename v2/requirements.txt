@@ -1,0 +1,12 @@
+# v2 modeling layer adds these on top of root requirements.txt.
+# Install: pip install -r requirements.txt -r v2/requirements.txt
+#
+# numpyro 0.20.1 is incompatible with jax >= 0.10 (xla_pmap_p was removed).
+# Pin jax/jaxlib until numpyro releases a fix.
+pymc==5.22.0
+arviz==0.21.0
+h5netcdf==1.6.1
+netcdf4==1.7.4
+numpyro==0.20.1
+jax==0.7.2
+jaxlib==0.7.2

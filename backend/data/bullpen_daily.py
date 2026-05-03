@@ -35,7 +35,7 @@ def _ip_to_outs(ip_str) -> int:
         return 0
 
 
-_STARTER_MIN_OUTS = 9  # 3 IP — sub-3-IP "first pitcher" is treated as an opener
+_STARTER_MIN_OUTS = 9  # 3 IP - sub-3-IP "first pitcher" is treated as an opener
 
 
 def _classify_outs(outs_list: list[int]) -> tuple[int, int, int]:

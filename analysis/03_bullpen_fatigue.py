@@ -143,7 +143,7 @@ def main() -> None:
         tmp = picks.rename(columns={"opponent": "_orig_opp", "team": "opponent"}).copy()
         picks[col] = compute_prior_outs(tmp, daily, days=d)
 
-    # Bucket and plot — opp fatigue → our pick win rate
+    # Bucket and plot - opp fatigue → our pick win rate
     picks["opp_fatigue_2d"] = bucket_by_quantile(picks["opp_bp_outs_2d"])
     picks["own_fatigue_2d"] = bucket_by_quantile(picks["own_bp_outs_2d"])
 
@@ -207,8 +207,8 @@ def main() -> None:
         "## Files\n"
         "- `winrate_by_opp_fatigue.png`\n"
         "- `winrate_by_own_fatigue.png`\n"
-        "- `fatigue_buckets.csv` — full breakdown across 1d/2d/3d windows\n"
-        "- `roi_by_opp_fatigue.csv` — ROI per fatigue bucket\n"
+        "- `fatigue_buckets.csv` - full breakdown across 1d/2d/3d windows\n"
+        "- `roi_by_opp_fatigue.csv` - ROI per fatigue bucket\n"
     )
     write_summary(out, "Bullpen fatigue impact", summary)
 

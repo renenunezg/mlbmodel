@@ -121,7 +121,7 @@ export function PerformanceTabs({
           <KpiCard
             label="ROI"
             value={pct(latest?.roi)}
-            tooltip="Profit per dollar risked. ROI = total P&L ÷ total stakes. 13% ROI means 13¢ profit per $1 staked, on average — not 13% of your bankroll."
+            tooltip="Profit per dollar risked. ROI = total P&L ÷ total stakes. 13% ROI means 13¢ profit per $1 staked, on average - not 13% of your bankroll."
           />
           <KpiCard
             label="Sharpe"
@@ -130,8 +130,8 @@ export function PerformanceTabs({
           />
           <KpiCard
             label="Max DD"
-            value={latest?.max_drawdown != null ? `${fmtSigned(latest.max_drawdown)}u` : "—"}
-            tooltip="Worst peak-to-trough decline of cumulative P&L, in units. With flat 1u stake sizing (no compounding), drawdown is reported in absolute units rather than as a % of equity — a Kelly-style % would misrepresent a non-compounding strategy."
+            value={latest?.max_drawdown != null ? `${fmtSigned(latest.max_drawdown)}u` : "-"}
+            tooltip="Worst peak-to-trough decline of cumulative P&L, in units. With flat 1u stake sizing (no compounding), drawdown is reported in absolute units rather than as a % of equity - a Kelly-style % would misrepresent a non-compounding strategy."
           />
           <KpiCard
             label="Brier"
@@ -253,14 +253,14 @@ export function PerformanceTabs({
           />
           <KpiCard
             label="Max Drawdown"
-            value={latest?.max_drawdown != null ? `${fmtSigned(latest.max_drawdown)}u` : "—"}
+            value={latest?.max_drawdown != null ? `${fmtSigned(latest.max_drawdown)}u` : "-"}
             tooltip="Worst peak-to-trough decline of cumulative P&L, in units. Stakes are flat fractions of a fixed 1u base (no compounding), so reporting drawdown as a % of running equity (the Kelly-style metric) would be misleading."
           />
           <KpiCard
             label="P&L"
             value={`${fmtSigned(latest?.net_profit_units)}u`}
             sub={`${fmt(latest?.total_staked_units, 2)}u staked`}
-            tooltip="Net profit in units. 1 unit = your chosen bankroll size — if your bankroll is $100, 1u = $100. Stakes shown below are TOTAL summed across all bets in the window, not a single bet. Bankroll never compounds; each bet is sized as a fraction of a fixed 1u."
+            tooltip="Net profit in units. 1 unit = your chosen bankroll size - if your bankroll is $100, 1u = $100. Stakes shown below are TOTAL summed across all bets in the window, not a single bet. Bankroll never compounds; each bet is sized as a fraction of a fixed 1u."
           />
           <KpiCard
             label="Favorites"
@@ -530,8 +530,8 @@ function EvalHistoryTable({ rows }: { rows: ModelEvaluation[] }) {
                 </span>
               </TableCell>
               <TableCell>
-                {row.totals_correct ?? "—"}/
-                {row.totals_predictions ?? "—"}{" "}
+                {row.totals_correct ?? "-"}/
+                {row.totals_predictions ?? "-"}{" "}
                 <span className="text-muted-foreground">
                   ({pct(row.totals_accuracy)})
                 </span>

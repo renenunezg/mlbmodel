@@ -3,7 +3,7 @@ export type Post = {
   date: string;       // "YYYY-MM-DD"
   title: string;
   summary: string;
-  body: string;       // plain text or light markdown — rendered as paragraphs split on \n\n
+  body: string;       // plain text or light markdown - rendered as paragraphs split on \n\n
 };
 
 // Add new entries at the top. Each entry appears as a card on the About page.
