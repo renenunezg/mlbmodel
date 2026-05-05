@@ -1,9 +1,9 @@
-"""Hierarchical Dirichlet-Multinomial batter outcome model with platoon split.
+"""Hierarchical D-M pitcher outcome model with role-conditional shrinkage.
 
-Per (batter, vs_lhp) cell, Multinomial likelihood over the 8 OUTCOMES with
-non-centered additive logit offsets vs OUT (reference). Each batter has a main
-effect and a platoon delta that activates against LHP; both are partially
-pooled across batters.
+Per pitcher Multinomial likelihood over OUTCOMES. Hierarchy widths split by
+role (SP vs RP) so starters and relievers shrink toward separate population
+spreads. Position-player-pitching contamination is removed by dropping any
+pitcher who also appears as a real batter (>=50 PAs in the window).
 """
 from __future__ import annotations
 
@@ -30,17 +30,35 @@ REF_IDX = OUTCOMES.index("OUT")
 NON_REF_IDX = [i for i in range(len(OUTCOMES)) if i != REF_IDX]
 NON_REF_LABELS = [OUTCOMES[i] for i in NON_REF_IDX]
 K_FREE = len(NON_REF_IDX)
-HANDS = ("vs_R", "vs_L")
+ROLES = ("SP", "RP")
+POSITION_PLAYER_PA_THRESHOLD = 50
 
 
-def aggregate_counts(pa_df: pd.DataFrame, batter_idx: ActorIndex) -> tuple[np.ndarray, np.ndarray]:
-    outcome_codes = encode_outcomes(pa_df["outcome"])
-    b = batter_idx.encode(pa_df["batter"].to_numpy())
-    h = (pa_df["p_throws"].to_numpy() == "L").astype(np.int64)
-    counts = np.zeros((batter_idx.n, 2, len(OUTCOMES)), dtype=np.int64)
-    np.add.at(counts, (b, h, outcome_codes), 1)
-    n_per_cell = counts.sum(axis=2)
-    return counts, n_per_cell
+def classify_roles(pa_df: pd.DataFrame) -> pd.Series:
+    """Per-pitcher SP/RP from majority of game appearances as inning-1 starter."""
+    inning1 = pa_df[(pa_df["inning"] == 1)].copy()
+    starter_side = np.where(inning1["inning_topbot"] == "Top", "away", "home")
+    inning1 = inning1.assign(side=starter_side)
+    starters_per_game = (
+        inning1.groupby(["game_pk", "side"])["pitcher"]
+        .agg(lambda s: s.mode().iloc[0] if not s.mode().empty else np.nan)
+        .dropna()
+        .astype("int64")
+    )
+    starts_count = starters_per_game.value_counts()
+    games_count = pa_df.groupby("pitcher")["game_pk"].nunique()
+    start_share = (starts_count / games_count).fillna(0.0)
+    role = np.where(start_share >= 0.5, "SP", "RP")
+    return pd.Series(role, index=games_count.index, name="role")
+
+
+def filter_position_player_pitching(pa_df: pd.DataFrame) -> pd.DataFrame:
+    batter_pa = pa_df.groupby("batter").size()
+    real_batters = set(batter_pa[batter_pa >= POSITION_PLAYER_PA_THRESHOLD].index)
+    pitchers_to_drop = set(pa_df["pitcher"].unique()) & real_batters
+    if pitchers_to_drop:
+        pa_df = pa_df[~pa_df["pitcher"].isin(pitchers_to_drop)].reset_index(drop=True)
+    return pa_df, pitchers_to_drop
 
 
 def build_model(pa_df: pd.DataFrame) -> tuple[pm.Model, dict]:
@@ -50,32 +68,34 @@ def build_model(pa_df: pd.DataFrame) -> tuple[pm.Model, dict]:
     log_p_lg = league_log_p(outcome_codes)
     intercept_prior = log_p_lg[NON_REF_IDX] - log_p_lg[REF_IDX]
 
-    batter_idx = ActorIndex.from_series(pa_df["batter"])
-    counts, n_per_cell = aggregate_counts(pa_df, batter_idx)
+    pitcher_idx = ActorIndex.from_series(pa_df["pitcher"])
+    p_codes = pitcher_idx.encode(pa_df["pitcher"].to_numpy())
+
+    counts = np.zeros((pitcher_idx.n, len(OUTCOMES)), dtype=np.int64)
+    np.add.at(counts, (p_codes, outcome_codes), 1)
+    n_per_pitcher = counts.sum(axis=1)
+
+    role_series = classify_roles(pa_df).reindex(pitcher_idx.ids).fillna("RP")
+    role_codes = (role_series.to_numpy() == "SP").astype(np.int64)  # 1 = SP, 0 = RP
+    role_idx_for_sigma = 1 - role_codes  # 0 = SP slot, 1 = RP slot in ROLES tuple
 
     coords = {
         "outcome": list(OUTCOMES),
         "outcome_free": NON_REF_LABELS,
-        "batter": batter_idx.ids,
-        "hand": list(HANDS),
+        "pitcher": pitcher_idx.ids,
+        "role": list(ROLES),
     }
 
     with pm.Model(coords=coords) as model:
         intercept = pm.Normal("intercept", mu=intercept_prior, sigma=0.5, dims="outcome_free")
+        sigma_pitcher = pm.HalfNormal("sigma_pitcher", sigma=0.6, dims=("role", "outcome_free"))
+        z_pitcher = pm.Normal("z_pitcher", 0.0, 1.0, dims=("pitcher", "outcome_free"))
+        sigma_per_pitcher = sigma_pitcher[role_idx_for_sigma]  # (pitcher, outcome_free)
+        beta_pitcher = sigma_per_pitcher * z_pitcher
 
-        sigma_batter = pm.HalfNormal("sigma_batter", sigma=0.6, dims="outcome_free")
-        z_batter = pm.Normal("z_batter", 0.0, 1.0, dims=("batter", "outcome_free"))
-        beta_main = sigma_batter[None, :] * z_batter
+        logit_free = intercept[None, :] + beta_pitcher
 
-        sigma_platoon = pm.HalfNormal("sigma_platoon", sigma=0.3, dims="outcome_free")
-        z_platoon = pm.Normal("z_platoon", 0.0, 1.0, dims=("batter", "outcome_free"))
-        beta_platoon = sigma_platoon[None, :] * z_platoon
-
-        logit_R = intercept[None, :] + beta_main
-        logit_L = intercept[None, :] + beta_main + beta_platoon
-        logit_free = pt.stack([logit_R, logit_L], axis=1)
-
-        zeros_ref = pt.zeros((batter_idx.n, 2, 1))
+        zeros_ref = pt.zeros((pitcher_idx.n, 1))
         cols = []
         free_iter = iter(range(K_FREE))
         for i in range(len(OUTCOMES)):
@@ -83,30 +103,31 @@ def build_model(pa_df: pd.DataFrame) -> tuple[pm.Model, dict]:
                 cols.append(zeros_ref)
             else:
                 fi = next(free_iter)
-                cols.append(logit_free[:, :, fi : fi + 1])
-        logit_full = pt.concatenate(cols, axis=2)
+                cols.append(logit_free[:, fi : fi + 1])
+        logit_full = pt.concatenate(cols, axis=1)
 
-        p = pm.math.softmax(logit_full, axis=2)
+        p = pm.math.softmax(logit_full, axis=1)
         pm.Multinomial(
             "outcome_counts",
-            n=n_per_cell,
+            n=n_per_pitcher,
             p=p,
             observed=counts,
-            dims=("batter", "hand", "outcome"),
+            dims=("pitcher", "outcome"),
         )
 
-    n_per_batter = n_per_cell.sum(axis=1)
+    n_sp = int((role_series == "SP").sum())
+    n_rp = int((role_series == "RP").sum())
     meta = {
-        "batter_idx": batter_idx,
+        "pitcher_idx": pitcher_idx,
         "log_p_league": log_p_lg.tolist(),
         "intercept_prior": intercept_prior.tolist(),
         "n_pa": int(len(pa_df)),
-        "n_batters": int(batter_idx.n),
-        "min_pa_per_batter": int(n_per_batter.min()),
-        "median_pa_per_batter": int(np.median(n_per_batter)),
-        "max_pa_per_batter": int(n_per_batter.max()),
-        "n_pa_vs_lhp": int(n_per_cell[:, 1].sum()),
-        "n_pa_vs_rhp": int(n_per_cell[:, 0].sum()),
+        "n_pitchers": int(pitcher_idx.n),
+        "n_sp": n_sp,
+        "n_rp": n_rp,
+        "min_pa_per_pitcher": int(n_per_pitcher.min()),
+        "median_pa_per_pitcher": int(np.median(n_per_pitcher)),
+        "max_pa_per_pitcher": int(n_per_pitcher.max()),
     }
     return model, meta
 
@@ -137,7 +158,7 @@ def fit(
     return idata, meta, elapsed
 
 
-GATE_VARS = ["intercept", "sigma_batter", "sigma_platoon"]
+GATE_VARS = ["intercept", "sigma_pitcher"]
 
 
 def summarize(idata: az.InferenceData) -> dict:
@@ -163,16 +184,16 @@ def main() -> int:
     parser.add_argument("--subsample", type=int, default=None)
     args = parser.parse_args()
 
-    print(f"[batter_skill] loading PAs {args.start_year}-{args.end_year}...")
-    t_load = time.time()
+    print(f"[pitcher_skill] loading PAs {args.start_year}-{args.end_year}...")
     pa_df = load_pa_dataset(args.start_year, args.end_year)
-    print(f"  loaded {len(pa_df):,} PAs in {time.time()-t_load:.1f}s")
+    pa_df, dropped = filter_position_player_pitching(pa_df)
+    print(f"  filtered position-player-pitching: dropped {len(dropped)} pitchers")
 
     if args.subsample:
         pa_df = pa_df.sample(args.subsample, random_state=args.seed).reset_index(drop=True)
         print(f"  subsampled to {len(pa_df):,} PAs")
 
-    print(f"[batter_skill] fitting (chains={args.chains}, draws={args.draws}, tune={args.tune})...")
+    print(f"[pitcher_skill] fitting (chains={args.chains}, draws={args.draws}, tune={args.tune})...")
     idata, meta, elapsed = fit(
         pa_df,
         draws=args.draws,
@@ -193,9 +214,10 @@ def main() -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     report = {
         "n_pa": meta["n_pa"],
-        "n_batters": meta["n_batters"],
-        "n_pa_vs_lhp": meta["n_pa_vs_lhp"],
-        "n_pa_vs_rhp": meta["n_pa_vs_rhp"],
+        "n_pitchers": meta["n_pitchers"],
+        "n_sp": meta["n_sp"],
+        "n_rp": meta["n_rp"],
+        "n_dropped_position_player_pitchers": len(dropped),
         "fit_seconds": elapsed,
         "fit_minutes": elapsed / 60,
         "n_divergent": n_div,
@@ -203,11 +225,11 @@ def main() -> int:
         **diag,
         "gate_passed": gate_passed,
     }
-    write_diagnostics(args.output_dir / "batter_skill.json", report)
-    print(f"  wrote {args.output_dir / 'batter_skill.json'}")
+    write_diagnostics(args.output_dir / "pitcher_skill.json", report)
+    print(f"  wrote {args.output_dir / 'pitcher_skill.json'}")
 
     if args.save_trace:
-        trace_path = args.output_dir / "batter_skill.nc"
+        trace_path = args.output_dir / "pitcher_skill.nc"
         idata.to_netcdf(trace_path)
         print(f"  wrote {trace_path}")
 
