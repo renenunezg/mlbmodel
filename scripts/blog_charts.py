@@ -12,22 +12,24 @@ from backend.db import engine
 
 OUT_DIR = Path("analysis/blog_charts")
 
-DARK_BG = "#0f172a"
-GRID_COLOR = "#1e293b"
-TEXT_COLOR = "#94a3b8"
-LABEL_COLOR = "#e2e8f0"
+ACCENT = "#2d7a4f"
+GRID_COLOR = "#e5e5e5"
+AXIS_COLOR = "#d4d4d8"
+TICK_COLOR = "#52525b"
 
 
-def _apply_dark_style(fig, ax):
-    fig.patch.set_facecolor(DARK_BG)
-    ax.set_facecolor(DARK_BG)
-    ax.tick_params(colors=TEXT_COLOR, labelsize=9)
-    ax.xaxis.label.set_color(LABEL_COLOR)
-    ax.yaxis.label.set_color(LABEL_COLOR)
-    ax.title.set_color(LABEL_COLOR)
-    for spine in ax.spines.values():
-        spine.set_edgecolor(GRID_COLOR)
-    ax.grid(True, color=GRID_COLOR, linewidth=0.6, linestyle="--")
+def _apply_style(fig, ax):
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
+    ax.tick_params(colors=TICK_COLOR, labelsize=9)
+    ax.xaxis.label.set_color(TICK_COLOR)
+    ax.yaxis.label.set_color(TICK_COLOR)
+    ax.title.set_color(TICK_COLOR)
+    for spine in ["top", "right"]:
+        ax.spines[spine].set_visible(False)
+    for spine in ["left", "bottom"]:
+        ax.spines[spine].set_edgecolor(AXIS_COLOR)
+    ax.grid(True, color=GRID_COLOR, linewidth=0.8, linestyle="--")
 
 
 def load_evaluations() -> pd.DataFrame:
@@ -54,7 +56,7 @@ def load_calibration() -> pd.DataFrame:
 
 def accuracy_over_time(df: pd.DataFrame) -> None:
     fig, ax = plt.subplots(figsize=(10, 5))
-    _apply_dark_style(fig, ax)
+    _apply_style(fig, ax)
 
     ax.axhline(0.5, color="#475569", linewidth=0.8, linestyle="--", label="50% baseline")
     ax.plot(df["date"], df["ml_accuracy"], color="#22c55e", linewidth=1.8, label="Moneyline")
@@ -69,8 +71,8 @@ def accuracy_over_time(df: pd.DataFrame) -> None:
     ax.xaxis.set_major_locator(mdates.WeekdayLocator(interval=1))
     fig.autofmt_xdate(rotation=30)
 
-    legend = ax.legend(fontsize=9, framealpha=0.15, edgecolor=GRID_COLOR, labelcolor=LABEL_COLOR)
-    legend.get_frame().set_facecolor(DARK_BG)
+    legend = ax.legend(fontsize=9, framealpha=0.8, edgecolor=GRID_COLOR, labelcolor=TICK_COLOR)
+    legend.get_frame().set_facecolor("white")
 
     fig.tight_layout()
     fig.savefig(OUT_DIR / "accuracy_over_time.png", dpi=150, bbox_inches="tight")
@@ -79,7 +81,7 @@ def accuracy_over_time(df: pd.DataFrame) -> None:
 
 def equity_curve(df: pd.DataFrame) -> None:
     fig, ax = plt.subplots(figsize=(10, 4))
-    _apply_dark_style(fig, ax)
+    _apply_style(fig, ax)
 
     ax.axhline(0, color="#475569", linewidth=0.8, linestyle="--")
     ax.fill_between(
@@ -113,7 +115,7 @@ def equity_curve(df: pd.DataFrame) -> None:
 
 def calibration_chart(cal: pd.DataFrame) -> None:
     fig, ax = plt.subplots(figsize=(6, 6))
-    _apply_dark_style(fig, ax)
+    _apply_style(fig, ax)
 
     ax.plot([0, 1], [0, 1], color="#475569", linewidth=1, linestyle="--", label="Perfect calibration")
     ax.scatter(
@@ -139,8 +141,8 @@ def calibration_chart(cal: pd.DataFrame) -> None:
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
 
-    legend = ax.legend(fontsize=9, framealpha=0.15, edgecolor=GRID_COLOR, labelcolor=LABEL_COLOR)
-    legend.get_frame().set_facecolor(DARK_BG)
+    legend = ax.legend(fontsize=9, framealpha=0.8, edgecolor=GRID_COLOR, labelcolor=TICK_COLOR)
+    legend.get_frame().set_facecolor("white")
 
     fig.tight_layout()
     fig.savefig(OUT_DIR / "calibration.png", dpi=150, bbox_inches="tight")
@@ -149,7 +151,7 @@ def calibration_chart(cal: pd.DataFrame) -> None:
 
 def brier_over_time(df: pd.DataFrame) -> None:
     fig, ax = plt.subplots(figsize=(10, 4))
-    _apply_dark_style(fig, ax)
+    _apply_style(fig, ax)
 
     # Lower is better; shade the "good" region below 0.25 (random classifier baseline)
     ax.axhline(0.25, color="#475569", linewidth=0.8, linestyle="--", label="Random baseline (0.25)")
@@ -162,8 +164,8 @@ def brier_over_time(df: pd.DataFrame) -> None:
     ax.xaxis.set_major_locator(mdates.WeekdayLocator(interval=1))
     fig.autofmt_xdate(rotation=30)
 
-    legend = ax.legend(fontsize=9, framealpha=0.15, edgecolor=GRID_COLOR, labelcolor=LABEL_COLOR)
-    legend.get_frame().set_facecolor(DARK_BG)
+    legend = ax.legend(fontsize=9, framealpha=0.8, edgecolor=GRID_COLOR, labelcolor=TICK_COLOR)
+    legend.get_frame().set_facecolor("white")
 
     fig.tight_layout()
     fig.savefig(OUT_DIR / "brier_over_time.png", dpi=150, bbox_inches="tight")
@@ -172,7 +174,7 @@ def brier_over_time(df: pd.DataFrame) -> None:
 
 def mae_over_time(df: pd.DataFrame) -> None:
     fig, ax = plt.subplots(figsize=(10, 4))
-    _apply_dark_style(fig, ax)
+    _apply_style(fig, ax)
 
     ax.plot(df["date"], df["mae"], color="#f59e0b", linewidth=1.8, label="MAE (runs)")
     ax.fill_between(df["date"], df["mae"], df["mae"].mean(), where=df["mae"] <= df["mae"].mean(), color="#f59e0b", alpha=0.12)
@@ -186,8 +188,8 @@ def mae_over_time(df: pd.DataFrame) -> None:
     ax.xaxis.set_major_locator(mdates.WeekdayLocator(interval=1))
     fig.autofmt_xdate(rotation=30)
 
-    legend = ax.legend(fontsize=9, framealpha=0.15, edgecolor=GRID_COLOR, labelcolor=LABEL_COLOR)
-    legend.get_frame().set_facecolor(DARK_BG)
+    legend = ax.legend(fontsize=9, framealpha=0.8, edgecolor=GRID_COLOR, labelcolor=TICK_COLOR)
+    legend.get_frame().set_facecolor("white")
 
     fig.tight_layout()
     fig.savefig(OUT_DIR / "mae_over_time.png", dpi=150, bbox_inches="tight")
@@ -209,7 +211,7 @@ def roi_by_segment(df: pd.DataFrame) -> None:
     colors = ["#22c55e" if v >= 0 else "#ef4444" for v in values]
 
     fig, ax = plt.subplots(figsize=(8, 4))
-    _apply_dark_style(fig, ax)
+    _apply_style(fig, ax)
 
     bars = ax.barh(labels, values, color=colors, height=0.55)
     ax.axvline(0, color="#475569", linewidth=0.8)
@@ -225,7 +227,7 @@ def roi_by_segment(df: pd.DataFrame) -> None:
             va="center",
             ha=ha,
             fontsize=9,
-            color=LABEL_COLOR,
+            color=TICK_COLOR,
         )
 
     ax.set_title("ROI by Bet Segment (season to date)", fontsize=13, pad=12)

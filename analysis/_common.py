@@ -25,15 +25,35 @@ def read_sql(query: str, params: dict | None = None) -> pd.DataFrame:
     return pd.read_sql(query, engine, params=params or {})
 
 
+ACCENT = "#2d7a4f"
+GRID_COLOR = "#e5e5e5"
+AXIS_COLOR = "#d4d4d8"
+TICK_COLOR = "#52525b"
+
+
 def style_plot():
     plt.rcParams.update({
         "figure.figsize": (10, 6),
         "figure.dpi": 110,
+        "figure.facecolor": "white",
+        "axes.facecolor": "white",
         "axes.spines.top": False,
         "axes.spines.right": False,
+        "axes.spines.left": True,
+        "axes.spines.bottom": True,
+        "axes.edgecolor": AXIS_COLOR,
         "axes.grid": True,
-        "grid.alpha": 0.25,
+        "axes.grid.axis": "both",
+        "grid.color": GRID_COLOR,
+        "grid.linestyle": "--",
+        "grid.linewidth": 0.8,
+        "xtick.color": TICK_COLOR,
+        "ytick.color": TICK_COLOR,
+        "xtick.labelsize": 11,
+        "ytick.labelsize": 11,
+        "font.family": "monospace",
         "font.size": 11,
+        "text.color": TICK_COLOR,
     })
 
 
