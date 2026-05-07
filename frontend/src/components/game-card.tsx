@@ -100,7 +100,11 @@ export function GameCard({ matchup }: GameCardProps) {
     matchup.away.ev_flag !== "No Play" ||
     matchup.home.ev_flag !== "No Play" ||
     matchup.away.run_line_ev_flag !== "No Play" ||
-    matchup.home.run_line_ev_flag !== "No Play";
+    matchup.home.run_line_ev_flag !== "No Play" ||
+    matchup.away.total_play !== "No Play" ||
+    matchup.home.total_play !== "No Play" ||
+    matchup.away.high_variance_flag === "Yes" ||
+    matchup.home.high_variance_flag === "Yes";
 
   const isFinal =
     matchup.status === "Final" &&
