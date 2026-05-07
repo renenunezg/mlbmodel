@@ -1,5 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { posts } from "./posts";
 
@@ -71,10 +73,12 @@ export default function AboutPage() {
                   <CardTitle className="text-base mt-0.5">{post.title}</CardTitle>
                   <CardDescription>{post.summary}</CardDescription>
                 </CardHeader>
-                <CardContent className="pt-4 text-sm text-muted-foreground leading-relaxed space-y-3">
-                  {post.body.split("\n\n").map((para, i) => (
-                    <p key={i}>{para}</p>
-                  ))}
+                <CardContent className="pt-4 text-sm text-muted-foreground leading-relaxed">
+                  <div className="space-y-3 [&_p]:leading-relaxed [&_h2]:font-heading [&_h2]:text-base [&_h2]:tracking-tight [&_h2]:text-foreground [&_h2]:mt-6 [&_h2]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-1 [&_strong]:text-foreground [&_table]:w-full [&_table]:text-xs [&_table]:my-3 [&_th]:border [&_th]:border-border [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_th]:font-mono [&_th]:font-normal [&_th]:text-foreground [&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-1 [&_td]:font-mono [&_img]:my-4 [&_img]:rounded-md [&_img]:border [&_img]:border-border [&_img]:max-w-full">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {post.body}
+                    </ReactMarkdown>
+                  </div>
                 </CardContent>
               </Card>
             ))}
