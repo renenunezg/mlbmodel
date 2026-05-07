@@ -3,7 +3,7 @@ export type Post = {
   date: string;       // "YYYY-MM-DD"
   title: string;
   summary: string;
-  body: string;       // plain text or light markdown - rendered as paragraphs split on \n\n
+  body: string;       // GitHub-flavored markdown, rendered with react-markdown + remark-gfm
 };
 
 // Add new entries at the top. Each entry appears as a card on the About page.
@@ -13,6 +13,101 @@ export const posts: Post[] = [
     date: "2026-05-03",
     title: "V2 Is Coming and It's Bringing Bayes with It. Our Findings on XGBoost.",
     summary: "One month of live predictions with a 14-feature XGBoost regressor. What held up, what didn't, and why I'm going hierarchical Bayesian for v2.",
-    body: "v1 came out of a simple bet: baseball is the highest-variance major sport, so don't overengineer it. One XGBoost regressor, 14 features (xFIP, bullpen workload, handedness-blended OPS, rolling scoring averages, park factor), expected runs as the output, with a fixed-dispersion negative binomial stacked on top to convert that into a win probability. I figured a smaller model would be harder to overfit on something this noisy.\n\nA month of live predictions in, MAE is sitting around 2.4 runs. That isn't bad in absolute terms, the game just resists prediction. The problem is what 2.4 runs means for totals: the line is asking for a distributional claim and a point estimate can't deliver one. The model spitting out 9.2 expected when the line is 8.5 sounds like edge until you remember the actual run distribution for that game probably runs from 5 to 13. I knew the totals issue going in and decided the moneyline output would carry the model. Mostly it hasn't.\n\nBrier was the worse number. Win-prob calibration came in slightly under coin-flip, not a collapse but not where I want to be. The pattern that bugs me most is comeback losses: the model has no representation of in-game leverage or pen state. I patched it mid-April with two bullpen-fatigue features (reliever outs over the prior 48 hours, per team) and they helped on the games where a tired pen blew a lead, but it's a patch on top of an output shape that was wrong to begin with. A scalar expected-runs number can't tell you that the tying run is on second in the seventh against a closer who threw 25 pitches yesterday.\n\nThe structural fix is to model the game as what it actually is, a sequence of plate appearances with compounding state, instead of a single number per team. v2 is a hierarchical Bayesian skill model fit with numpyro: batter outcome distributions by handedness, pitcher skill split by starter vs reliever, park effects priored on the values I already pull from Savant. The thing that sold me on going Bayesian here is partial pooling, which means a call-up with 40 PAs gets shrunk toward the league mean in proportion to how little I know about him, and I don't have to draw an arbitrary cutoff like 'you need 100 PAs to be in the model' which I'd otherwise have to defend.\n\nOn top of the skill layer there's a Monte Carlo simulator that runs each game 10,000 times against the posterior, inning by inning. The output isn't a number, it's a distribution over runs, which is the thing you actually need for totals and run line. Whether the calibration on those holds up under live betting is genuinely an open question, and Phase 6 of the rebuild is set up specifically to find out before any cutover happens. The Statcast data layer under all of this is unchanged from v1. The rethink is entirely in the modeling layer.",
+    body: `When I started this project, I was operating on a personal hypothesis I'd had for a couple of years while modeling sports: since baseball has the highest variance of any major sport, introducing overly complex modeling techniques would likely lead to overfitting and, ultimately, worse performance.
+
+I chose expected runs as the main output metric for two reasons: A) expected runs translate naturally via distributions like Poisson or negative binomial into win probabilities, making the model easier to evaluate, and B) they can also directly inform totals (over/under) predictions.
+
+After seeing some success using tree-based models, specifically XGBoost, to predict xR-type outputs in other sports (mainly hockey), I decided to apply the same approach to baseball (my favorite sport), handpicking the features I considered most informative.
+
+Even though I was aiming for a relatively simple approach, there were still a few key challenges to address, mainly deriving win probabilities correctly and calibration, since XGBoost is notoriously uncalibrated out of the box.
+
+I approached the win probability problem with a negative binomial distribution rather than Poisson. Poisson assumes that variance equals mean, while real baseball scoring environments are heavily overdispersed and tend to cluster.
+
+As for calibration, I was looking to achieve reasonable alignment between the model's confidence and actual win percentages. In other words, if the home team has a 60% win probability, then it should win roughly 60% of the time.
+
+After a bit of research this brought me to isotonic regression, since it maps predicted probabilities to real observed frequencies and is non-parametric (we don't have to commit to a functional form).
+
+![Calibration curve](/blog/calibration.png)
+
+I later regretted this decision somewhat, since isotonic regression can overfit aggressively on smaller samples.
+
+After testing on the first month of the season and evaluating against sharp betting markets, the initial betting results looked encouraging:
+
+![Accuracy over time](/blog/accuracy_over_time.png)
+
+ROI was positive across several betting segments, particularly underdogs and run lines:
+
+| Category | ROI | Record |
+|----------|-----|--------|
+| Favorites | +4.2% | 29-23 |
+| Underdogs | +22.0% | 63-59 |
+| Run Line | +10.0% | 110-67 |
+| Overs | -1.6% | 43-47 |
+| Unders | -23.2% | 28-41 |
+
+**Average line on underdog bets: +111**
+
+![ROI by segment](/blog/roi_by_segment.png)
+
+However, betting performance over a one-month sample is extremely noisy and easy to misinterpret. Positive ROI alone does not necessarily imply that the underlying probability estimates are strong.
+
+The more important story appeared in the probability performance metrics themselves.
+
+![Brier score over time](/blog/brier_over_time.png)
+
+![MAE over time](/blog/mae_over_time.png)
+
+Despite some positive betting outcomes, the model's probability predictions were only marginally better than random.
+
+Brier score, which measures calibration quality, suggested that the model outputs were only negligibly better than coin-flip probabilities. Meanwhile, MAE settled around 2.4 runs of average error, which is a respectable baseline for baseball scoring prediction.
+
+The real issue wasn't the 2.4 runs of MAE on its own. It was that the whole setup is locked to a point estimate, so even when the model picks the right side of a bet, it has nothing to say about how the run distribution is actually shaped. That matters most on totals, where the line is asking a distributional question and a single number can't answer it.
+
+That realization pushed me toward a simulation-based Bayesian framework for v2.
+
+## The Beauty of Bayes
+
+Back when I was an undergrad with a growing interest in probability and statistics, looking for alternatives to the limitations of frequentist modeling, I was drawn to the beauty of the way Bayesian methods formalize how rational minds should update beliefs, effectively describing how learning works by adjusting through new data. I particularly liked the self-correcting nature of Bayes' theorem and the graceful handling of initially limited data. Hence, hierarchical bayesian.
+
+Bayesian modeling in one paragraph:
+
+Instead of finding a single best parameter value, we treat parameters as random variables and estimate their posterior distribution given the observed data. We start with a prior (what we believe before seeing data), combine it with the likelihood (how well different parameter values explain the observed outcomes), and arrive at a posterior (what we believe after observing the data). The posterior gives us not just a point estimate, but an explicit measure of uncertainty.
+
+"Hierarchical" means parameters are nested. Each individual batter has their own skill profile, but those skills are drawn from a shared population distribution. This gives us partial pooling: a rookie with 50 plate appearances gets shrunk heavily toward the league average because we do not yet trust the sample, while a veteran with 5,000 plate appearances barely shrinks at all because the observed data dominates the prior. XGBoost has no equivalent mechanism; it treats every observation independently.
+
+Concretely, v2 models each plate appearance as a probabilistic interaction between batter skill, pitcher skill, platoon effects, and park context.
+
+The model itself is a Dirichlet-Multinomial over eight outcome cells per plate appearance: strikeout, walk, hit-by-pitch, single, double, triple, home run, and out-in-play.
+
+For each batter, we estimate a seven-dimensional vector of additive logit offsets (with "out" as the reference category). Pitchers receive the same treatment, with separate variance structures for starters and relievers. The model also includes platoon split adjustments and park-level residual effects on wOBA.
+
+When a specific batter faces a specific pitcher, the outcome probabilities are generated by softmaxing the sum of:
+
+- League-average logits (the intercept)
+- Batter logit offsets for the relevant platoon split
+- Pitcher logit offsets
+- Park effects
+
+## The Simulator: Per-Plate-Appearance Monte Carlo
+
+Once we have posterior estimates for batter skill, pitcher skill, and park effects, the simulator plays out each game one plate appearance at a time, running 10,000+ simulations per matchup.
+
+The output is not a single projected score, but a full joint distribution over (home_runs, away_runs), from which moneyline, run line, and totals probabilities can be derived directly.
+
+This removes the need for a manually imposed negative binomial assumption and avoids unrealistic independence assumptions between teams. Instead, the simulator allows scoring correlation structures to emerge naturally from the interaction between lineups, pitchers, bullpen usage, and game context.
+
+## Why This Is Better Than V1
+
+A few concrete things v2 can do that v1 could not:
+
+- **Lineup-aware predictions.** v1 relied on team-level batting splits, meaning a team with its full starting lineup received nearly the same prediction as a banged up or resting lineup. v2 incorporates the actual posted lineup directly into the simulation.
+
+- **Distribution-aware outputs.** v1 focused primarily on point estimates and assumed run distributions afterward. v2 generates the scoring distribution itself through simulation.
+
+- **Calibrated uncertainty.** The posterior distributions naturally provide credible intervals and uncertainty estimates for every modeled quantity.
+
+- **Extensibility.** Adding weather effects, umpire tendencies, or batter-pitcher interaction terms simply means extending the generative model itself rather than rebuilding an entirely new feature-engineered pipeline.
+
+- **Better structural realism.** Baseball games are sequential, interaction-heavy processes. Modeling them at the plate-appearance level is simply a more faithful representation of how run environments actually emerge.`,
   },
 ];
