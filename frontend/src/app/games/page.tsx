@@ -147,11 +147,19 @@ export default async function Page() {
     (g: any) => !predictionPks.has(g.game_pk)
   ) as GameInfo[];
 
+  const hasAnyPlay = (m: GameMatchup) =>
+    m.away.ev_flag !== "No Play" ||
+    m.home.ev_flag !== "No Play" ||
+    m.away.run_line_ev_flag !== "No Play" ||
+    m.home.run_line_ev_flag !== "No Play" ||
+    m.away.total_play !== "No Play" ||
+    m.home.total_play !== "No Play" ||
+    m.away.high_variance_flag === "Yes" ||
+    m.home.high_variance_flag === "Yes";
+
   matchups.sort((a, b) => {
-    const aHasEv =
-      a.away.ev_flag !== "No Play" || a.home.ev_flag !== "No Play" ? 1 : 0;
-    const bHasEv =
-      b.away.ev_flag !== "No Play" || b.home.ev_flag !== "No Play" ? 1 : 0;
+    const aHasEv = hasAnyPlay(a) ? 1 : 0;
+    const bHasEv = hasAnyPlay(b) ? 1 : 0;
     if (aHasEv !== bHasEv) return bHasEv - aHasEv;
     const aTime = a.start_time ?? "";
     const bTime = b.start_time ?? "";

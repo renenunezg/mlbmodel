@@ -7,22 +7,24 @@ interface SummaryStatsProps {
 export function SummaryStats({ matchups }: SummaryStatsProps) {
   const gameCount = matchups.length;
 
-  const evPlays = new Set<string>();
+  const mlPlays = new Set<string>();
+  const rlPlays = new Set<string>();
+  const totalsGames = new Set<number>();
   for (const m of matchups) {
-    if (m.away.ev_flag !== "No Play") evPlays.add(`${m.game_pk}-away`);
-    if (m.home.ev_flag !== "No Play") evPlays.add(`${m.game_pk}-home`);
-  }
-
-  let totalPlays = 0;
-  for (const m of matchups) {
-    if (m.away.total_play !== "No Play") totalPlays++;
-    if (m.home.total_play !== "No Play") totalPlays++;
+    if (m.away.ev_flag !== "No Play") mlPlays.add(`${m.game_pk}-away`);
+    if (m.home.ev_flag !== "No Play") mlPlays.add(`${m.game_pk}-home`);
+    if (m.away.run_line_ev_flag !== "No Play") rlPlays.add(`${m.game_pk}-away`);
+    if (m.home.run_line_ev_flag !== "No Play") rlPlays.add(`${m.game_pk}-home`);
+    if (m.away.total_play !== "No Play" || m.home.total_play !== "No Play") {
+      totalsGames.add(m.game_pk);
+    }
   }
 
   const stats = [
     { label: "Games", value: gameCount },
-    { label: "+EV Plays", value: evPlays.size },
-    { label: "Total Plays", value: totalPlays },
+    { label: "ML", value: mlPlays.size },
+    { label: "RL", value: rlPlays.size },
+    { label: "Totals", value: totalsGames.size },
   ];
 
   return (
