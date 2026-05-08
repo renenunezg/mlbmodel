@@ -239,6 +239,34 @@ def fetch_probable_starters(game_date: date = None, days_ahead: int = 7) -> pd.D
     return df
 
 
+def fetch_lineup(game_pk: int) -> dict[str, list[int]]:
+    """Fetch posted batting orders for a game.
+
+    Reads the boxscore endpoint, returns `{"home": [9 batter_ids], "away": [...]}`.
+    Lists are empty if the lineup hasn't posted yet (pre-game) or if the game
+    isn't found. Player IDs are returned as ints in slot order 1-9.
+    """
+    url = f"{BASE_URL}/game/{game_pk}/boxscore"
+    last_exc: Exception | None = None
+    for attempt in range(2):
+        try:
+            resp = requests.get(url, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+            break
+        except Exception as e:
+            last_exc = e
+    else:
+        raise RuntimeError(f"fetch_lineup({game_pk}) failed: {last_exc}")
+
+    out: dict[str, list[int]] = {"home": [], "away": []}
+    teams = data.get("teams", {})
+    for side in ("home", "away"):
+        order = teams.get(side, {}).get("battingOrder", []) or []
+        out[side] = [int(pid) for pid in order]
+    return out
+
+
 def fetch_batting_splits(season: int = None, split: str = "vs_rhp") -> pd.DataFrame:
     """Fetch team batting splits from MLB Stats API.
 
