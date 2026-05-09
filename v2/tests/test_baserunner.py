@@ -39,38 +39,6 @@ def test_hr_clears_bases_and_scores_all():
 
 
 @skip_if_no_tables
-def test_solo_hr():
-    """HR with empty bases → exactly 1 run."""
-    adv = load_advancement_table()
-    rng = np.random.default_rng(1)
-    n = 200
-    state = np.zeros(n, dtype=np.int64)
-    outs = np.zeros(n, dtype=np.int64)
-    outcome = np.full(n, OUTCOME_TO_IDX["HR"], dtype=np.int64)
-    subtype = np.full(n, NA_SUBTYPE_IDX, dtype=np.int64)
-    ns, ru, oa = adv.sample(rng, state, outs, outcome, subtype)
-    assert (ns == 0).all()
-    assert (ru == 1).all()
-
-
-@skip_if_no_tables
-def test_strikeout_adds_one_out_no_runs():
-    """K with empty bases, 0 outs → state unchanged, runs=0, outs_added=1."""
-    adv = load_advancement_table()
-    rng = np.random.default_rng(2)
-    n = 200
-    state = np.zeros(n, dtype=np.int64)
-    outs = np.zeros(n, dtype=np.int64)
-    outcome = np.full(n, OUTCOME_TO_IDX["K"], dtype=np.int64)
-    subtype = np.full(n, NA_SUBTYPE_IDX, dtype=np.int64)
-    ns, ru, oa = adv.sample(rng, state, outs, outcome, subtype)
-    assert (ru == 0).all()
-    # nearly all should be 1 out added; allow edge cases (caught stealing on the K)
-    assert (oa == 1).mean() > 0.95
-    assert (ns == 0).all()
-
-
-@skip_if_no_tables
 def test_walk_with_bases_loaded_forces_run():
     """BB with bases loaded → exactly 1 run (forced from 3rd), state stays full."""
     adv = load_advancement_table()

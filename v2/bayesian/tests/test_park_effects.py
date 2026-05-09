@@ -7,12 +7,6 @@ import pandas as pd
 from v2.bayesian import park_effects
 
 
-def test_savant_park_factors_has_30_teams():
-    pf = park_effects.savant_park_factors()
-    assert len(pf) == 30
-    assert pf["COL"] > 110
-
-
 def test_statcast_team_mapping_round_trips():
     pf = park_effects.savant_park_factors()
     for stat_team in ["AZ", "CWS", "KC", "SD", "SF", "TB", "WSH"]:

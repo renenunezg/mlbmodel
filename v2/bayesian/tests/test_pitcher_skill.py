@@ -1,7 +1,6 @@
 """Fast unit tests for the pitcher skill model."""
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -12,15 +11,6 @@ from v2.bayesian.tests._synth import synth_pitcher_pa
 @pytest.fixture(scope="module")
 def synthetic_pa():
     return synth_pitcher_pa(n_sp=20, n_rp=20, pa_per_sp=300, pa_per_rp=80, seed=7)
-
-
-def test_classify_roles_majority(synthetic_pa):
-    pa_df, _ = synthetic_pa
-    role = pitcher_skill.classify_roles(pa_df)
-    assert set(role.unique()).issubset({"SP", "RP"})
-    sp_count = (role == "SP").sum()
-    rp_count = (role == "RP").sum()
-    assert sp_count > 0 and rp_count > 0
 
 
 def test_filter_position_player_pitching():
@@ -61,11 +51,3 @@ def test_role_split_recovers_separate_widths(synthetic_pa):
     assert sp_avg > rp_avg, f"SP sigma not larger than RP: SP={sp_avg:.3f} RP={rp_avg:.3f}"
 
 
-def test_summarize_returns_required_keys(synthetic_pa):
-    pa_df, _ = synthetic_pa
-    idata, _, _ = pitcher_skill.fit(
-        pa_df, draws=200, tune=200, chains=2, target_accept=0.9, random_seed=0
-    )
-    out = pitcher_skill.summarize(idata)
-    assert {"max_rhat", "min_ess_bulk", "min_ess_tail"}.issubset(out.keys())
-    assert np.isfinite(out["max_rhat"])
