@@ -36,11 +36,16 @@ GHOST_RUNNER_STATE = 2  # runner on 2B only
 RELIEVER_PULL_OUTS = 9
 RELIEVER_PULL_RUNS = 3
 
-# Per-game form noise on logits. Mimics day-to-day variation and posterior
-# parameter uncertainty that point-estimate posteriors miss. Applied to all 8
-# outcomes (zero-sum across the vector to avoid mean-shifting the run rate).
-# Sigma calibrated against the variance gate.
-FORM_SIGMA = 0.18
+# Per-game form noise on logits. Zero-sum across the 8-outcome vector to avoid
+# systematically shifting the run rate, applied per game per side. With Phase 5's
+# K-draw posteriors (load_posterior_draws) handling parameter uncertainty
+# directly, this knob now mostly captures genuine day-to-day form variance.
+# Recalibrated 2026-05-09: sigma=0.13 clears the mean-runs gate (+4.87%) and
+# misses the variance gate by ~1pp (-6.04%, gate is 5%). The mean is what
+# matters most for pricing; var miss is a known tradeoff. To close the var
+# gap properly, see "out-subtype model conditioned on batter/pitcher" in
+# CLAUDE.md deferred work.
+FORM_SIGMA = 0.13
 
 
 @dataclass
@@ -77,6 +82,7 @@ def simulate_game(
     inputs: GameInputs,
     n_sims: int = 1000,
     role_lookup: dict[int, int] | None = None,
+    form_sigma: float = FORM_SIGMA,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return (home_runs, away_runs), each (n_sims,) int64."""
     role_lookup = role_lookup or {}
@@ -94,10 +100,14 @@ def simulate_game(
     # Per-sim "form" noise across all 8 outcomes (one per side). Zero-summed to
     # avoid systematic level-shift on the run rate. Held constant across the game.
     n_out = K_FREE + 1
-    away_form_full = rng.normal(0.0, FORM_SIGMA, size=(n_sims, n_out))
-    away_form_full -= away_form_full.mean(axis=1, keepdims=True)
-    home_form_full = rng.normal(0.0, FORM_SIGMA, size=(n_sims, n_out))
-    home_form_full -= home_form_full.mean(axis=1, keepdims=True)
+    if form_sigma > 0:
+        away_form_full = rng.normal(0.0, form_sigma, size=(n_sims, n_out))
+        away_form_full -= away_form_full.mean(axis=1, keepdims=True)
+        home_form_full = rng.normal(0.0, form_sigma, size=(n_sims, n_out))
+        home_form_full -= home_form_full.mean(axis=1, keepdims=True)
+    else:
+        away_form_full = np.zeros((n_sims, n_out))
+        home_form_full = np.zeros((n_sims, n_out))
 
     # ---- per-sim state ----
     state = np.zeros(n_sims, dtype=np.int64)
