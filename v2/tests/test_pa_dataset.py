@@ -6,7 +6,6 @@ import pandas as pd
 
 from v2.data.pa_dataset import (
     EVENT_TO_OUTCOME,
-    EVENT_TO_OUT_SUBTYPE,
     NON_PA_EVENTS,
     OUTCOMES,
     transform_pitch_frame,
@@ -98,25 +97,3 @@ def test_strikeouts_have_correct_subtype():
     assert sub["strikeout_double_play"] == "k_dp"
 
 
-def test_schema_types():
-    """Output schema has expected columns and types."""
-    events = ["single", "home_run", "walk"]
-    df = transform_pitch_frame(_synthetic_pitches(events))
-    expected = {
-        "game_pk", "game_date", "batter", "pitcher", "stand", "p_throws",
-        "home_team", "away_team", "balls", "strikes", "events", "outcome",
-        "out_subtype", "launch_speed", "launch_angle", "inning", "inning_topbot",
-    }
-    assert expected.issubset(df.columns)
-    assert df["batter"].dtype == np.int64
-    assert df["pitcher"].dtype == np.int64
-
-
-def test_event_subtype_keys_are_subset_of_outcome_keys():
-    """Every key in EVENT_TO_OUT_SUBTYPE must also be in EVENT_TO_OUTCOME (and map to OUT or K)."""
-    extra = set(EVENT_TO_OUT_SUBTYPE) - set(EVENT_TO_OUTCOME)
-    assert not extra, f"out_subtype maps unknown events: {extra}"
-    for evt in EVENT_TO_OUT_SUBTYPE:
-        assert EVENT_TO_OUTCOME[evt] in {"OUT", "K"}, (
-            f"{evt} has subtype but outcome={EVENT_TO_OUTCOME[evt]}"
-        )

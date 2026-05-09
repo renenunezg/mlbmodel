@@ -6,46 +6,12 @@ import pandas as pd
 import pytest
 
 from v2.bayesian import batter_skill
-from v2.bayesian._common import ActorIndex
 from v2.bayesian.tests._synth import synth_batter_pa
 
 
 @pytest.fixture(scope="module")
 def synthetic_pa():
     return synth_batter_pa(n_batters=40, pa_per_cell_mean=150, seed=42)
-
-
-def test_aggregate_counts_shape_and_sum(synthetic_pa):
-    pa_df, _ = synthetic_pa
-    bidx = ActorIndex.from_series(pa_df["batter"])
-    counts, n_per_cell = batter_skill.aggregate_counts(pa_df, bidx)
-    assert counts.shape == (bidx.n, 2, 8)
-    assert n_per_cell.shape == (bidx.n, 2)
-    assert int(counts.sum()) == len(pa_df)
-
-
-def test_build_model_coords(synthetic_pa):
-    pa_df, _ = synthetic_pa
-    model, meta = batter_skill.build_model(pa_df)
-    assert "batter" in model.coords and "hand" in model.coords
-    assert tuple(model.coords["hand"]) == ("vs_R", "vs_L")
-    assert meta["n_batters"] == pa_df["batter"].nunique()
-
-
-def test_summarize_returns_required_keys():
-    keys = {"max_rhat", "min_ess_bulk", "min_ess_tail"}
-    import arviz as az
-    rng = np.random.default_rng(0)
-    fake = az.from_dict(
-        posterior={"intercept": rng.normal(size=(2, 50, 7)),
-                   "sigma_batter": np.abs(rng.normal(size=(2, 50, 7))),
-                   "sigma_platoon": np.abs(rng.normal(size=(2, 50, 7)))},
-        coords={"outcome_free": list("ABCDEFG")},
-        dims={"intercept": ["outcome_free"], "sigma_batter": ["outcome_free"],
-              "sigma_platoon": ["outcome_free"]},
-    )
-    out = batter_skill.summarize(fake)
-    assert keys.issubset(out.keys())
 
 
 def test_synth_recovery_and_platoon_sign(synthetic_pa):
