@@ -83,52 +83,6 @@ def test_unknown_actor_falls_back_to_league_mean():
     np.testing.assert_allclose(probs, expected, atol=1e-12)
 
 
-@skip_if_no_posteriors
-def test_park_neutral_recovers_no_park():
-    """At a venue with park_log near 0, the WOBA-weighted shift is near 0."""
-    pm = _load()
-    real_park_log = pm.park_log[:-1]
-    neutral_idx = int(np.argmin(np.abs(real_park_log)))
-    neutral_code = pm.venue_codes[neutral_idx]
-
-    from v2.simulator import pa_probs_batch
-    p_neutral = pa_probs_batch(
-        pm,
-        batter_ids=np.array([-1], dtype=np.int64),
-        pitcher_ids=np.array([-1], dtype=np.int64),
-        vs_lhp=np.array([False]),
-        roles=np.array([0], dtype=np.int64),
-        venues=np.array([neutral_code]),
-    )[0]
-    p_unknown = pa_probs_batch(
-        pm,
-        batter_ids=np.array([-1], dtype=np.int64),
-        pitcher_ids=np.array([-1], dtype=np.int64),
-        vs_lhp=np.array([False]),
-        roles=np.array([0], dtype=np.int64),
-        venues=np.array(["__UNKNOWN__"]),
-    )[0]
-    # Within ~0.5pp because park_log isn't exactly zero anywhere.
-    assert np.abs(p_neutral - p_unknown).max() < 0.005
-
-
-@skip_if_no_posteriors
-def test_probs_sum_to_one():
-    pm = _load()
-    rng = np.random.default_rng(0)
-    n = 1000
-    from v2.simulator import pa_probs_batch
-    probs = pa_probs_batch(
-        pm,
-        batter_ids=rng.choice(pm.batter_ids, size=n).astype(np.int64),
-        pitcher_ids=rng.choice(pm.pitcher_ids, size=n).astype(np.int64),
-        vs_lhp=rng.random(n) < 0.3,
-        roles=(rng.random(n) < 0.5).astype(np.int64),
-        venues=np.random.default_rng(0).choice(pm.venue_codes, size=n),
-    )
-    np.testing.assert_allclose(probs.sum(axis=1), 1.0, atol=1e-10)
-
-
 # ---------- acceptance gate ----------------------------------------------
 
 

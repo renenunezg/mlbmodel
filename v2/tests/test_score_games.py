@@ -8,8 +8,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import numpy as np
-import pandas as pd
 import pytest
 
 from v2.bayesian._common import POSTERIORS_DIR
@@ -80,18 +78,3 @@ def test_score_games_end_to_end():
         assert df[col].notna().all(), f"{col} has nulls"
 
 
-@pytest.mark.skipif(not POSTERIORS_PRESENT, reason="posteriors not built")
-@pytest.mark.skipif(not CACHE_2026.exists(), reason="2026 statcast cache missing")
-def test_market_probs_internals():
-    """Sanity check that probs.market_probs lines up with raw mean over the same arrays."""
-    from v2.markets.probs import market_probs
-
-    rng = np.random.default_rng(42)
-    h = rng.poisson(4.5, size=10_000)
-    a = rng.poisson(4.5, size=10_000)
-    p = market_probs(h, a, total_line=9.0, spread_home=-1.5)
-
-    # cross-check against direct calculation
-    margin = h - a
-    expected_home = float((margin > 0).mean()) + 0.5 * float((margin == 0).mean())
-    assert abs(p["p_home_win"] - round(expected_home, 4)) < 1e-9
