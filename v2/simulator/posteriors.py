@@ -79,44 +79,45 @@ def _posterior_mean(idata: az.InferenceData, var: str) -> np.ndarray:
     return idata.posterior[var].mean(("chain", "draw")).values
 
 
-def load_posteriors(posteriors_dir: Path = POSTERIORS_DIR) -> PosteriorMeans:
-    bat = az.from_netcdf(posteriors_dir / "batter_skill.nc")
-    pit = az.from_netcdf(posteriors_dir / "pitcher_skill.nc")
-    park = az.from_netcdf(posteriors_dir / "park_effects.nc")
-
-    intercept_b = _posterior_mean(bat, "intercept")
-    intercept_p = _posterior_mean(pit, "intercept")
+def _assemble(
+    *,
+    intercept_b: np.ndarray,
+    intercept_p: np.ndarray,
+    sigma_batter: np.ndarray,
+    z_batter: np.ndarray,
+    sigma_platoon: np.ndarray,
+    z_platoon: np.ndarray,
+    sigma_pitcher: np.ndarray,
+    z_pitcher: np.ndarray,
+    park_log_real: np.ndarray,
+    batter_ids: np.ndarray,
+    pitcher_ids: np.ndarray,
+    venue_codes: np.ndarray,
+    enforce_intercept_tolerance: bool,
+) -> PosteriorMeans:
     intercept_diff = float(np.abs(intercept_b - intercept_p).max())
-
-    sigma_batter = _posterior_mean(bat, "sigma_batter")          # (K_FREE,)
-    z_batter = _posterior_mean(bat, "z_batter")                  # (n_b, K_FREE)
-    sigma_platoon = _posterior_mean(bat, "sigma_platoon")        # (K_FREE,)
-    z_platoon = _posterior_mean(bat, "z_platoon")                # (n_b, K_FREE)
+    if enforce_intercept_tolerance and intercept_diff > INTERCEPT_TOLERANCE:
+        raise RuntimeError(
+            f"batter and pitcher intercepts disagree by {intercept_diff:.4f} > "
+            f"{INTERCEPT_TOLERANCE}; investigate before using the simulator."
+        )
 
     beta_main = sigma_batter[None, :] * z_batter
     beta_platoon = sigma_platoon[None, :] * z_platoon
-    n_b, _ = beta_main.shape
+    n_b = beta_main.shape[0]
     batter_offset = np.vstack([beta_main, np.zeros((1, K_FREE))])
     platoon_offset = np.vstack([beta_platoon, np.zeros((1, K_FREE))])
 
-    sigma_pitcher = _posterior_mean(pit, "sigma_pitcher")        # (role=2, K_FREE)
-    z_pitcher = _posterior_mean(pit, "z_pitcher")                # (n_p, K_FREE)
     # ROLES = ("SP", "RP"); index 0 = SP, 1 = RP per pitcher_skill.py.
-    beta_pitcher = sigma_pitcher[None, :, :] * z_pitcher[:, None, :]   # (n_p, 2, K_FREE)
-    n_p, _, _ = beta_pitcher.shape
-    pitcher_offset = np.concatenate(
-        [beta_pitcher, np.zeros((1, 2, K_FREE))], axis=0
-    )
+    beta_pitcher = sigma_pitcher[None, :, :] * z_pitcher[:, None, :]
+    n_p = beta_pitcher.shape[0]
+    pitcher_offset = np.concatenate([beta_pitcher, np.zeros((1, 2, K_FREE))], axis=0)
 
-    park_log_real = _posterior_mean(park, "park_log")            # (n_v,)
     park_log = np.concatenate([park_log_real, [0.0]])
 
-    batter_ids = bat.posterior["batter"].values.astype(np.int64)
-    pitcher_ids = pit.posterior["pitcher"].values.astype(np.int64)
-    venue_codes = park.posterior["venue"].values.astype(str)
-
-    # Sanity: ActorIndex.from_series already sorted these, but be defensive in
-    # case a future training pass changes the order. searchsorted requires sort.
+    # searchsorted requires sorted ids; defensive resort if upstream order changes.
+    batter_ids = batter_ids.copy()
+    pitcher_ids = pitcher_ids.copy()
     if not np.all(np.diff(batter_ids) > 0):
         order = np.argsort(batter_ids)
         batter_ids = batter_ids[order]
@@ -126,12 +127,6 @@ def load_posteriors(posteriors_dir: Path = POSTERIORS_DIR) -> PosteriorMeans:
         order = np.argsort(pitcher_ids)
         pitcher_ids = pitcher_ids[order]
         pitcher_offset[:n_p] = pitcher_offset[:n_p][order]
-
-    if intercept_diff > INTERCEPT_TOLERANCE:
-        raise RuntimeError(
-            f"batter and pitcher intercepts disagree by {intercept_diff:.4f} > "
-            f"{INTERCEPT_TOLERANCE}; investigate before using the simulator."
-        )
 
     intercept = 0.5 * (intercept_b + intercept_p)
 
@@ -143,6 +138,93 @@ def load_posteriors(posteriors_dir: Path = POSTERIORS_DIR) -> PosteriorMeans:
         park_log=park_log,
         batter_ids=batter_ids,
         pitcher_ids=pitcher_ids,
-        venue_codes=venue_codes,
+        venue_codes=venue_codes.copy(),
         intercept_diff=intercept_diff,
     )
+
+
+def load_posteriors(posteriors_dir: Path = POSTERIORS_DIR) -> PosteriorMeans:
+    bat = az.from_netcdf(posteriors_dir / "batter_skill.nc")
+    pit = az.from_netcdf(posteriors_dir / "pitcher_skill.nc")
+    park = az.from_netcdf(posteriors_dir / "park_effects.nc")
+
+    return _assemble(
+        intercept_b=_posterior_mean(bat, "intercept"),
+        intercept_p=_posterior_mean(pit, "intercept"),
+        sigma_batter=_posterior_mean(bat, "sigma_batter"),
+        z_batter=_posterior_mean(bat, "z_batter"),
+        sigma_platoon=_posterior_mean(bat, "sigma_platoon"),
+        z_platoon=_posterior_mean(bat, "z_platoon"),
+        sigma_pitcher=_posterior_mean(pit, "sigma_pitcher"),
+        z_pitcher=_posterior_mean(pit, "z_pitcher"),
+        park_log_real=_posterior_mean(park, "park_log"),
+        batter_ids=bat.posterior["batter"].values.astype(np.int64),
+        pitcher_ids=pit.posterior["pitcher"].values.astype(np.int64),
+        venue_codes=park.posterior["venue"].values.astype(str),
+        enforce_intercept_tolerance=True,
+    )
+
+
+def load_posterior_draws(
+    rng: np.random.Generator,
+    K: int = 30,
+    posteriors_dir: Path = POSTERIORS_DIR,
+) -> list[PosteriorMeans]:
+    """Sample K random posterior realizations from the chain×draw axes.
+
+    Each returned PosteriorMeans is one draw (not a mean), so consuming it via
+    simulate_pa_batch / simulate_game propagates parameter uncertainty into the
+    resulting run distribution. K~30 is enough for stable p10/p90 win-prob bands;
+    the simulator's per-PA randomness still dominates total variance.
+
+    Intercept tolerance is NOT enforced per-draw — the per-draw |int_b - int_p|
+    is much noisier than on means, but the means already pass the check via
+    load_posteriors().
+    """
+    bat = az.from_netcdf(posteriors_dir / "batter_skill.nc")
+    pit = az.from_netcdf(posteriors_dir / "pitcher_skill.nc")
+    park = az.from_netcdf(posteriors_dir / "park_effects.nc")
+
+    bat_s = bat.posterior.stack(sample=("chain", "draw"))
+    pit_s = pit.posterior.stack(sample=("chain", "draw"))
+    park_s = park.posterior.stack(sample=("chain", "draw"))
+
+    n_samples = bat_s.sizes["sample"]
+    if K > n_samples:
+        raise ValueError(f"K={K} exceeds available draws {n_samples}")
+    indices = rng.choice(n_samples, size=K, replace=False)
+
+    bat_intercept = bat_s["intercept"].isel(sample=indices).values    # (K_FREE, K)
+    bat_sigma = bat_s["sigma_batter"].isel(sample=indices).values     # (K_FREE, K)
+    bat_z = bat_s["z_batter"].isel(sample=indices).values             # (n_b, K_FREE, K)
+    bat_sigma_pt = bat_s["sigma_platoon"].isel(sample=indices).values # (K_FREE, K)
+    bat_z_pt = bat_s["z_platoon"].isel(sample=indices).values         # (n_b, K_FREE, K)
+
+    pit_intercept = pit_s["intercept"].isel(sample=indices).values    # (K_FREE, K)
+    pit_sigma = pit_s["sigma_pitcher"].isel(sample=indices).values    # (role=2, K_FREE, K)
+    pit_z = pit_s["z_pitcher"].isel(sample=indices).values            # (n_p, K_FREE, K)
+
+    park_log = park_s["park_log"].isel(sample=indices).values         # (n_v, K)
+
+    batter_ids = bat.posterior["batter"].values.astype(np.int64)
+    pitcher_ids = pit.posterior["pitcher"].values.astype(np.int64)
+    venue_codes = park.posterior["venue"].values.astype(str)
+
+    out: list[PosteriorMeans] = []
+    for k in range(K):
+        out.append(_assemble(
+            intercept_b=bat_intercept[..., k],
+            intercept_p=pit_intercept[..., k],
+            sigma_batter=bat_sigma[..., k],
+            z_batter=bat_z[..., k],
+            sigma_platoon=bat_sigma_pt[..., k],
+            z_platoon=bat_z_pt[..., k],
+            sigma_pitcher=pit_sigma[..., k],
+            z_pitcher=pit_z[..., k],
+            park_log_real=park_log[..., k],
+            batter_ids=batter_ids,
+            pitcher_ids=pitcher_ids,
+            venue_codes=venue_codes,
+            enforce_intercept_tolerance=False,
+        ))
+    return out
