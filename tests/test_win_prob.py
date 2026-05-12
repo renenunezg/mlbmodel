@@ -1,4 +1,3 @@
-"""Tests for win probability and joint-distribution computations."""
 import numpy as np
 from backend.simulation import win_prob, compute_game_probs
 
