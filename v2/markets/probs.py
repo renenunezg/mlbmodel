@@ -42,7 +42,7 @@ def market_probs(
     p_home_win_strict = float((margin > 0).mean())
     p_away_win_strict = float((margin < 0).mean())
     p_tie = float((margin == 0).mean())
-    # Ties shouldn't happen — game_sim resolves via extras — but split 50/50 if so.
+    # Ties shouldn't happen (game_sim resolves via extras), but split 50/50 if so.
     p_home_win = p_home_win_strict + 0.5 * p_tie
     p_away_win = p_away_win_strict + 0.5 * p_tie
 

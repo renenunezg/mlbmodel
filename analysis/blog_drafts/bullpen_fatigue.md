@@ -8,7 +8,7 @@
 
 > Looked at 421 MLB games to see what predicts our model's wins. Hottest signal: opposing team's bullpen IP in the prior 2 days. Picks against rested bullpens: -5.6% ROI. Picks against gassed bullpens: +13.3% ROI. The book isn't fully pricing in pen fatigue. Thread 👇
 
-## The thread (5–6 tweets)
+## The thread (5-6 tweets)
 
 **1/** I run an MLB run-prediction model. Recent stretch of comeback losses got me asking: how much of the model's pain is bullpen volatility? Pulled 421 completed games and dug in.
 

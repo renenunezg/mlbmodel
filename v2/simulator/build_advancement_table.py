@@ -176,7 +176,7 @@ def build_advancement(df: pd.DataFrame) -> pd.DataFrame:
         "state", "outs", "outcome_idx", "subtype_key", "new_state", "runs", "outs_added", "prob",
     ])
 
-    # Append deterministic rows for HR / BB / HBP — these are structurally constrained
+    # Append deterministic rows for HR / BB / HBP. These are structurally constrained
     # and don't deserve smoothing.
     det_rows = []
     for st in range(8):

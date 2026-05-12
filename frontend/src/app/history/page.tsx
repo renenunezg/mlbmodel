@@ -376,7 +376,7 @@ export default async function HistoryPage({
           {/* Pagination */}
           <div className="flex items-center justify-between pt-2">
             <p className="text-sm text-muted-foreground">
-              Showing {offset + 1}–{Math.min(offset + PAGE_SIZE, totalRows)} of{" "}
+              Showing {offset + 1}-{Math.min(offset + PAGE_SIZE, totalRows)} of{" "}
               {totalRows} rows
             </p>
             <div className="flex items-center gap-2">

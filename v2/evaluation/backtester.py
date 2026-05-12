@@ -68,7 +68,7 @@ def run(start, end, out_path: Path | None, lineup_filter: str) -> dict:
     print(f"[backtester] v1 rows={len(v1)}, v2 rows={len(v2)}, final games={len(games)}")
 
     if v2.empty:
-        print("[backtester] v2 table empty for this window — run replay.py first.")
+        print("[backtester] v2 table empty for this window. Run replay.py first.")
         sys.exit(2)
 
     if lineup_filter:
