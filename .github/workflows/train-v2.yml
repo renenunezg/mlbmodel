@@ -12,7 +12,7 @@ concurrency:
 jobs:
   train:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -40,7 +40,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           PYTHONPATH: "."
-        run: python -m v2.data.build_cache --years 2026
+        run: python -m v2.data.build_cache --years 2024 2025 2026
 
       - name: Train v2 models
         env:
