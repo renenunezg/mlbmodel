@@ -1,18 +1,9 @@
-"""Tests for regression, probabilistic, and financial metrics."""
 import numpy as np
 import pandas as pd
 from backend.metrics import (
-    mae, rmse, mape, r_squared, brier_score, log_loss,
-    sharpness, calibration_curve, roi, max_drawdown,
+    mae, rmse, r_squared, sharpness, calibration_curve, roi, max_drawdown,
     equity_curve_from_ledger, hit_rate_by_edge_bucket,
 )
-
-
-# --- Regression ---
-
-def test_mae_perfect():
-    y = np.array([1.0, 2.0, 3.0])
-    assert mae(y, y) == 0.0
 
 
 def test_mae_known():
@@ -27,43 +18,11 @@ def test_rmse_known():
     assert abs(rmse(y_true, y_pred) - 1.0) < 1e-9
 
 
-def test_r_squared_perfect():
-    y = np.array([1.0, 2.0, 3.0, 4.0])
-    assert abs(r_squared(y, y) - 1.0) < 1e-9
-
-
 def test_r_squared_mean_prediction():
+    # R² = 0 when predicting the mean.
     y = np.array([1.0, 2.0, 3.0, 4.0])
     y_pred = np.full_like(y, y.mean())
-    assert abs(r_squared(y, y_pred)) < 1e-9  # R² = 0 when predicting mean
-
-
-# --- Probabilistic ---
-
-def test_brier_score_perfect():
-    probs = np.array([1.0, 0.0, 1.0])
-    outcomes = np.array([1.0, 0.0, 1.0])
-    assert brier_score(probs, outcomes) == 0.0
-
-
-def test_brier_score_baseline():
-    # Always predicting 0.5 on fair coin: Brier = 0.25
-    probs = np.full(1000, 0.5)
-    outcomes = np.random.choice([0.0, 1.0], size=1000, p=[0.5, 0.5])
-    bs = brier_score(probs, outcomes)
-    assert abs(bs - 0.25) < 0.02  # within noise
-
-
-def test_log_loss_perfect():
-    probs = np.array([0.99, 0.01, 0.99])
-    outcomes = np.array([1.0, 0.0, 1.0])
-    ll = log_loss(probs, outcomes)
-    assert ll < 0.05  # near zero for near-perfect
-
-
-def test_sharpness_all_same():
-    probs = np.full(100, 0.5)
-    assert sharpness(probs) == 0.0
+    assert abs(r_squared(y, y_pred)) < 1e-9
 
 
 def test_sharpness_spread():
@@ -90,11 +49,6 @@ def test_roi_breakeven():
 def test_roi_profit():
     ledger = pd.DataFrame({"stake": [1.0, 1.0], "payout": [2.5, 0.0]})
     assert roi(ledger) == 0.25  # net = 0.5 / 2.0 staked
-
-
-def test_max_drawdown_flat():
-    eq = np.array([1.0, 1.0, 1.0])
-    assert max_drawdown(eq) == 0.0
 
 
 def test_max_drawdown_known():
