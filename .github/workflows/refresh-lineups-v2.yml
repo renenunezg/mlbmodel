@@ -1,0 +1,52 @@
+name: Refresh Lineups v2
+
+on:
+  schedule:
+    - cron: "0/30 14-23 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: refresh-lineups-v2
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore Statcast cache
+        uses: actions/cache@v4
+        with:
+          path: cache
+          key: statcast-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            statcast-${{ runner.os }}-
+
+      - name: Restore posteriors
+        uses: actions/cache@v4
+        with:
+          path: v2/bayesian/posteriors
+          key: posteriors-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            posteriors-${{ runner.os }}-
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt && pip install -e .
+
+      - name: Refresh lineups
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          PYTHONPATH: "."
+        run: python -m v2.pipeline.refresh_lineups
