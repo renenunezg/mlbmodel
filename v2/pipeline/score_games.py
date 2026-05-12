@@ -13,6 +13,7 @@ Steps per game:
 from __future__ import annotations
 
 import argparse
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -328,6 +329,8 @@ def score(date: str, n_sims: int = 10000, write: bool = True, seed: int = 0) -> 
             live_queues, cache_queues, relievers, throws_lookup,
         )
         lineup_source = f"lineup_{lineup_tag}+queue_{queue_source}"
+        _hash_input = sorted(live.get("home", [])) + sorted(live.get("away", []))
+        lhash = hashlib.sha1(str(_hash_input).encode()).hexdigest()[:16]
         h_chunks: list[np.ndarray] = []
         a_chunks: list[np.ndarray] = []
         per_draw_home_wp: list[float] = []
@@ -358,6 +361,7 @@ def score(date: str, n_sims: int = 10000, write: bool = True, seed: int = 0) -> 
             posterior_age_days=age,
             home_wp_p10=home_wp_p10,
             home_wp_p90=home_wp_p90,
+            lineup_hash=lhash,
         )
         all_rows.extend(rows)
         for r in rows:
