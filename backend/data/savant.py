@@ -1,12 +1,4 @@
-"""
-Baseball Savant data fetcher.
-
-Replaces: scrape_park_factors.py
-
-Fetches park factors from Baseball Savant's leaderboard.
-Attempts JSON endpoint first, falls back to HTML scraping with requests
-(no Selenium).
-"""
+"""Park factors from Baseball Savant. CSV endpoint first, HTML scrape fallback."""
 
 import pandas as pd
 import requests
@@ -24,11 +16,7 @@ SAVANT_PARK_FACTORS_URL = "https://baseballsavant.mlb.com/leaderboard/statcast-p
 
 
 def fetch_park_factors(season: int = None) -> pd.DataFrame:
-    """Fetch park factors from Baseball Savant.
-
-    Returns DataFrame with columns:
-        team, venue, season, park_factor
-    """
+    """Park factors per (team, venue, season). Defaults to last year."""
     if season is None:
         # Park factors use previous year's data since current season may not have enough
         season = date.today().year - 1

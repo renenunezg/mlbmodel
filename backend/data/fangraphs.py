@@ -1,12 +1,4 @@
-"""
-Pitcher and team batting stats fetcher.
-
-Computes advanced metrics (xFIP, WHIP, K/9, wRC+) from Statcast pitch-level
-data via pybaseball. Replaces direct FanGraphs scraping (blocked by Cloudflare).
-
-For team batting wRC+: uses FanGraphs team batting page via pybaseball.
-Fallback: computes OPS from Statcast if FanGraphs is unavailable.
-"""
+"""Pitcher and team batting stats computed from Statcast pitch data via pybaseball."""
 
 import pandas as pd
 import numpy as np
@@ -27,14 +19,7 @@ _statcast_cache: dict[str, pd.DataFrame] = {}
 
 
 def _get_statcast_range(start_date: date = None) -> pd.DataFrame:
-    """Fetch Statcast pitch-level data from start_date to today.
-
-    Uses a per-season parquet cache on disk. Subsequent runs only fetch the
-    delta since the last cached date, then merge and re-save. Falls back to
-    full fetch if the cache is missing or corrupt.
-
-    Defaults to March 25 of the current year (safely before any opening day).
-    """
+    """Fetch Statcast pitch-level data, persisted to a per-season parquet cache."""
     from pybaseball import statcast
 
     end_dt = date.today()
@@ -111,7 +96,6 @@ def _get_statcast_range(start_date: date = None) -> pd.DataFrame:
 
 
 def _identify_starters(pitch_df: pd.DataFrame) -> set:
-    """Identify starting pitchers (first pitcher per team per game)."""
     starters = set()
     for game_pk in pitch_df["game_pk"].unique():
         game = pitch_df[pitch_df["game_pk"] == game_pk]
@@ -128,12 +112,7 @@ def _identify_starters(pitch_df: pd.DataFrame) -> set:
 
 def _compute_pitcher_stats(pitch_df: pd.DataFrame, pitcher_ids: set = None,
                             starter_ids: set = None) -> pd.DataFrame:
-    """Compute xFIP, WHIP, K/9, BB/9 from pitch-level Statcast data.
-
-    If pitcher_ids is provided, only compute for those pitchers.
-    If starter_ids is provided, also computes avg_ip_per_start (IP per game started)
-    for pitchers in that set.
-    """
+    """Compute xFIP, WHIP, K/9, BB/9. Adds avg_ip_per_start for pitchers in starter_ids."""
     # Filter to plate appearances (events)
     pa_df = pitch_df[pitch_df["events"].notna()].copy()
 
@@ -143,8 +122,6 @@ def _compute_pitcher_stats(pitch_df: pd.DataFrame, pitcher_ids: set = None,
     if pa_df.empty:
         return pd.DataFrame()
 
-    # Pre-compute IP per (pitcher, game) so we can derive avg IP per start for starters.
-    # This is also what the 60/40 blend replacement uses to weight starter vs bullpen innings.
     per_game_outs = None
     if starter_ids is not None and pa_df["pitcher"].isin(starter_ids).any():
         out_events = {
@@ -234,10 +211,7 @@ def _compute_pitcher_stats(pitch_df: pd.DataFrame, pitcher_ids: set = None,
 
 
 def _get_prior_season_pitcher_stats() -> pd.DataFrame:
-    """Get prior-season pitcher stats, cached to parquet for fast reuse.
-
-    Used as fallback for pitchers with no current-season data.
-    """
+    """Prior-season pitcher stats, parquet-cached. Fallback for pitchers with no current-season data."""
     prior_year = date.today().year - 1
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cache_path = CACHE_DIR / f"pitcher_stats_{prior_year}.parquet"
@@ -286,11 +260,7 @@ def _get_prior_season_pitcher_stats() -> pd.DataFrame:
 
 
 def fetch_pitcher_stats(season: int = None) -> pd.DataFrame:
-    """Fetch starting pitcher stats computed from Statcast data.
-
-    For pitchers with no current-season stats, falls back to prior-season data.
-    Returns DataFrame with columns matching the pitcher_stats DB table.
-    """
+    """Starting pitcher stats. Falls back to prior-season data for pitchers with no current rows."""
     if season is None:
         season = date.today().year
 
@@ -344,10 +314,7 @@ def fetch_pitcher_stats(season: int = None) -> pd.DataFrame:
 
 
 def fetch_bullpen_stats(season: int = None) -> pd.DataFrame:
-    """Fetch team-level bullpen stats computed from Statcast data.
-
-    Returns DataFrame with columns matching the bullpen_stats DB table.
-    """
+    """Team-level bullpen stats (IP-weighted xFIP / WHIP / K9 / RHP IP share)."""
     if season is None:
         season = date.today().year
 
@@ -402,13 +369,7 @@ def fetch_bullpen_stats(season: int = None) -> pd.DataFrame:
 
 
 def fetch_team_batting(season: int = None) -> pd.DataFrame:
-    """Fetch team batting stats from Statcast data.
-
-    Computes OPS, ISO, K%, BB% by split (vs RHP / vs LHP).
-    wRC+ is set to None (requires league context not available from Statcast alone).
-
-    For wRC+, falls back to pybaseball's FanGraphs integration if available.
-    """
+    """Team batting splits (OPS / ISO / K% / BB%) vs RHP and vs LHP."""
     if season is None:
         season = date.today().year
 

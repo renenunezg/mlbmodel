@@ -1,14 +1,4 @@
-"""
-MLB Stats API data fetcher.
-
-Replaces: scrape_season_scores.py, scrape_probable_starters.py,
-          scrape_team_batting_vs_lhp.py, scrape_team_batting_vs_rhp.py
-
-Uses the MLB-StatsAPI package for clean access to:
-- Game schedule and scores (game_pk as universal ID)
-- Probable starters with handedness
-- Team batting splits (vs LHP / vs RHP)
-"""
+"""MLB Stats API fetchers: schedule, scores, probable starters, lineups, batting splits."""
 
 import statsapi
 import pandas as pd
@@ -23,7 +13,6 @@ _handedness_cache: dict[int, str] = {}
 
 
 def _fetch_pitcher_handedness(pitcher_id: int) -> str | None:
-    """Fetch a pitcher's throwing hand from the MLB People API."""
     if pitcher_id in _handedness_cache:
         return _handedness_cache[pitcher_id]
 
@@ -41,7 +30,6 @@ def _fetch_pitcher_handedness(pitcher_id: int) -> str | None:
 
 
 def _batch_fetch_handedness(pitcher_ids: list[int]) -> dict[int, str]:
-    """Fetch handedness for multiple pitchers in one API call."""
     ids_to_fetch = [pid for pid in pitcher_ids if pid and pid not in _handedness_cache]
     if not ids_to_fetch:
         return _handedness_cache
@@ -63,13 +51,7 @@ def _batch_fetch_handedness(pitcher_ids: list[int]) -> dict[int, str]:
 
 
 def fetch_schedule(game_date: date = None) -> pd.DataFrame:
-    """Fetch the game schedule for a given date.
-
-    Returns DataFrame with columns:
-        game_pk, game_date, home_team, away_team, home_score, away_score,
-        status, venue, home_pitcher_name, home_pitcher_id, home_pitcher_hand,
-        away_pitcher_name, away_pitcher_id, away_pitcher_hand
-    """
+    """Schedule for a date (regular season only). Includes probable pitchers + handedness."""
     if game_date is None:
         game_date = date.today()
 
@@ -240,12 +222,7 @@ def fetch_probable_starters(game_date: date = None, days_ahead: int = 7) -> pd.D
 
 
 def fetch_lineup(game_pk: int) -> dict[str, list[int]]:
-    """Fetch posted batting orders for a game.
-
-    Reads the boxscore endpoint, returns `{"home": [9 batter_ids], "away": [...]}`.
-    Lists are empty if the lineup hasn't posted yet (pre-game) or if the game
-    isn't found. Player IDs are returned as ints in slot order 1-9.
-    """
+    """Posted batting orders {home: [pid1..pid9], away: [...]}. Empty lists pre-posting."""
     url = f"{BASE_URL}/game/{game_pk}/boxscore"
     last_exc: Exception | None = None
     for attempt in range(2):
