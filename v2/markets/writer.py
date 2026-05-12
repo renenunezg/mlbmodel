@@ -52,6 +52,7 @@ def build_game_rows(
     posterior_age_days: int,
     home_wp_p10: float | None = None,
     home_wp_p90: float | None = None,
+    lineup_hash: str | None = None,
 ) -> list[dict]:
     """Return two dict rows (home + away) ready to write to model_outputs_v2.
 
@@ -118,6 +119,7 @@ def build_game_rows(
         "our_total": our_total,
         "lineups_locked": lineups_locked,
         "lineup_source": lineup_source,
+        "lineup_hash": lineup_hash,
         "prediction_updated_at": now,
         "posterior_age_days": int(posterior_age_days),
     }
