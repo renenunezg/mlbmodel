@@ -1,4 +1,4 @@
-"""Populate model_outputs_season_v2 for a date range by replaying score_games.
+"""Populate model_outputs_season for a date range by replaying score_games.
 
 Idempotent: append_season() in v2/markets/writer.py upserts on (game_pk, team).
 Re-running over a date that's already populated is safe but wastes wall time;
@@ -33,9 +33,9 @@ def _daterange(start: date, end: date):
 
 
 def _dates_already_done(start: date, end: date) -> set[date]:
-    """Distinct dates in model_outputs_season_v2 within [start, end]."""
+    """Distinct dates in model_outputs_season within [start, end]."""
     q = text(
-        "SELECT DISTINCT date::date AS d FROM model_outputs_season_v2 "
+        "SELECT DISTINCT date::date AS d FROM model_outputs_season "
         "WHERE date::date BETWEEN :s AND :e"
     )
     with engine.begin() as conn:
@@ -58,7 +58,7 @@ def _log(date_str: str, games: int, wall_s: float, note: str = "") -> None:
 def replay_range(start: date, end: date, n_sims: int, resume: bool, seed: int) -> None:
     done = _dates_already_done(start, end) if resume else set()
     if resume:
-        print(f"[replay] resume: {len(done)} dates already in model_outputs_season_v2")
+        print(f"[replay] resume: {len(done)} dates already in model_outputs_season")
 
     dates = list(_daterange(start, end))
     print(f"[replay] range {start} -> {end} ({len(dates)} dates), n_sims={n_sims}")

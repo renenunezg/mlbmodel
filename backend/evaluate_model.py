@@ -313,7 +313,7 @@ def main(model=None, cv_metrics=None, best_params=None):
     if cv_metrics:
         _write_experiment_run(cv_metrics, best_params)
 
-    model_df = pd.read_sql_table("model_outputs_season", con=engine)
+    model_df = pd.read_sql(text("SELECT * FROM model_outputs_season"), con=engine)
     games_df = pd.read_sql_table("games", con=engine)
 
     games_df = games_df[games_df["status"] == "Final"].dropna(subset=["home_score", "away_score"])

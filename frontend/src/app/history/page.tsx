@@ -1,6 +1,8 @@
 import { supabase } from "@/lib/supabase";
 import { ModelOutput, GameInfo } from "@/lib/types";
 import { cn, formatDate, formatOdds, formatRuns, formatPct } from "@/lib/utils";
+import { getFirstV2Date } from "@/lib/constants";
+import { V2Badge } from "@/components/v2-badge";
 import Filters from "@/components/filters";
 import { LastUpdated } from "@/components/last-updated";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
@@ -265,8 +267,16 @@ export default async function HistoryPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {predictions.map((row, i) => {
+              {(() => {
+                const firstV2Date = getFirstV2Date(predictions);
+                const firstV2Idx = firstV2Date
+                  ? predictions.findIndex(
+                      (r) => r.date && r.date.slice(0, 10) === firstV2Date,
+                    )
+                  : -1;
+                return predictions.map((row, i) => {
                 const nextRow = predictions[i + 1];
+                const showV2Badge = i === firstV2Idx;
                 const game = gamesMap[row.game_pk];
                 const isFinal = game?.status === "Final";
                 const isHome = game?.home_team === row.team;
@@ -328,7 +338,10 @@ export default async function HistoryPage({
                     hasPlay && won === false && "text-negative"
                   )}
                 >
-                  <TableCell>{formatDate(row.date)}</TableCell>
+                  <TableCell>
+                    {formatDate(row.date)}
+                    {showV2Badge ? <V2Badge /> : null}
+                  </TableCell>
                   <TableCell className="font-medium">{row.team}</TableCell>
                   <TableCell>{row.starter ?? "-"}</TableCell>
                   <TableCell className="text-right">{formatRuns(row.expected_runs)}</TableCell>
@@ -369,7 +382,8 @@ export default async function HistoryPage({
                   </TableCell>
                 </TableRow>
                 );
-              })}
+              });
+              })()}
             </TableBody>
           </Table>
 

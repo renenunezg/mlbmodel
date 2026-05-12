@@ -5,9 +5,9 @@ Usage:
     python -m v2.evaluation.backtester --start 2025-07-15 --end 2025-07-15 --out smoke.json
 
 Reads from Supabase:
-    - model_outputs_season       (v1, pre-computed all season)
-    - model_outputs_season_v2    (v2, populated by replay.py)
-    - games                      (Final outcomes)
+    - model_outputs_season_v1_archive  (v1, pre-computed all season)
+    - model_outputs_season             (v2, populated by replay.py)
+    - games                            (Final outcomes)
 
 Filters v2 to lineup_source LIKE '%queue_cache%' so stub-queue rows don't
 confound the comparison. Inner-joins v1 and v2 on (game_pk, team) so both
@@ -62,8 +62,8 @@ def _load_games(start, end) -> pd.DataFrame:
 
 def run(start, end, out_path: Path | None, lineup_filter: str) -> dict:
     print(f"[backtester] loading predictions {start} -> {end}")
-    v1 = _load_predictions("model_outputs_season", start, end)
-    v2 = _load_predictions("model_outputs_season_v2", start, end, extra_cols="lineup_source")
+    v1 = _load_predictions("model_outputs_season_v1_archive", start, end)
+    v2 = _load_predictions("model_outputs_season", start, end, extra_cols="lineup_source")
     games = _load_games(start, end)
     print(f"[backtester] v1 rows={len(v1)}, v2 rows={len(v2)}, final games={len(games)}")
 

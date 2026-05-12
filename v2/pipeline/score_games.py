@@ -1,4 +1,4 @@
-"""Phase 5 entrypoint: score games for a date and write to model_outputs_v2.
+"""Score games for a date and write to model_outputs.
 
 Usage:
     python -m v2.pipeline.score_games --date 2025-09-15 --n-sims 10000
@@ -376,7 +376,7 @@ def score(date: str, n_sims: int = 10000, write: bool = True, seed: int = 0) -> 
     if write and all_rows:
         write_daily(pd.Timestamp(date), all_rows)
         append_season(all_rows)
-        print(f"[score_games] wrote {len(all_rows)} rows to model_outputs_v2 + season_v2")
+        print(f"[score_games] wrote {len(all_rows)} rows to model_outputs + season")
 
     print(f"[score_games] {flagged} +EV flags across {len(all_rows)} rows; posterior_age_days={age}")
     return pd.DataFrame(all_rows)

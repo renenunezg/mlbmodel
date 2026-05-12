@@ -6,6 +6,8 @@ import type {
   CalibrationBin,
   FeatureImportance,
   EdgeBucket,
+  PosteriorSkill,
+  PosteriorSigma,
 } from "@/lib/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { KpiCard } from "@/components/kpi-card";
@@ -13,8 +15,11 @@ import { AccuracyChart } from "@/components/accuracy-chart";
 import { MetricLineChart } from "@/components/metric-line-chart";
 import { CalibrationChart } from "@/components/calibration-chart";
 import { EquityCurveChart } from "@/components/equity-curve-chart";
-import { FeatureImportanceChart } from "@/components/feature-importance-chart";
 import { ResidualsChart } from "@/components/residuals-chart";
+import { TopSkillsLeaderboard } from "@/components/top-skills-leaderboard";
+import { VarianceDecompositionChart } from "@/components/variance-decomposition-chart";
+import { V2Badge } from "@/components/v2-badge";
+import { getFirstV2Date } from "@/lib/constants";
 import {
   Table,
   TableBody,
@@ -30,6 +35,8 @@ interface PerformanceTabsProps {
   featureImportance: FeatureImportance[];
   edgeBuckets: EdgeBucket[];
   residuals: number[];
+  posteriorSkills: PosteriorSkill[];
+  posteriorSigmas: PosteriorSigma[];
 }
 
 function pct(value: number | null | undefined): string {
@@ -60,6 +67,8 @@ export function PerformanceTabs({
   featureImportance,
   edgeBuckets,
   residuals,
+  posteriorSkills,
+  posteriorSigmas,
 }: PerformanceTabsProps) {
   // Split evaluations by window type
   const dailyEvals = evaluations.filter(
@@ -84,13 +93,6 @@ export function PerformanceTabs({
     ? calibration
         .filter((c) => c.date === latestCalDate)
         .sort((a, b) => a.bin_mid - b.bin_mid)
-    : [];
-
-  // Latest feature importance (most recent date)
-  const latestFeatDate =
-    featureImportance.length > 0 ? featureImportance[0].date : null;
-  const latestFeatures = latestFeatDate
-    ? featureImportance.filter((f) => f.date === latestFeatDate)
     : [];
 
   // Latest edge buckets (season window, most recent date)
@@ -314,7 +316,12 @@ export function PerformanceTabs({
         </div>
 
         <div className="border-t border-border pt-6">
-          <h2 className="font-heading text-lg mb-4">Hit Rate by Edge Bucket</h2>
+          <h2 className="font-heading text-lg mb-4">
+            Hit Rate by Edge Bucket
+            {latestBucketDate && latestBucketDate.slice(0, 10) >= "2026-05-12" ? (
+              <V2Badge />
+            ) : null}
+          </h2>
           {latestBuckets.length > 0 ? (
             <Table>
               <TableHeader>
@@ -354,18 +361,24 @@ export function PerformanceTabs({
       {/* DIAGNOSTICS TAB */}
       {/* ============================================================ */}
       <TabsContent value="diagnostics" className="space-y-8">
-        <div className="border-t border-border pt-6">
-          <h2 className="font-heading text-lg mb-4">Feature Importance</h2>
-          {latestFeatures.length > 0 ? (
-            <>
-              <p className="text-xs text-muted-foreground mb-2">
-                XGBoost gain-based importance as of {latestFeatDate}.
-              </p>
-              <FeatureImportanceChart data={latestFeatures} />
-            </>
+        <div>
+          <h2 className="font-heading text-lg mb-4">Posterior Skill Leaderboard</h2>
+          {posteriorSkills.length > 0 ? (
+            <TopSkillsLeaderboard skills={posteriorSkills} />
           ) : (
             <p className="text-muted-foreground text-sm">
-              No feature importance data yet.
+              No skill data yet. Runs after train-v2.yml completes.
+            </p>
+          )}
+        </div>
+
+        <div className="border-t border-border pt-6">
+          <h2 className="font-heading text-lg mb-4">Variance Decomposition</h2>
+          {posteriorSigmas.length > 0 ? (
+            <VarianceDecompositionChart data={posteriorSigmas} />
+          ) : (
+            <p className="text-muted-foreground text-sm">
+              No sigma data yet. Runs after train-v2.yml completes.
             </p>
           )}
         </div>
@@ -439,6 +452,7 @@ function EvalHistoryTable({ rows }: { rows: ModelEvaluation[] }) {
     windowKey === "season"
       ? filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
       : filtered;
+  const firstV2Date = getFirstV2Date(visible);
 
   return (
     <div>
@@ -502,6 +516,7 @@ function EvalHistoryTable({ rows }: { rows: ModelEvaluation[] }) {
             <TableRow key={row.date}>
               <TableCell className="font-medium">
                 {row.date}
+                {row.date.slice(0, 10) === firstV2Date ? <V2Badge /> : null}
                 {row.predictions_rewritten ? (
                   <span
                     className="ml-2 inline-block rounded-sm border border-amber-500/40 bg-amber-500/10 px-1.5 py-0 text-[10px] font-mono uppercase tracking-wider text-amber-600 dark:text-amber-400"
@@ -566,6 +581,7 @@ function DailyBettingHistory({ rows }: { rows: ModelEvaluation[] }) {
     windowKey === "season"
       ? filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
       : filtered;
+  const firstV2Date = getFirstV2Date(visible);
 
   return (
     <div>
@@ -642,7 +658,10 @@ function DailyBettingHistory({ rows }: { rows: ModelEvaluation[] }) {
                 : "";
             return (
               <TableRow key={d.date}>
-                <TableCell className="font-medium">{d.date}</TableCell>
+                <TableCell className="font-medium">
+                  {d.date}
+                  {d.date.slice(0, 10) === firstV2Date ? <V2Badge /> : null}
+                </TableCell>
                 <TableCell className="text-right font-mono tabular-nums">
                   {bets}
                 </TableCell>

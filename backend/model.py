@@ -249,11 +249,11 @@ def _get_table_columns(table_name):
 
 
 def _upsert_season_outputs(df):
-    """Upsert into model_outputs_season. Filters df to columns the table actually has."""
-    existing_cols = _get_table_columns("model_outputs_season")
+    """Upsert into model_outputs_season_v1_archive. Filters df to columns the table actually has."""
+    existing_cols = _get_table_columns("model_outputs_season_v1_archive")
     cols = [c for c in df.columns if c in existing_cols]
     if not cols:
-        print("  WARNING: no matching columns for model_outputs_season upsert")
+        print("  WARNING: no matching columns for model_outputs_season_v1_archive upsert")
         return
     placeholders = ", ".join([f":{c}" for c in cols])
     col_names = ", ".join(cols)
@@ -263,12 +263,12 @@ def _upsert_season_outputs(df):
     # read-only. INSERTs for new game_pks are unaffected. Without this guard,
     # a mid-day hand-run rewrites bets that were already in flight.
     sql = f"""
-        INSERT INTO model_outputs_season ({col_names})
+        INSERT INTO model_outputs_season_v1_archive ({col_names})
         VALUES ({placeholders})
         ON CONFLICT (game_pk, team) DO UPDATE SET {update_set}
         WHERE EXISTS (
             SELECT 1 FROM games g
-            WHERE g.game_pk = model_outputs_season.game_pk
+            WHERE g.game_pk = model_outputs_season_v1_archive.game_pk
               AND g.status = 'Preview'
         )
     """
@@ -473,10 +473,10 @@ def main():
     # table's RLS, policies, and indexes; to_sql(if_exists="replace") would drop them.
     final_output = final_output.rename(columns={"xR": "expected_runs", "game_date": "date"})
     with engine.begin() as conn:
-        conn.execute(text("TRUNCATE TABLE model_outputs"))
-        final_output.to_sql("model_outputs", con=conn, if_exists="append", index=False)
+        conn.execute(text("TRUNCATE TABLE model_outputs_v1_archive"))
+        final_output.to_sql("model_outputs_v1_archive", con=conn, if_exists="append", index=False)
 
-    # Upsert into model_outputs_season (historical record, deduplicated by game_pk+team)
+    # Upsert into model_outputs_season_v1_archive (historical record, deduplicated by game_pk+team)
     float_cols = ["expected_runs", "win_prob", "our_total"]
     for col in float_cols:
         if col in final_output.columns:

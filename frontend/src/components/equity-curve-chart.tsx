@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from "recharts";
+import { V2_CUTOVER_DATE } from "@/lib/constants";
 
 interface EquityCurveChartProps {
   data: ModelEvaluation[];
@@ -38,6 +39,12 @@ export function EquityCurveChart({ data }: EquityCurveChartProps) {
           tickFormatter={(v: number) => `${v.toFixed(2)}u`}
         />
         <ReferenceLine y={1} stroke="#a1a1aa" strokeDasharray="4 4" />
+        <ReferenceLine
+          x={V2_CUTOVER_DATE}
+          stroke="#10b981"
+          strokeDasharray="4 2"
+          label={{ value: "v2", position: "insideTopRight", fill: "#10b981", fontSize: 10, fontFamily: "var(--font-geist-mono)" }}
+        />
         <Tooltip
           formatter={(value) => `${Number(value).toFixed(4)} units`}
           labelFormatter={(label) => formatDateLabel(String(label))}

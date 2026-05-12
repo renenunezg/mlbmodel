@@ -32,7 +32,7 @@ def run_checks(date_str: str) -> bool:
         SELECT o.team, g.home_team, g.away_team, o.expected_runs, o.win_prob,
                o.win_prob_p10, o.win_prob_p90, o.posterior_age_days,
                o.lineup_source, o.game_pk
-        FROM model_outputs_v2 o
+        FROM model_outputs o
         JOIN games g USING (game_pk)
         WHERE o.date::date = :d
     """)
@@ -40,7 +40,7 @@ def run_checks(date_str: str) -> bool:
         df = pd.read_sql(q, conn, params={"d": date_str})
 
     if df.empty:
-        print(f"[verify] FAIL: no rows in model_outputs_v2 for {date_str}")
+        print(f"[verify] FAIL: no rows in model_outputs for {date_str}")
         return False
 
     failures = []

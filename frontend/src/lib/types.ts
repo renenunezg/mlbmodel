@@ -115,6 +115,26 @@ export interface EdgeBucket {
   roi: number;
 }
 
+export interface PosteriorSkill {
+  refit_date: string;
+  actor_type: "batter" | "pitcher";
+  split_label: string;
+  rank_type: "top" | "bottom";
+  rank: number;
+  actor_id: number;
+  actor_name: string | null;
+  team: string | null;
+  skill_score: number;
+}
+
+export interface PosteriorSigma {
+  refit_date: string;
+  sigma_name: string;
+  mean: number;
+  p10: number | null;
+  p90: number | null;
+}
+
 export interface GameMatchup {
   game_pk: number;
   home_team: string;

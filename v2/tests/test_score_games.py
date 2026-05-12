@@ -2,7 +2,7 @@
 
 Uses the live Supabase (read-only against games + probable_starters + odds) and
 the 2026 statcast cache. Skips if posteriors aren't built. Always runs with
-write=False so it doesn't touch model_outputs_v2.
+write=False so it doesn't touch model_outputs.
 """
 from __future__ import annotations
 
