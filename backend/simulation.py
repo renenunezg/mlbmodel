@@ -1,42 +1,19 @@
-"""Negative-binomial run-distribution simulation and market probability math.
-
-Pure math: takes expected runs (lambdas) and book lines (total, spread) and
-returns the joint-distribution probabilities used for moneyline, run line,
-and totals EV. No DB access, no model artifacts.
-"""
+"""Negative-binomial run-distribution math: takes lambdas + book lines, returns market probs."""
 import numpy as np
 import pandas as pd
 from scipy.stats import nbinom
 
 
-# Negative binomial dispersion parameter. Variance = lambda + lambda^2 / r.
-# r=6 is calibrated from MLB historical run distributions; it adds realistic
-# overdispersion compared to plain Poisson, producing less extreme win probs.
+# r=6 calibrated to MLB historical run distributions. Variance = lambda + lambda^2 / r.
 NBINOM_R = 6.0
 
 
 def compute_game_probs(lambda_home, lambda_away, total_line=None, spread_home=None,
                        max_runs=25, r=NBINOM_R):
-    """Full game-level probability dict from the joint negative-binomial run distribution.
+    """Joint NB distribution → {p_home_win, p_away_win, p_home_cover, p_away_cover, p_over, p_under}.
 
-    Replaces the old magic `win_prob - 0.10` heuristic for run line and the
-    `±1 run` heuristic for totals - both are now derived directly from the joint
-    distribution, which naturally tightens in high-scoring environments and
-    widens in low-scoring ones.
-
-    Args:
-        lambda_home: expected runs for home team
-        lambda_away: expected runs for away team
-        total_line: book total runs line (for over/under). None → skip.
-        spread_home: signed spread from home team's perspective
-            (e.g. -1.5 = home favored by 1.5, +1.5 = home underdog). None → skip.
-        max_runs: truncation point for the run distribution (25 covers 99.9%+ of games)
-        r: negative binomial dispersion parameter (higher r → less overdispersion)
-
-    Returns dict with keys: p_home_win, p_away_win, p_home_cover, p_away_cover,
-    p_over, p_under. Keys whose input is missing are set to None.
-    Ties on the moneyline are allocated proportionally to expected runs
-    (extra-innings approximation). Pushes on run line / totals are split 50/50.
+    Keys whose input is missing are set to None. Moneyline ties allocated proportionally
+    to expected runs (extra-innings approximation); run-line / totals pushes split 50/50.
     """
     runs = np.arange(max_runs + 1)
     h_probs = nbinom.pmf(runs, r, r / (r + lambda_home))
@@ -87,22 +64,16 @@ def compute_game_probs(lambda_home, lambda_away, total_line=None, spread_home=No
 
 
 def win_prob(lambda_a, lambda_b, max_runs=15, r=NBINOM_R):
-    """Backward-compatible: returns P(team A beats team B) as a float.
-
-    Thin wrapper around compute_game_probs so existing callers (backtest.py,
-    compute_predictions) continue to work. See compute_game_probs for the full
-    joint-distribution output.
-    """
+    """P(team A beats team B). Thin wrapper around compute_game_probs."""
     probs = compute_game_probs(lambda_a, lambda_b, max_runs=max_runs, r=r)
     return probs["p_home_win"]
 
 
-# Backward-compatible alias used by backtest.py
 poisson_win_prob = win_prob
 
 
 def convert_to_odds(p):
-    """Convert win probability to American odds."""
+    """Win probability to American odds."""
     if p < 0.5:
         return round(((1 - p) / p) * 100)
     elif p > 0.5:
@@ -112,7 +83,7 @@ def convert_to_odds(p):
 
 
 def american_to_prob(odds):
-    """Convert American odds to implied probability."""
+    """American odds to implied probability."""
     if pd.isna(odds):
         return np.nan
     odds = float(odds)
@@ -123,11 +94,9 @@ def american_to_prob(odds):
 
 
 def apply_market_probs(df):
-    """Compute p_cover / p_over / p_under per row from the joint NB distribution,
-    using the book's actual total_line and spread (pulled from the row's odds columns).
+    """Add p_cover, p_over, p_under columns per row from the joint NB distribution.
 
-    Expected columns on df: game_pk, team, is_home, xR, total, spread.
-    Adds columns: p_cover, p_over, p_under.
+    Reads game_pk, team, is_home, xR, total, spread from df.
     """
     df = df.copy()
     df["p_cover"] = np.nan

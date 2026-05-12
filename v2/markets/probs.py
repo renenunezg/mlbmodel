@@ -21,17 +21,7 @@ def market_probs(
     total_line: float | None,
     spread_home: float | None,
 ) -> dict:
-    """Return ML / RL / totals probabilities from sim arrays.
-
-    Args:
-        home_runs, away_runs: (n_sims,) int arrays from simulate_game.
-        total_line: book total runs (e.g. 8.5). None to skip totals.
-        spread_home: signed run-line from home perspective (e.g. -1.5 = home favored).
-            None to skip RL.
-
-    Returns dict with: p_home_win, p_away_win, p_home_cover, p_away_cover,
-    p_over, p_under. Keys whose input is missing are None.
-    """
+    """ML / RL / totals empirical probabilities from sim arrays. Missing inputs → None keys."""
     h = np.asarray(home_runs)
     a = np.asarray(away_runs)
     n = len(h)

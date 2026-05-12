@@ -1,8 +1,4 @@
-"""Comprehensive model evaluation metrics: regression, probabilistic, financial.
-
-All functions are pure (no DB access) - they receive arrays/DataFrames and return
-scalars or dicts. The caller (evaluate_model.py) is responsible for persistence.
-"""
+"""Model evaluation metrics: regression, probabilistic, financial. Pure functions, no DB."""
 import numpy as np
 import pandas as pd
 from scipy.stats import nbinom
@@ -12,7 +8,6 @@ from scipy.stats import nbinom
 # ---------------------------------------------------------------------------
 
 def _finite_pair(y_true, y_pred):
-    """Return (y_true, y_pred) filtered to rows where both values are finite."""
     mask = ~(np.isnan(y_true) | np.isnan(y_pred))
     return y_true[mask], y_pred[mask]
 

@@ -1,11 +1,6 @@
-"""Bullpen-rest data fetcher.
+"""Per-game boxscore → per-team reliever/starter outs into bullpen_daily.
 
-For each completed game in `games`, fetch boxscore from the MLB Stats API and
-upsert (game_date, team, reliever_outs) into bullpen_daily. Skips games whose
-date is already represented for that team to avoid redundant API calls.
-
-Used by the daily pipeline to keep `bullpen_daily` current. Backfill of
-historical data is one-time via scripts/backfill_bullpen_daily.py.
+Backfill of historical data is one-time via scripts/backfill_bullpen_daily.py.
 """
 from __future__ import annotations
 
@@ -39,12 +34,7 @@ _STARTER_MIN_OUTS = 9  # 3 IP - sub-3-IP "first pitcher" is treated as an opener
 
 
 def _classify_outs(outs_list: list[int]) -> tuple[int, int, int]:
-    """Opener-aware classification.
-
-    If the first pitcher threw fewer than 3 IP, they're a functional reliever
-    (an opener) and roll into reliever_outs. Otherwise they're a real starter.
-    Returns (starter_outs, reliever_outs, n_relievers).
-    """
+    """Opener-aware: sub-3-IP first pitcher rolls into reliever_outs. Returns (starter, reliever, n_rp)."""
     if not outs_list:
         return 0, 0, 0
     first = outs_list[0]

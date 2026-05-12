@@ -87,16 +87,6 @@ class AdvancementTable:
             )
 
         u = rng.random(size=len(keys))
-        # for each key, find first cdf[starts[i]:ends[i]] >= u[i]
-        # vectorized: build per-row cdf row offset by uniform draw, searchsorted within key range.
-        # simpler approach: loop in numpy via cumulative trick.
-        # Since lengths are small (most ≤ 30), Python loop with numpy slicing is fine here;
-        # this gets called ~80 times per game-sim per N=10k draws → 800k calls/game, but the inner
-        # array op is one searchsorted per row. Acceptable. We vectorize via per-key bincount.
-
-        # Vectorized approach using "global searchsorted":
-        # offset cdf by row index so each row's cdf is shifted into a unique band, then searchsorted.
-        # Simpler/safer: per-row slice. With N=10k it's ~10k Python iterations → ~5-10ms.
         results_ns = np.empty(len(keys), dtype=np.int64)
         results_ru = np.empty(len(keys), dtype=np.int64)
         results_oa = np.empty(len(keys), dtype=np.int64)

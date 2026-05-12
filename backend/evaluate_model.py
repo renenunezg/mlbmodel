@@ -66,13 +66,7 @@ def _calc_total_pick(row):
 
 
 def _build_bet_ledger(eval_df):
-    """Build a bet ledger from evaluated predictions.
-
-    A row counts as a bet only if the relevant ev_flag fired, the recomputed
-    edge still meets EV_THRESHOLDS (stored win_prob is rounded, so flag-time
-    edge can drift below threshold), and quarter-Kelly stake > 0. Totals are
-    deduped per game_pk because eval_df has one row per (game_pk, team).
-    """
+    """Bet ledger from evaluated predictions. Re-checks EV threshold; totals deduped per game_pk."""
     rows = []
     seen_total_pks = set()
 

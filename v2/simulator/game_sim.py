@@ -36,15 +36,8 @@ GHOST_RUNNER_STATE = 2  # runner on 2B only
 RELIEVER_PULL_OUTS = 9
 RELIEVER_PULL_RUNS = 3
 
-# Per-game form noise on logits. Zero-sum across the 8-outcome vector to avoid
-# systematically shifting the run rate, applied per game per side. With Phase 5's
-# K-draw posteriors (load_posterior_draws) handling parameter uncertainty
-# directly, this knob now mostly captures genuine day-to-day form variance.
-# Recalibrated 2026-05-09: sigma=0.13 clears the mean-runs gate (+4.87%) and
-# misses the variance gate by ~1pp (-6.04%, gate is 5%). The mean is what
-# matters most for pricing; var miss is a known tradeoff. To close the var
-# gap properly, see "out-subtype model conditioned on batter/pitcher" in
-# CLAUDE.md deferred work.
+# Per-game form noise on logits, zero-sum across the 8-outcome vector. Captures
+# day-to-day form variance on top of the K-draw posterior parameter uncertainty.
 FORM_SIGMA = 0.13
 
 

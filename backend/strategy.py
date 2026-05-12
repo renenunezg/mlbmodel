@@ -1,17 +1,11 @@
-"""+EV flagging and Kelly sizing.
-
-Reads model probabilities (win_prob, p_cover, p_over, p_under) and book odds,
-emits per-row EV flags and Kelly stake fractions. Single source of truth for
-the +EV thresholds.
-"""
+"""+EV flagging and Kelly sizing."""
 import pandas as pd
 import numpy as np
 from backend.simulation import american_to_prob
 from backend.kelly import american_to_decimal, kelly_fraction, compute_kelly_row
 
 
-# Single source of truth for +EV thresholds. Used by flag_ev / flag_runline_ev / flag_total_play.
-# Totals bar is higher because total-runs markets are noisier than sides.
+# Totals bar is higher; total-runs markets are noisier than sides.
 EV_THRESHOLDS = {
     "ml": 0.045,
     "rl": 0.045,
@@ -44,10 +38,6 @@ def flag_ev(row, threshold=EV_THRESHOLDS["ml"]):
 
 
 def flag_runline_ev(row, threshold=EV_THRESHOLDS["rl"]):
-    """Flag a run line play if our model's cover probability (from the joint
-    negative-binomial distribution, accounting for the book's actual spread)
-    beats the book's implied cover probability by at least `threshold`.
-    """
     try:
         book_prob = american_to_prob(row["spread_odds"])
         model_prob = row.get("p_cover")
@@ -61,7 +51,6 @@ def flag_runline_ev(row, threshold=EV_THRESHOLDS["rl"]):
 
 
 def flag_total_play(row, threshold=EV_THRESHOLDS["totals"]):
-    """Flag Over/Under based on joint-distribution probabilities vs book odds."""
     try:
         over_prob_book = american_to_prob(row.get("total_over_odds"))
         under_prob_book = american_to_prob(row.get("total_under_odds"))
@@ -71,8 +60,7 @@ def flag_total_play(row, threshold=EV_THRESHOLDS["totals"]):
             return "Over"
         if pd.notna(p_under) and pd.notna(under_prob_book) and (p_under - under_prob_book) >= threshold:
             return "Under"
-        # Fallback when book over/under odds missing: use diff heuristic so the UI
-        # still surfaces directional model disagreement with the line.
+        # Book over/under odds missing: fall back to runs-diff heuristic.
         if pd.isna(over_prob_book) and pd.isna(under_prob_book) and pd.notna(row.get("total_diff")):
             if row["total_diff"] >= 1:
                 return "Over"
@@ -85,11 +73,7 @@ def flag_total_play(row, threshold=EV_THRESHOLDS["totals"]):
 
 
 def apply_kelly_sizing(df):
-    """Add Kelly full + quarter columns for moneyline, run line, and totals.
-
-    Expects df to already have win_prob, p_cover, p_over, p_under,
-    moneyline, spread_odds, total_over_odds, total_under_odds, total_play.
-    """
+    """Add kelly_{full,quarter}_{ml,rl,total} columns."""
     df = df.copy()
 
     # Moneyline Kelly: model prob vs book moneyline

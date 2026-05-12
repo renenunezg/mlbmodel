@@ -1,12 +1,8 @@
 """Bullpen state + pitcher-swap logic for game simulation.
 
-Phase 4 design: for backtests, the per-game reliever queue is the list of pitchers
-who actually appeared in relief in that game from the statcast cache, in order of
-first PA. The swap rules (outs/runs/PA-count thresholds) decide WHEN to swap; the
-queue decides WHO. This avoids needing to reconstruct rest state from `bullpen_daily`
-(which only stores per-team aggregates, not per-pitcher).
-
-For live use (Phase 7), this should be replaced with a rest-aware roster fetch.
+Backtest queue: the list of pitchers who actually appeared in relief in that game,
+in order of first PA, sourced from the statcast cache. Swap rules decide WHEN to
+swap; the queue decides WHO.
 """
 from __future__ import annotations
 

@@ -1,18 +1,10 @@
-"""Kelly criterion utilities for bet sizing.
-
-Quarter-Kelly is the standard for sports betting due to parameter uncertainty
-(model probabilities are estimates, not ground truth). Full Kelly is optimal
-under perfect information but leads to ruin-level volatility in practice.
-"""
+"""Kelly criterion utilities. Quarter-Kelly is the default since model probs are estimates."""
 import numpy as np
 import pandas as pd
 
 
 def american_to_decimal(odds):
-    """Convert American odds to decimal odds (includes stake).
-
-    Examples: +100 → 2.0, -150 → 1.667, +200 → 3.0
-    """
+    """American odds to decimal (stake-inclusive). +100 → 2.0, -150 → 1.667."""
     if pd.isna(odds):
         return np.nan
     odds = float(odds)
