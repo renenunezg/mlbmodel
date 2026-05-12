@@ -244,6 +244,35 @@ def fetch_lineup(game_pk: int) -> dict[str, list[int]]:
     return out
 
 
+_active_roster_cache: dict[int, list[int]] = {}
+
+
+def fetch_active_pitchers(team_id: int) -> list[int]:
+    """Active 26-man-roster pitcher ids for a team. Cached in memory per process."""
+    if team_id in _active_roster_cache:
+        return _active_roster_cache[team_id]
+
+    try:
+        resp = requests.get(
+            f"{BASE_URL}/teams/{team_id}/roster",
+            params={"rosterType": "active"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        roster = resp.json().get("roster", [])
+    except Exception as e:
+        print(f"  fetch_active_pitchers({team_id}) failed: {e}")
+        return []
+
+    ids = [
+        int(p["person"]["id"])
+        for p in roster
+        if p.get("position", {}).get("abbreviation") == "P"
+    ]
+    _active_roster_cache[team_id] = ids
+    return ids
+
+
 def fetch_batting_splits(season: int = None, split: str = "vs_rhp") -> pd.DataFrame:
     """Fetch team batting splits from MLB Stats API.
 
