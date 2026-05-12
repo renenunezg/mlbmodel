@@ -63,3 +63,13 @@ def normalize_team(name: str) -> str:
     if not isinstance(name, str):
         return name
     return TEAM_NAME_MAP.get(name.strip(), name.strip())
+
+
+# MLB Stats API team_id by canonical 3-letter code.
+TEAM_ID_BY_CODE: dict[str, int] = {
+    "LAA": 108, "HOU": 117, "ATH": 133, "TOR": 141, "ATL": 144, "MIL": 158,
+    "STL": 138, "CHC": 112, "ARI": 109, "LAD": 119, "SFG": 137, "CLE": 114,
+    "SEA": 136, "MIA": 146, "NYM": 121, "WSN": 120, "BAL": 110, "SDP": 135,
+    "PHI": 143, "PIT": 134, "TEX": 140, "TBR": 139, "BOS": 111, "CIN": 113,
+    "COL": 115, "KCR": 118, "DET": 116, "MIN": 142, "CHW": 145, "NYY": 147,
+}
