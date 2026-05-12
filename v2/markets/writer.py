@@ -5,8 +5,8 @@ daily table is rebuilt per-date (delete + insert); the season table is upserted
 keyed on (game_pk, team).
 
 `win_prob_p10` / `win_prob_p90` are passed in by the caller (computed from
-per-posterior-draw win-prob samples). The writer doesn't bootstrap them — that
-would only capture MC noise and mislead consumers.
+per-posterior-draw win-prob samples). The writer doesn't bootstrap them, since
+that would only capture MC noise and mislead consumers.
 """
 from __future__ import annotations
 
@@ -98,7 +98,7 @@ def build_game_rows(
     t_p10, t_p50, t_p90 = runs_percentiles(total_arr)
 
     # away band is the complement of the home band (perfectly anti-correlated
-    # by construction — every per-draw home_wp_k pairs with away_wp_k = 1 - home_wp_k).
+    # by construction: every per-draw home_wp_k pairs with away_wp_k = 1 - home_wp_k).
     if home_wp_p10 is not None and home_wp_p90 is not None:
         away_wp_p10 = round(1.0 - home_wp_p90, 4)
         away_wp_p90 = round(1.0 - home_wp_p10, 4)

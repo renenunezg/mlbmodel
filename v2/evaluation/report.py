@@ -57,7 +57,7 @@ def format_head_to_head(v1: dict, v2: dict, gates: dict, window: str) -> str:
     lines.append(f"{'bets placed RL':24}{v1['roi_rl']['n_bets']:>12}{v2['roi_rl']['n_bets']:>12}")
     lines.append(f"{'bets placed TOT':24}{v1['roi_total']['n_bets']:>12}{v2['roi_total']['n_bets']:>12}")
     lines.append("")
-    verdict = "GREEN-LIGHT for cutover" if gates["all_pass"] else "GATES FAILED — diagnose before cutover"
+    verdict = "GREEN-LIGHT for cutover" if gates["all_pass"] else "GATES FAILED: diagnose before cutover"
     lines.append(f"verdict: {verdict}")
     for k, v in gates.items():
         if k == "all_pass":

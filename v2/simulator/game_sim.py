@@ -1,6 +1,6 @@
 """Game-level Monte Carlo simulator: vectorized across N parallel sims of one game.
 
-Vectorization strategy: for one game, run N sims in lockstep — at each tick (one PA in
+Vectorization strategy: for one game, run N sims in lockstep. At each tick (one PA in
 ALL sims simultaneously), call simulate_pa_batch on the (N,) batch, then advance
 baserunner state via AdvancementTable.sample. Per-sim state arrays are int64.
 
@@ -60,7 +60,7 @@ class GameInputs:
 
 
 def _queue_arrays(q: BullpenQueue, throws: dict[int, str], roles: dict[int, int]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Return (pitcher_ids, throws_is_lhp_int, role_int) — one entry per slot in queue."""
+    """Return (pitcher_ids, throws_is_lhp_int, role_int), one entry per slot in queue."""
     ids = [q.starter] + q.relievers
     if not ids:
         ids = [0]

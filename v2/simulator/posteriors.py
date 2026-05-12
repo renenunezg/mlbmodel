@@ -177,7 +177,7 @@ def load_posterior_draws(
     resulting run distribution. K~30 is enough for stable p10/p90 win-prob bands;
     the simulator's per-PA randomness still dominates total variance.
 
-    Intercept tolerance is NOT enforced per-draw — the per-draw |int_b - int_p|
+    Intercept tolerance is NOT enforced per-draw. The per-draw |int_b - int_p|
     is much noisier than on means, but the means already pass the check via
     load_posteriors().
     """

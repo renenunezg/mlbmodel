@@ -3,7 +3,7 @@
 Phase 5 introduced per-game posterior draws in score_games (load_posterior_draws,
 N_DRAWS=30 batches). The original FORM_SIGMA=0.18 was calibrated against
 point-estimate posteriors. With real posterior parameter uncertainty now in the
-loop, we expect to need a smaller sigma — possibly zero. This script reruns the
+loop, we expect to need a smaller sigma, possibly zero. This script reruns the
 Phase 4 acceptance gate (200 stratified 2025 games, runs/team-game mean and var
 within 5% of actual) at multiple sigma values and reports.
 

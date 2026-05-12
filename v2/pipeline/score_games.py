@@ -5,12 +5,10 @@ Usage:
 
 Steps per game:
   1. Read probable_starters and odds from Supabase.
-  2. Build lineups (cache-derived top-9 batters by season PA per team for now).
+  2. Fetch posted lineups via MLB Stats API; fall back to top-9 by season PA per team.
   3. Build bullpen queues (from statcast cache if game already played; else fallback).
   4. Run simulate_game for n_sims.
   5. Compute market probs + EV + Kelly + percentiles, write rows.
-
-Lineup integration with fetch_lineup is deferred to Phase 7 per the source plan.
 """
 from __future__ import annotations
 
@@ -23,6 +21,7 @@ import numpy as np
 import pandas as pd
 from sqlalchemy import text
 
+from backend.data.mlb_api import fetch_lineup
 from backend.db import engine
 from v2.markets.writer import (
     append_season,
@@ -153,6 +152,22 @@ def top9_batters_by_team(cache: pd.DataFrame) -> dict[str, list[int]]:
     return out
 
 
+def fetch_lineups_for_games(game_pks: list[int]) -> dict[int, dict[str, list[int]]]:
+    """Per game_pk, fetch posted home/away batting orders from MLB Stats API.
+
+    Empty lists for sides where the lineup hasn't posted yet. Errors are
+    swallowed per-game and yield empty lists so the caller can fall back.
+    """
+    out: dict[str, dict[str, list[int]]] = {}
+    for gp in game_pks:
+        try:
+            out[gp] = fetch_lineup(gp)
+        except Exception as e:
+            print(f"  [fetch_lineup] {gp} failed, falling back: {e}")
+            out[gp] = {"home": [], "away": []}
+    return out
+
+
 def reliever_queue_for_team(cache: pd.DataFrame, team: str, max_n: int = 6) -> list[int]:
     """Pitchers who appeared in relief (not the inning-1 starter) for `team`, ranked by appearances."""
     pa = cache[cache["events"].notna()].copy()
@@ -177,20 +192,37 @@ def p_throws_for_pitchers(cache: pd.DataFrame, pitcher_ids: list[int]) -> dict[i
     return {int(r.pitcher): str(r.p_throws) for _, r in sub.iterrows()}
 
 
+def _resolve_lineup(
+    live: list[int],
+    fallback: list[int],
+) -> tuple[list[int], str]:
+    """Use live posted lineup if it's a complete 9 of non-zero ids; else fallback."""
+    if len(live) == 9 and all(int(b) > 0 for b in live):
+        return [int(b) for b in live], "live"
+    padded = (list(fallback) + [0] * 9)[:9]
+    return padded, "top9"
+
+
 def build_inputs(
     ctx: GameContext,
-    lineups_by_team: dict[str, list[int]],
+    live_home: list[int],
+    live_away: list[int],
+    fallback_lineups_by_team: dict[str, list[int]],
     queues_by_key: dict[tuple[int, str], BullpenQueue],
     relievers_by_team: dict[str, list[int]],
     throws_lookup: dict[int, str],
-) -> tuple[GameInputs, str]:
-    """Build GameInputs + lineup_source label."""
-    home_lineup = lineups_by_team.get(ctx.home_team, [])
-    away_lineup = lineups_by_team.get(ctx.away_team, [])
-    if len(home_lineup) < 9 or len(away_lineup) < 9:
-        # pad with zeros (resolves to league-mean batter via posteriors fallback row)
-        home_lineup = (home_lineup + [0] * 9)[:9]
-        away_lineup = (away_lineup + [0] * 9)[:9]
+) -> tuple[GameInputs, str, str]:
+    """Build GameInputs + lineup_tag + queue_source.
+
+    lineup_tag is 'live' (both sides posted), 'top9' (both fell back), or 'mixed'.
+    queue_source is 'cache' or 'stub'.
+    """
+    home_lineup, home_tag = _resolve_lineup(live_home, fallback_lineups_by_team.get(ctx.home_team, []))
+    away_lineup, away_tag = _resolve_lineup(live_away, fallback_lineups_by_team.get(ctx.away_team, []))
+    if home_tag == away_tag:
+        lineup_tag = home_tag
+    else:
+        lineup_tag = "mixed"
 
     home_queue = queues_by_key.get((ctx.game_pk, "home"))
     away_queue = queues_by_key.get((ctx.game_pk, "away"))
@@ -219,7 +251,7 @@ def build_inputs(
         home_p_throws_lookup=home_throws,
         away_p_throws_lookup=away_throws,
     )
-    return inputs, queue_source
+    return inputs, lineup_tag, queue_source
 
 
 def score(date: str, n_sims: int = 10000, write: bool = True, seed: int = 0) -> pd.DataFrame:
@@ -239,9 +271,10 @@ def score(date: str, n_sims: int = 10000, write: bool = True, seed: int = 0) -> 
 
     year = pd.Timestamp(date).year
     cache = load_cache_for_year(year)
-    lineups = top9_batters_by_team(cache)
+    fallback_lineups = top9_batters_by_team(cache)
     relievers = {team: reliever_queue_for_team(cache, team) for team in {c.home_team for c in contexts} | {c.away_team for c in contexts}}
     queues = build_queues_from_cache(year)
+    live_lineups = fetch_lineups_for_games([c.game_pk for c in contexts])
     # Pre-fetch p_throws for every pitcher in any queue we'll touch
     all_pitchers: set[int] = set()
     for q in queues.values():
@@ -259,8 +292,11 @@ def score(date: str, n_sims: int = 10000, write: bool = True, seed: int = 0) -> 
     all_rows: list[dict] = []
     flagged = 0
     for ctx in contexts:
-        inputs, queue_source = build_inputs(ctx, lineups, queues, relievers, throws_lookup)
-        lineup_source = f"top9_pa+queue_{queue_source}"
+        live = live_lineups.get(ctx.game_pk, {"home": [], "away": []})
+        inputs, lineup_tag, queue_source = build_inputs(
+            ctx, live["home"], live["away"], fallback_lineups, queues, relievers, throws_lookup
+        )
+        lineup_source = f"lineup_{lineup_tag}+queue_{queue_source}"
         h_chunks: list[np.ndarray] = []
         a_chunks: list[np.ndarray] = []
         per_draw_home_wp: list[float] = []
