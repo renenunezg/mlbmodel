@@ -1,4 +1,4 @@
-"""Build per-team rows from sim arrays + odds, write to model_outputs_v2 / model_outputs_season_v2.
+"""Build per-team rows from sim arrays + odds, write to model_outputs / model_outputs_season.
 
 Row schema mirrors the live Supabase columns. Keyed by (game_pk, team). The
 daily table is rebuilt per-date (delete + insert); the season table is upserted
@@ -54,7 +54,7 @@ def build_game_rows(
     home_wp_p90: float | None = None,
     lineup_hash: str | None = None,
 ) -> list[dict]:
-    """Return two dict rows (home + away) ready to write to model_outputs_v2.
+    """Return two dict rows (home + away) ready to write to model_outputs.
 
     `home_odds` / `away_odds` come from the `odds` table; either may be None when
     no odds row matched. Per-row keys we read: moneyline, spread, spread_odds,
@@ -228,21 +228,21 @@ def _to_float(v):
 
 
 def write_daily(date: pd.Timestamp, rows: list[dict]) -> None:
-    """Replace today's slate in model_outputs_v2: delete prior rows for the date, insert new."""
+    """Replace today's slate in model_outputs: delete prior rows for the date, insert new."""
     if not rows:
         return
     df = pd.DataFrame(rows)
     target_date = pd.Timestamp(date).to_pydatetime().date()
     with engine.begin() as conn:
         conn.execute(
-            text("DELETE FROM model_outputs_v2 WHERE date::date = :d"),
+            text("DELETE FROM model_outputs WHERE date::date = :d"),
             {"d": target_date},
         )
-        df.to_sql("model_outputs_v2", con=conn, if_exists="append", index=False)
+        df.to_sql("model_outputs", con=conn, if_exists="append", index=False)
 
 
 def append_season(rows: list[dict]) -> None:
-    """Upsert into model_outputs_season_v2 keyed on (game_pk, team). Idempotent."""
+    """Upsert into model_outputs_season keyed on (game_pk, team). Idempotent."""
     if not rows:
         return
     df = pd.DataFrame(rows)
@@ -252,10 +252,10 @@ def append_season(rows: list[dict]) -> None:
     with engine.begin() as conn:
         for game_pk, team in pairs:
             conn.execute(
-                text("DELETE FROM model_outputs_season_v2 WHERE game_pk = :g AND team = :t"),
+                text("DELETE FROM model_outputs_season WHERE game_pk = :g AND team = :t"),
                 {"g": int(game_pk), "t": team},
             )
-        df.to_sql("model_outputs_season_v2", con=conn, if_exists="append", index=False)
+        df.to_sql("model_outputs_season", con=conn, if_exists="append", index=False)
 
 
 def posterior_age_days(now: datetime | None = None, posteriors_dir: Path = POSTERIORS_DIR) -> int:

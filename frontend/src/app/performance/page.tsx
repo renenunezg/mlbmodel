@@ -4,6 +4,8 @@ import type {
   CalibrationBin,
   FeatureImportance,
   EdgeBucket,
+  PosteriorSkill,
+  PosteriorSigma,
 } from "@/lib/types";
 import { PerformanceTabs } from "./tabs";
 import { LastUpdated } from "@/components/last-updated";
@@ -13,7 +15,7 @@ export const revalidate = 300;
 
 export default async function PerformancePage() {
   // Fetch all data in parallel
-  const [evalRes, calRes, featRes, edgeRes, residRes, latestRes] = await Promise.all([
+  const [evalRes, calRes, featRes, edgeRes, residRes, latestRes, skillsRes, sigmasRes] = await Promise.all([
     supabase
       .from("model_evaluation")
       .select("*")
@@ -44,6 +46,16 @@ export default async function PerformancePage() {
       .select("created_at")
       .order("created_at", { ascending: false })
       .limit(1),
+    supabase
+      .from("posterior_skills")
+      .select("*")
+      .order("refit_date", { ascending: false })
+      .limit(80),
+    supabase
+      .from("posterior_sigmas")
+      .select("*")
+      .order("refit_date", { ascending: false })
+      .limit(20),
   ]);
 
   const evaluations = (evalRes.data ?? []) as ModelEvaluation[];
@@ -51,6 +63,8 @@ export default async function PerformancePage() {
   const calibration = (calRes.data ?? []) as CalibrationBin[];
   const featureImportance = (featRes.data ?? []) as FeatureImportance[];
   const edgeBuckets = (edgeRes.data ?? []) as EdgeBucket[];
+  const posteriorSkills = (skillsRes.data ?? []) as PosteriorSkill[];
+  const posteriorSigmas = (sigmasRes.data ?? []) as PosteriorSigma[];
 
   // Residuals: fetch model_outputs_season for graded game_pks and join client-side.
   // PostgREST embedded !inner requires an FK constraint, which these tables lack.
@@ -112,6 +126,8 @@ export default async function PerformancePage() {
         featureImportance={featureImportance}
         edgeBuckets={edgeBuckets}
         residuals={residuals}
+        posteriorSkills={posteriorSkills}
+        posteriorSigmas={posteriorSigmas}
       />
       <RealtimeRefresh tables={["model_evaluation"]} />
     </main>

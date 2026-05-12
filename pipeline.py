@@ -303,7 +303,6 @@ NIGHTLY_STEPS = [
     ("Schedule & scores", update_scores_and_schedule),
     ("Bullpen daily", update_bullpen_daily),
     ("Odds", fetch_and_load_odds),
-    ("Model", run_model),
     ("Evaluation", run_evaluation),
 ]
 

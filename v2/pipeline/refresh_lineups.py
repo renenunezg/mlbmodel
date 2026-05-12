@@ -1,7 +1,7 @@
 """Hourly lineup refresh: re-scores games where posted lineups differ from what was used.
 
-Reads model_outputs_v2.lineup_hash to detect changes. Only rewrites today's
-model_outputs_v2 rows — never touches model_outputs_season_v2.
+Reads model_outputs.lineup_hash to detect changes. Only rewrites today's
+model_outputs rows — never touches model_outputs_season.
 
 Usage:
     python -m v2.pipeline.refresh_lineups [--date YYYY-MM-DD] [--n-sims N]
@@ -29,7 +29,7 @@ def _fetch_scheduled_games(date_str: str) -> pd.DataFrame:
     q = text("""
         SELECT g.game_pk, COALESCE(o.lineup_hash, '') AS stored_hash
         FROM games g
-        LEFT JOIN model_outputs_v2 o
+        LEFT JOIN model_outputs o
           ON o.game_pk = g.game_pk AND o.team = g.home_team
         WHERE g.game_date = :d
           AND g.home_score IS NULL
