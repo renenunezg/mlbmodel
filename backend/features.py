@@ -28,10 +28,7 @@ LEAGUE_AVG = {
 
 
 def compute_starter_inning_share(avg_ip_per_start):
-    """Starter inning share = avg IP/start / 9, clamped to [0.35, 0.78].
-
-    Returns league mean when input is NaN or missing. Accepts scalar or pandas Series.
-    """
+    """avg IP/start / 9, clamped to [0.35, 0.78]. NaN falls back to league mean."""
     if isinstance(avg_ip_per_start, pd.Series):
         share = (pd.to_numeric(avg_ip_per_start, errors="coerce") / 9.0).clip(
             lower=STARTER_SHARE_MIN, upper=STARTER_SHARE_MAX,
@@ -43,18 +40,13 @@ def compute_starter_inning_share(avg_ip_per_start):
 
 
 def blend_batting_split(vs_r, vs_l, opp_handedness, starter_share, bullpen_rhp_share):
-    """Blend a batting split (OPS/ISO/K%) across the starter + bullpen portions.
-
-    starter portion faces opp_handedness (known); bullpen portion faces a mix
-    determined by bullpen_rhp_share. All inputs may be scalars or arrays.
-    """
+    """Blend a batting split across the starter (known handedness) + bullpen (RHP-share mix)."""
     split_vs_starter = np.where(opp_handedness == "R", vs_r, vs_l)
     split_vs_bullpen = bullpen_rhp_share * vs_r + (1 - bullpen_rhp_share) * vs_l
     return starter_share * split_vs_starter + (1 - starter_share) * split_vs_bullpen
 
 
 def _safe_read_table(table_name):
-    """Read a SQL table, returning empty DataFrame if table has no rows."""
     try:
         df = pd.read_sql_table(table_name, con=engine)
         if df.empty:
@@ -66,11 +58,7 @@ def _safe_read_table(table_name):
 
 
 def load_training_data():
-    """Load and merge all data sources into a single training DataFrame.
-
-    Handles early-season scenarios where tables may be empty or have
-    sparse data by falling back to league averages.
-    """
+    """Merge all source tables into one DataFrame, filling sparse rows with league averages."""
     print("Loading training data...")
     starters = _safe_read_table("probable_starters")
     if starters.empty:
@@ -151,11 +139,6 @@ def load_training_data():
     starters = starters[starters["team"] != starters["opp_team"].fillna("")]
     starters["opp_handedness"] = starters["opp_handedness"].fillna("R")
 
-    # ---- Dynamic starter/bullpen inning share ----
-    # Replaces the old fixed 0.6/0.4 blend. Inning share derives from the opposing
-    # starter's avg IP per start; bullpen RHP share is the opposing team's actual
-    # bullpen RHP IP share. Both fall back to league-average when sample is thin.
-
     opp_ip = pd.to_numeric(starters["opp_avg_ip_per_start"], errors="coerce")
     starter_fallback_mask = opp_ip.isna()
     starter_share = compute_starter_inning_share(opp_ip)
@@ -166,25 +149,13 @@ def load_training_data():
     bullpen_rhp = bullpen_rhp.fillna(LEAGUE_BULLPEN_RHP_SHARE)
     starters["bullpen_rhp_share"] = bullpen_rhp
 
-    # Logging - surface silent fallback if it dominates the slate.
-    n = len(starters)
-    if n > 0:
+    if len(starters) > 0:
         ss_frac = float(starter_fallback_mask.mean())
         bp_frac = float(bullpen_fallback_mask.mean())
-        print(
-            f"  starter_inning_share: min={starter_share.min():.3f} "
-            f"mean={starter_share.mean():.3f} max={starter_share.max():.3f} "
-            f"std={starter_share.std():.3f} fallback={ss_frac:.1%}"
-        )
-        print(
-            f"  bullpen_rhp_share: min={bullpen_rhp.min():.3f} "
-            f"mean={bullpen_rhp.mean():.3f} max={bullpen_rhp.max():.3f} "
-            f"std={bullpen_rhp.std():.3f} fallback={bp_frac:.1%}"
-        )
         if ss_frac > 0.5:
-            print(f"  WARNING: {ss_frac:.0%} of rows fell back to league-mean starter inning share - check avg_ip_per_start in pitcher_stats")
+            print(f"  starter_inning_share: {ss_frac:.0%} fallback to league mean")
         if bp_frac > 0.5:
-            print(f"  WARNING: {bp_frac:.0%} of rows fell back to league-mean bullpen RHP share - check rhp_ip_share in bullpen_stats")
+            print(f"  bullpen_rhp_share: {bp_frac:.0%} fallback to league mean")
 
     # Blend batting splits vs the opposing starter (known handedness) and the
     # opposing bullpen (distribution from opp_rhp_ip_share).
@@ -364,7 +335,6 @@ def load_training_data():
 
 
 def preprocess_data(df):
-    """Convert columns to numeric types."""
     numeric_cols = [
         "xfip", "xfip_bullpen", "starter_whip", "bullpen_k_9",
         "batting_ops", "batting_iso", "batting_k_pct",

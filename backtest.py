@@ -76,10 +76,7 @@ def compute_features_for_window(
     park_factors: dict,
     cutoff_date: str,
 ) -> pd.DataFrame:
-    """Compute model features for games, using only data available before cutoff_date.
-
-    Returns DataFrame with one row per team per game, with all 11 features + actual_runs.
-    """
+    """Per-team-per-game features computed from data strictly before cutoff_date."""
     cutoff = pd.to_datetime(cutoff_date)
     games_df = games_df.copy()
     games_df["game_date"] = pd.to_datetime(games_df["game_date"])

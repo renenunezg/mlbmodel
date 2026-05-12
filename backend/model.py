@@ -202,14 +202,7 @@ def compute_predictions(df, model, calibrator=None, use_existing_xR=False):
 
 
 def fit_calibrator(df):
-    """Fit isotonic regression on negative-binomial win probs vs actual outcomes.
-
-    Args:
-        df: DataFrame with win_prob and actual_runs columns (completed games only).
-
-    Returns:
-        Fitted IsotonicRegression, or None if fewer than 400 outcomes available.
-    """
+    """Isotonic regression: NB win probs → observed outcomes. None if <400 outcomes."""
     outcomes = []
     for game_pk, group in df.groupby("game_pk"):
         if len(group) != 2:
@@ -244,7 +237,6 @@ def fit_calibrator(df):
 
 
 def _get_table_columns(table_name):
-    """Return the set of column names currently present in a table."""
     with engine.connect() as conn:
         result = conn.execute(
             text(
@@ -257,11 +249,7 @@ def _get_table_columns(table_name):
 
 
 def _upsert_season_outputs(df):
-    """Upsert into model_outputs_season using ON CONFLICT (game_pk, team).
-
-    Filters df to only columns that currently exist in the target table so that
-    new in-memory columns (added before a migration lands) don't break the insert.
-    """
+    """Upsert into model_outputs_season. Filters df to columns the table actually has."""
     existing_cols = _get_table_columns("model_outputs_season")
     cols = [c for c in df.columns if c in existing_cols]
     if not cols:

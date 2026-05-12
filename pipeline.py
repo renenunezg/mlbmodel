@@ -1,10 +1,4 @@
-"""
-MLB model daily pipeline.
-
-Fetches data, updates scores, populates stats, runs model, evaluates picks.
-
-Usage: python pipeline.py
-"""
+"""MLB model daily pipeline. Usage: python pipeline.py [nightly]"""
 
 import time
 import traceback
@@ -25,21 +19,14 @@ from backend.data.savant import fetch_park_factors
 from backend.data.odds_api import fetch_odds
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
 def _timed(label, fn):
-    """Run fn, print elapsed time, return result."""
     t0 = time.time()
     result = fn()
-    elapsed = time.time() - t0
-    print(f"  [{elapsed:.1f}s] {label}")
+    print(f"  [{time.time() - t0:.1f}s] {label}")
     return result
 
 
 def _batch_upsert_games(conn, games_df):
-    """Upsert a DataFrame of games into the games table."""
     if games_df.empty:
         return
     for _, g in games_df.iterrows():
@@ -70,23 +57,13 @@ def _batch_upsert_games(conn, games_df):
 
 
 def _truncate_and_load(table_name, df):
-    """Replace a stats table's contents atomically."""
     with engine.begin() as conn:
         conn.execute(text(f"TRUNCATE {table_name} RESTART IDENTITY"))
         df.to_sql(table_name, conn, if_exists="append", index=False)
 
 
-# ---------------------------------------------------------------------------
-# Pipeline steps
-# ---------------------------------------------------------------------------
-
 def update_scores_and_schedule():
-    """Fetch schedules for recent + upcoming days.
-
-    - Updates final scores for the last 3 days
-    - Upserts today's and tomorrow's schedule
-    - Refreshes probable starters
-    """
+    """Fetch last 3 days + today + tomorrow; finalize scores; refresh probable starters."""
     today = date.today()
 
     # Fetch all dates we care about in one pass: 3 days back + today + tomorrow
@@ -173,11 +150,7 @@ def update_scores_and_schedule():
 
 
 def fetch_statcast_stats():
-    """Fetch pitcher, bullpen, and batting stats from Statcast.
-
-    All three use the same cached Statcast pitch data, so running them
-    together avoids redundant API calls.
-    """
+    """Pitcher / bullpen / batting stats. All share the same cached pitch data."""
     pitchers = fetch_pitcher_stats()
     if not pitchers.empty:
         _truncate_and_load("pitcher_stats", pitchers)
@@ -201,7 +174,6 @@ def fetch_statcast_stats():
 
 
 def fetch_and_load_park_factors():
-    """Load park factors if not already populated."""
     with engine.connect() as conn:
         count = conn.execute(text("SELECT count(*) FROM park_factors")).scalar()
 
@@ -222,13 +194,7 @@ def fetch_and_load_park_factors():
 
 
 def fetch_and_load_odds():
-    """Fetch odds and match to game_pk via team name.
-
-    The Odds API doesn't provide game_pk, so we match by team name against
-    today's/tomorrow's games. Doubleheaders are an edge case - team name alone
-    can't distinguish Game 1 vs Game 2, but game_pk keeps them separate in the DB
-    once matched. For doubleheaders, the last game_pk wins (usually Game 2).
-    """
+    """Fetch odds and match to game_pk via team name + nearest start_time (doubleheader tiebreak)."""
     odds = fetch_odds()
     if odds.empty:
         print("  No odds data from API")
@@ -256,13 +222,11 @@ def fetch_and_load_odds():
         team_games[g["away_team"]].append(entry)
 
     def _match_game_pk(team, commence_time):
-        """Match odds to game_pk by team, using nearest start_time for doubleheaders."""
         candidates = team_games.get(team, [])
         if not candidates:
             return None
         if len(candidates) == 1:
             return candidates[0][0]
-        # Multiple games (doubleheader) - pick closest by start time
         if pd.notna(commence_time):
             ct = pd.to_datetime(commence_time)
             best_pk, best_diff = None, None
@@ -273,7 +237,6 @@ def fetch_and_load_odds():
                         best_pk, best_diff = pk, diff
             if best_pk is not None:
                 return best_pk
-        # Fallback: return last game_pk
         return candidates[-1][0]
 
     odds["game_pk"] = odds.apply(
@@ -309,7 +272,6 @@ def fetch_and_load_odds():
 _model_artifacts = {}
 
 def run_model():
-    """Train/predict and write to model_outputs tables."""
     from backend.model import main as model_main
     result = model_main()
     if result:
@@ -317,7 +279,6 @@ def run_model():
 
 
 def run_evaluation():
-    """Evaluate predictions against actual results."""
     from backend.evaluate_model import main as eval_main
     eval_main(
         model=_model_artifacts.get("model"),
@@ -325,10 +286,6 @@ def run_evaluation():
         best_params=_model_artifacts.get("best_params"),
     )
 
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
 
 STEPS = [
     ("Schedule & scores", update_scores_and_schedule),
@@ -340,9 +297,8 @@ STEPS = [
     ("Evaluation", run_evaluation),
 ]
 
-# Nightly steps: refresh scores first so late west-coast games are Final
-# before evaluation, then eval yesterday, fetch odds, and rerun predictions.
-# No Statcast fetch or park factor reload - morning handles those.
+# Nightly: refresh scores first so late west-coast games are Final before eval.
+# Skip Statcast fetch and park factor reload; morning run handles those.
 NIGHTLY_STEPS = [
     ("Schedule & scores", update_scores_and_schedule),
     ("Bullpen daily", update_bullpen_daily),
