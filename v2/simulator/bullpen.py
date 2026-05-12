@@ -50,7 +50,7 @@ class BullpenQueue:
         ridx = self.pulled_idx - 1
         if ridx < len(self.relievers):
             return self.relievers[ridx]
-        # ran out of relievers — recycle the last reliever (rare in real games)
+        # ran out of relievers, recycle the last reliever (rare in real games)
         return self.relievers[-1] if self.relievers else self.starter
 
     def advance(self) -> int:

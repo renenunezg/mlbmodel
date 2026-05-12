@@ -114,7 +114,7 @@ const flowNodes = [
     items: [
       { label: "XGBoost Regressor", sub: "12 features → xR per team" },
       { label: "TimeSeriesSplit CV", sub: "5-fold, past-only training windows" },
-      { label: "Neg. Binomial (r=6)", sub: "Joint score distribution (0–25)" },
+      { label: "Neg. Binomial (r=6)", sub: "Joint score distribution (0-25)" },
       { label: "Isotonic Calibration", sub: "OOF-fit probability mapping" },
     ],
   },

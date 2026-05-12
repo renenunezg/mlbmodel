@@ -1,6 +1,6 @@
 """Head-to-head metric library for the Phase 6 v1-vs-v2 backtest.
 
-Thin layer over backend.metrics + backend.evaluate_model — the v1 and v2
+Thin layer over backend.metrics + backend.evaluate_model. The v1 and v2
 prediction tables share a schema, so the same ledger reconstruction works for
 both. Anything not already in backend/ goes here.
 """
@@ -17,7 +17,7 @@ def max_calibration_gap(bins: list[dict]) -> float:
     """Max |predicted_mean - observed_rate| across non-empty decile bins.
 
     Returns NaN when bins is empty. Counts-weighted is intentionally NOT used
-    here — the gate is about worst-bin drift, not average drift.
+    here: the gate is about worst-bin drift, not average drift.
     """
     if not bins:
         return float("nan")
