@@ -62,4 +62,4 @@ def evaluate_gate(
     threshold_rhat: float = 1.01,
     threshold_ess: float = 400,
 ) -> bool:
-    return bool(rhat_max < threshold_rhat and ess_min > threshold_ess)
+    return bool(rhat_max <= threshold_rhat and ess_min > threshold_ess)
