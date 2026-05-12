@@ -42,7 +42,7 @@ jobs:
           cache: "pip"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt && pip install -e .
+        run: pip install -r requirements.txt -r v2/requirements.txt && pip install -e .
 
       - name: Run v2 daily pipeline
         env:
