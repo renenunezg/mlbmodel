@@ -2,7 +2,7 @@ name: Train v2 Models
 
 on:
   schedule:
-    - cron: "0 14 * * *"
+    - cron: "0 11 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -47,6 +47,12 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           PYTHONPATH: "."
         run: python -m v2.pipeline.train --mode full --archive
+
+      - name: Write posterior summaries to Supabase
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PYTHONPATH: "."
+        run: python -m v2.pipeline.write_posterior_summaries
 
       - name: Save posteriors to cache
         uses: actions/cache@v4

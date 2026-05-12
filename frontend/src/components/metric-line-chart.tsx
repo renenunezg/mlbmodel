@@ -8,8 +8,10 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  ReferenceLine,
   ResponsiveContainer,
 } from "recharts";
+import { V2_CUTOVER_DATE } from "@/lib/constants";
 
 interface MetricLineChartProps {
   data: ModelEvaluation[];
@@ -56,6 +58,12 @@ export function MetricLineChart({
             fontFamily: "var(--font-geist-mono)",
             fontSize: "12px",
           }}
+        />
+        <ReferenceLine
+          x={V2_CUTOVER_DATE}
+          stroke="#10b981"
+          strokeDasharray="4 2"
+          label={{ value: "v2", position: "insideTopRight", fill: "#10b981", fontSize: 10, fontFamily: "var(--font-geist-mono)" }}
         />
         <Line
           type="monotone"

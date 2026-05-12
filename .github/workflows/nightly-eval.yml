@@ -2,9 +2,8 @@ name: Nightly Evaluation and Refresh
 
 on:
   schedule:
-    # 12 AM PDT / 11 PM PST (07:00 UTC) - "today" has rolled over so
-    # predictions land on the correct new-day date. Evaluates yesterday's
-    # results, then refreshes starters and reruns predictions for the new day.
+    # 12 AM PT (07:00 UTC) - evaluates yesterday's results, then refreshes
+    # starters/odds and scores tomorrow's games with v2.
     - cron: "0 7 * * *"
   workflow_dispatch:
 
@@ -15,12 +14,28 @@ concurrency:
 jobs:
   nightly:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Restore Statcast cache
+        uses: actions/cache@v4
+        with:
+          path: cache
+          key: statcast-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            statcast-${{ runner.os }}-
+
+      - name: Restore posteriors
+        uses: actions/cache@v4
+        with:
+          path: v2/bayesian/posteriors
+          key: posteriors-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            posteriors-${{ runner.os }}-
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -29,11 +44,17 @@ jobs:
           cache: "pip"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt -r v2/requirements.txt && pip install -e .
 
-      - name: Run nightly eval and refresh
+      - name: Run evaluation on completed games
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PYTHONPATH: "."
+        run: python pipeline.py nightly
+
+      - name: Score tomorrow's games with v2
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
           PYTHONPATH: "."
-        run: python pipeline.py nightly
+        run: python -m v2.pipeline.daily_run

@@ -1,8 +1,9 @@
 name: Daily Pipeline v2
 
 on:
-  schedule:
-    - cron: "0 12 * * *"
+  workflow_run:
+    workflows: ["Train v2 Models"]
+    types: [completed]
   workflow_dispatch:
 
 concurrency:
@@ -11,6 +12,7 @@ concurrency:
 
 jobs:
   run-pipeline:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
