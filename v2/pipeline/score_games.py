@@ -40,6 +40,7 @@ from v2.simulator import (
     load_posterior_draws,
     simulate_game,
 )
+from v2.simulator.bullpen import LiveQueueContext, build_queues_live
 
 
 # K posterior draws per game. ~30 gives stable p10/p90 win-prob bands without
@@ -203,36 +204,51 @@ def _resolve_lineup(
     return padded, "top9"
 
 
+def _resolve_queue(
+    game_pk: int,
+    side: str,
+    live: dict[tuple[int, str], BullpenQueue],
+    cache: dict[tuple[int, str], BullpenQueue],
+    stub_starter: int,
+    stub_relievers: list[int],
+) -> tuple[BullpenQueue, str]:
+    """Pick queue for one side. Returns (queue, source) where source ∈ live|cache|stub."""
+    key = (game_pk, side)
+    if key in live:
+        return live[key], "live"
+    if key in cache:
+        return cache[key], "cache"
+    return BullpenQueue(starter=stub_starter, relievers=stub_relievers[:5]), "stub"
+
+
 def build_inputs(
     ctx: GameContext,
     live_home: list[int],
     live_away: list[int],
     fallback_lineups_by_team: dict[str, list[int]],
-    queues_by_key: dict[tuple[int, str], BullpenQueue],
+    live_queues: dict[tuple[int, str], BullpenQueue],
+    cache_queues: dict[tuple[int, str], BullpenQueue],
     relievers_by_team: dict[str, list[int]],
     throws_lookup: dict[int, str],
 ) -> tuple[GameInputs, str, str]:
     """Build GameInputs + lineup_tag + queue_source.
 
-    lineup_tag is 'live' (both sides posted), 'top9' (both fell back), or 'mixed'.
-    queue_source is 'cache' or 'stub'.
+    lineup_tag ∈ {live, top9, mixed}. queue_source aggregates the two sides:
+    if both match, that value; otherwise 'mixed'.
     """
     home_lineup, home_tag = _resolve_lineup(live_home, fallback_lineups_by_team.get(ctx.home_team, []))
     away_lineup, away_tag = _resolve_lineup(live_away, fallback_lineups_by_team.get(ctx.away_team, []))
-    if home_tag == away_tag:
-        lineup_tag = home_tag
-    else:
-        lineup_tag = "mixed"
+    lineup_tag = home_tag if home_tag == away_tag else "mixed"
 
-    home_queue = queues_by_key.get((ctx.game_pk, "home"))
-    away_queue = queues_by_key.get((ctx.game_pk, "away"))
-    queue_source = "cache"
-    if home_queue is None or away_queue is None:
-        queue_source = "stub"
-        home_starter = ctx.home_starter_id or 0
-        away_starter = ctx.away_starter_id or 0
-        home_queue = BullpenQueue(starter=home_starter, relievers=relievers_by_team.get(ctx.home_team, [])[:5])
-        away_queue = BullpenQueue(starter=away_starter, relievers=relievers_by_team.get(ctx.away_team, [])[:5])
+    home_queue, home_qsrc = _resolve_queue(
+        ctx.game_pk, "home", live_queues, cache_queues,
+        ctx.home_starter_id or 0, relievers_by_team.get(ctx.home_team, []),
+    )
+    away_queue, away_qsrc = _resolve_queue(
+        ctx.game_pk, "away", live_queues, cache_queues,
+        ctx.away_starter_id or 0, relievers_by_team.get(ctx.away_team, []),
+    )
+    queue_source = home_qsrc if home_qsrc == away_qsrc else "mixed"
 
     # Throws: starter handedness from probable_starters, relievers from cache.
     home_throws = dict(throws_lookup)
@@ -273,11 +289,25 @@ def score(date: str, n_sims: int = 10000, write: bool = True, seed: int = 0) -> 
     cache = load_cache_for_year(year)
     fallback_lineups = top9_batters_by_team(cache)
     relievers = {team: reliever_queue_for_team(cache, team) for team in {c.home_team for c in contexts} | {c.away_team for c in contexts}}
-    queues = build_queues_from_cache(year)
+    cache_queues = build_queues_from_cache(year)
+
+    # Live queues: rest-aware, built from pitcher_workload + active roster.
+    live_q_contexts: list[LiveQueueContext] = []
+    for c in contexts:
+        if c.home_starter_id:
+            live_q_contexts.append(LiveQueueContext(c.game_pk, "home", c.home_team, c.home_starter_id))
+        if c.away_starter_id:
+            live_q_contexts.append(LiveQueueContext(c.game_pk, "away", c.away_team, c.away_starter_id))
+    try:
+        live_queues = build_queues_live(pd.Timestamp(date).date(), live_q_contexts)
+    except Exception as e:
+        print(f"[score_games] build_queues_live failed ({e}); falling back to cache")
+        live_queues = {}
+
     live_lineups = fetch_lineups_for_games([c.game_pk for c in contexts])
-    # Pre-fetch p_throws for every pitcher in any queue we'll touch
+
     all_pitchers: set[int] = set()
-    for q in queues.values():
+    for q in list(cache_queues.values()) + list(live_queues.values()):
         all_pitchers.add(q.starter)
         all_pitchers.update(q.relievers)
     for relievers_list in relievers.values():
@@ -294,7 +324,8 @@ def score(date: str, n_sims: int = 10000, write: bool = True, seed: int = 0) -> 
     for ctx in contexts:
         live = live_lineups.get(ctx.game_pk, {"home": [], "away": []})
         inputs, lineup_tag, queue_source = build_inputs(
-            ctx, live["home"], live["away"], fallback_lineups, queues, relievers, throws_lookup
+            ctx, live["home"], live["away"], fallback_lineups,
+            live_queues, cache_queues, relievers, throws_lookup,
         )
         lineup_source = f"lineup_{lineup_tag}+queue_{queue_source}"
         h_chunks: list[np.ndarray] = []
