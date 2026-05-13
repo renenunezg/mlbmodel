@@ -49,6 +49,7 @@ jobs:
       - name: Run evaluation on completed games
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
           PYTHONPATH: "."
         run: python pipeline.py nightly
 
