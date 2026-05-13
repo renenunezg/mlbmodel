@@ -1,7 +1,4 @@
-"""Per-game boxscore → per-team reliever/starter outs into bullpen_daily.
-
-Backfill of historical data is one-time via scripts/backfill_bullpen_daily.py.
-"""
+"""Per-game boxscore → per-team reliever/starter outs into bullpen_daily."""
 from __future__ import annotations
 
 import time
