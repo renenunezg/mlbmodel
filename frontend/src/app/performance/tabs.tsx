@@ -319,12 +319,7 @@ export function PerformanceTabs({
         </div>
 
         <div className="border-t border-border pt-6">
-          <h2 className="font-heading text-lg mb-4">
-            Hit Rate by Edge Bucket
-            {latestBucketDate && latestBucketDate.slice(0, 10) >= "2026-05-12" ? (
-              <V2Badge />
-            ) : null}
-          </h2>
+          <h2 className="font-heading text-lg mb-4">Hit Rate by Edge Bucket</h2>
           {latestBuckets.length > 0 ? (
             <Table>
               <TableHeader>
@@ -440,7 +435,7 @@ const PAGE_SIZE = 25;
 
 function EvalHistoryTable({ rows }: { rows: ModelEvaluation[] }) {
   const [windowKey, setWindowKey] =
-    useState<(typeof WINDOW_LABELS)[number]["key"]>("30");
+    useState<(typeof WINDOW_LABELS)[number]["key"]>("7");
   const [page, setPage] = useState(0);
 
   const filtered = useMemo(() => {
@@ -570,7 +565,7 @@ function EvalHistoryTable({ rows }: { rows: ModelEvaluation[] }) {
 
 function DailyBettingHistory({ rows }: { rows: ModelEvaluation[] }) {
   const [windowKey, setWindowKey] =
-    useState<(typeof WINDOW_LABELS)[number]["key"]>("30");
+    useState<(typeof WINDOW_LABELS)[number]["key"]>("7");
   const [page, setPage] = useState(0);
 
   const filtered = useMemo(() => {
