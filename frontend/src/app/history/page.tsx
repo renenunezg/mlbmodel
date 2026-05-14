@@ -34,12 +34,15 @@ export default async function HistoryPage({
   const page = Math.max(1, parseInt(params.page ?? "1", 10));
   const offset = (page - 1) * PAGE_SIZE;
 
-  // Build query for model_outputs_season
+  // Build query for model_outputs_season. start_time is the true chronological
+  // order; date alone has no within-day granularity, and game_pk is unrelated
+  // to first-pitch time, so sorting by it would scramble the daily schedule.
   let query = supabase
     .from("model_outputs_season")
     .select("*", { count: "exact" })
-    .order("date", { ascending: false })
-    .order("game_pk", { ascending: true })
+    .order("start_time", { ascending: false })
+    .order("game_pk", { ascending: true })  // groups the two rows of a game adjacent
+    .order("team", { ascending: true })     // deterministic home/away order within a game
     .range(offset, offset + PAGE_SIZE - 1);
 
   if (team) {
@@ -118,19 +121,6 @@ export default async function HistoryPage({
   for (const g of (gamesRes.data ?? []) as GameInfo[]) {
     gamesMap[g.game_pk] = g;
   }
-
-  // Server sorts predictions by date DESC, game_pk ASC. game_pk order has no
-  // relation to chronological start, so resort within each date by start_time.
-  // Stable sort: rows for the same game (home + away) stay paired.
-  predictions.sort((a, b) => {
-    const da = (a.date ?? "").slice(0, 10);
-    const db = (b.date ?? "").slice(0, 10);
-    if (da !== db) return db.localeCompare(da); // date DESC
-    const sa = gamesMap[a.game_pk]?.start_time ?? "";
-    const sb = gamesMap[b.game_pk]?.start_time ?? "";
-    if (sa !== sb) return sa.localeCompare(sb); // start_time ASC
-    return a.game_pk - b.game_pk; // tiebreaker within same game
-  });
 
   const recordGamesMap: Record<number, GameInfo> = {};
   for (const g of (rGamesRes.data ?? []) as GameInfo[]) {
