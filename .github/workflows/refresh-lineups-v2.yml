@@ -2,7 +2,9 @@ name: Refresh Lineups v2
 
 on:
   schedule:
-    - cron: "0/30 14-23 * * *"
+    # Every 30 min, offset to :17 and :47 to dodge the congested :00 / :30
+    # slots GitHub Actions warns about.
+    - cron: "17,47 14-23 * * *"
   workflow_dispatch:
 
 concurrency:

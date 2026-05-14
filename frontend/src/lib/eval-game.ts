@@ -134,7 +134,7 @@ export async function runEvalForGame(
   }
 
   const { data: preds, error: predErr } = await sb
-    .from("model_outputs_season")
+    .from("model_outputs_season_unified")
     .select(
       "game_pk, team, expected_runs, win_prob, ev_flag, run_line_ev_flag, spread, total, total_play, moneyline, kelly_quarter_ml, kelly_quarter_total, total_over_odds, total_under_odds",
     );

@@ -19,7 +19,7 @@ import numpy as np
 from sqlalchemy import MetaData, text
 from sqlalchemy.dialects.postgresql import insert
 
-from backend.cutover import V1_CUTOVER_DATE
+from backend.strategy import V1_CUTOVER_DATE
 from backend.db import engine
 from backend.metrics import (
     regression_summary,
@@ -79,7 +79,14 @@ def _write_evaluation_row(eval_date, eval_window, base_row, metric_dict):
         if isinstance(v, float) and (np.isnan(v) or np.isinf(v)):
             row[k] = None
 
-    update_cols = {k: v for k, v in row.items() if k not in ("date", "eval_window")}
+    # Don't overwrite an existing populated cell with NULL. Partial reruns
+    # (e.g. a refresh path that only computes counts and skips regression /
+    # probabilistic / financial summaries) used to wipe valid metrics. Skip
+    # None values on conflict so an earlier full write always wins.
+    update_cols = {
+        k: v for k, v in row.items()
+        if k not in ("date", "eval_window") and v is not None
+    }
 
     with engine.begin() as conn:
         conn.execute(
@@ -210,15 +217,17 @@ def _compute_base_row(window_df, window_ledger):
     }
 
 
-def main(model=None, cv_metrics=None, best_params=None):
+def main(model=None, cv_metrics=None, best_params=None, as_of: datetime.date | None = None):
     """Run full evaluation and write results to DB.
 
     Args:
         model: trained XGBoost model (for feature importance). None = skip.
         cv_metrics: list of per-fold metric dicts from train_model_cv. None = skip.
         best_params: dict of best hyperparameters. None = skip.
+        as_of: pretend "today" is this date. eval_date = as_of - 1. Used by
+            the historical backfill script to replay eval rows for past days.
     """
-    today = datetime.date.today()
+    today = as_of if as_of is not None else datetime.date.today()
 
     # --- Feature importance (depends only on trained model, not completed games) ---
     if model is not None:
@@ -229,10 +238,19 @@ def main(model=None, cv_metrics=None, best_params=None):
     if cv_metrics:
         _write_experiment_run(cv_metrics, best_params)
 
-    model_df = pd.read_sql(text("SELECT * FROM model_outputs_season"), con=engine)
+    # Continuous v1+v2 track record. The unified view routes pre-cutover
+    # dates to the frozen v1 archive (real v1 live picks) and post-cutover
+    # to the live v2 table. v2's hindsight backfill rows for pre-cutover
+    # dates are filtered out by the view, so they never enter the eval.
+    model_df = pd.read_sql(text("SELECT * FROM model_outputs_season_unified"), con=engine)
     games_df = pd.read_sql_table("games", con=engine)
 
     games_df = games_df[games_df["status"] == "Final"].dropna(subset=["home_score", "away_score"])
+    # Cap evaluation to games completed by `today`. Live runs are a no-op
+    # (no future games are Final yet); historical replays via as_of need this
+    # so future games don't leak into a past eval row's "season" window.
+    games_df["game_date"] = pd.to_datetime(games_df["game_date"])
+    games_df = games_df[games_df["game_date"] < pd.Timestamp(today)]
     if games_df.empty:
         print("  No completed games to evaluate against.")
         return

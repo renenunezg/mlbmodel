@@ -1,4 +1,6 @@
 """+EV flagging and Kelly sizing."""
+from datetime import date
+
 import pandas as pd
 import numpy as np
 from backend.simulation import american_to_prob
@@ -11,6 +13,10 @@ EV_THRESHOLDS = {
     "rl": 0.045,
     "totals": 0.065,
 }
+
+# v1 → v2 model cutover. Eval / calibration / feature-importance writes are
+# blocked before this date so the v1-archive history stays frozen.
+V1_CUTOVER_DATE = date(2026, 5, 12)
 
 
 # Dedupe warnings so a systematic issue doesn't spam stdout once per row.
