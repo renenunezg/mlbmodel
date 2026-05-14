@@ -273,8 +273,28 @@ def build_inputs(
     return inputs, lineup_tag, queue_source
 
 
-def score(date: str, n_sims: int = 10000, write: bool = True, seed: int = 0) -> pd.DataFrame:
-    """Score all games for a date. Returns the DataFrame of rows written."""
+def score(
+    date: str,
+    n_sims: int = 10000,
+    write: bool = True,
+    seed: int = 0,
+    game_pks: list[int] | None = None,
+    update_season: bool = True,
+) -> pd.DataFrame:
+    """Score games for a date.
+
+    Args:
+        date: YYYY-MM-DD slate to score.
+        n_sims: total sims per game (split across N_DRAWS posterior draws).
+        write: write rows to model_outputs (and model_outputs_season if update_season).
+        seed: rng seed.
+        game_pks: if set, only score these game_pks (others on the date are
+            untouched in model_outputs). Used by the hourly lineup refresh
+            so a single posted lineup doesn't rewrite the whole slate.
+        update_season: if False, skip the model_outputs_season upsert. The
+            historical record should only be written by the morning daily_run;
+            in-day refreshes must not mutate it.
+    """
     print(f"[score_games] loading {N_DRAWS} posterior draws + tables...")
     rng = np.random.default_rng(seed)
     draws = load_posterior_draws(rng, K=N_DRAWS)
@@ -286,6 +306,12 @@ def score(date: str, n_sims: int = 10000, write: bool = True, seed: int = 0) -> 
     if not contexts:
         print(f"[score_games] no games on {date}")
         return pd.DataFrame()
+    if game_pks is not None:
+        wanted = set(int(p) for p in game_pks)
+        contexts = [c for c in contexts if int(c.game_pk) in wanted]
+        if not contexts:
+            print(f"[score_games] none of the requested game_pks scheduled on {date}")
+            return pd.DataFrame()
     print(f"[score_games] {len(contexts)} games on {date}")
 
     year = pd.Timestamp(date).year
@@ -378,8 +404,11 @@ def score(date: str, n_sims: int = 10000, write: bool = True, seed: int = 0) -> 
 
     if write and all_rows:
         write_daily(pd.Timestamp(date), all_rows)
-        append_season(all_rows)
-        print(f"[score_games] wrote {len(all_rows)} rows to model_outputs + season")
+        if update_season:
+            append_season(all_rows)
+            print(f"[score_games] wrote {len(all_rows)} rows to model_outputs + season")
+        else:
+            print(f"[score_games] wrote {len(all_rows)} rows to model_outputs (season skipped)")
 
     print(f"[score_games] {flagged} +EV flags across {len(all_rows)} rows; posterior_age_days={age}")
     return pd.DataFrame(all_rows)

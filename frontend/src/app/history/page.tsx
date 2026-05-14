@@ -34,11 +34,12 @@ export default async function HistoryPage({
   const page = Math.max(1, parseInt(params.page ?? "1", 10));
   const offset = (page - 1) * PAGE_SIZE;
 
-  // Build query for model_outputs_season. start_time is the true chronological
-  // order; date alone has no within-day granularity, and game_pk is unrelated
-  // to first-pitch time, so sorting by it would scramble the daily schedule.
+  // Read from the unified view so v1's pre-cutover history shows alongside
+  // v2's post-cutover picks. start_time is the true chronological order;
+  // date alone has no within-day granularity, and game_pk is unrelated to
+  // first-pitch time, so sorting by it would scramble the daily schedule.
   let query = supabase
-    .from("model_outputs_season")
+    .from("model_outputs_season_unified")
     .select("*", { count: "exact" })
     .order("start_time", { ascending: false })
     .order("game_pk", { ascending: true })  // groups the two rows of a game adjacent

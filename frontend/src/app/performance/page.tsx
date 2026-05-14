@@ -91,7 +91,7 @@ export default async function PerformancePage() {
   let residuals: number[] = [];
   if (finalGames.length > 0) {
     const predRes = await supabase
-      .from("model_outputs_season")
+      .from("model_outputs_season_unified")
       .select("game_pk, team, expected_runs")
       .in("game_pk", finalGames.map((g) => g.game_pk));
 

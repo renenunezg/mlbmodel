@@ -2,7 +2,9 @@ name: Train v2 Models
 
 on:
   schedule:
-    - cron: "0 11 * * *"
+    # Offset 7 min from the hour: GitHub Actions explicitly suggests avoiding
+    # exact-hour cron times since :00 is the most congested slot.
+    - cron: "7 11 * * *"
   workflow_dispatch:
 
 concurrency:
