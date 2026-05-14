@@ -362,7 +362,10 @@ export function PerformanceTabs({
       {/* ============================================================ */}
       <TabsContent value="diagnostics" className="space-y-8">
         <div>
-          <h2 className="font-heading text-lg mb-4">Posterior Skill Leaderboard</h2>
+          <h2 className="font-heading text-lg mb-1">Recent-Form Leaderboard</h2>
+          <p className="text-muted-foreground text-xs mb-4">
+            Trailing 10-day Statcast xwOBA. Reflects who is hot or cold right now, not season-long talent.
+          </p>
           {posteriorSkills.length > 0 ? (
             <TopSkillsLeaderboard skills={posteriorSkills} />
           ) : (
