@@ -19,6 +19,7 @@ import numpy as np
 from sqlalchemy import MetaData, text
 from sqlalchemy.dialects.postgresql import insert
 
+from backend.cutover import V1_CUTOVER_DATE
 from backend.db import engine
 from backend.kelly import american_to_decimal
 from backend.metrics import (
@@ -162,6 +163,9 @@ def _build_bet_ledger(eval_df):
 
 def _write_evaluation_row(eval_date, eval_window, base_row, metric_dict):
     """Upsert one row into model_evaluation."""
+    if eval_date < V1_CUTOVER_DATE:
+        print(f"  [freeze] skip model_evaluation write for {eval_date} ({eval_window}); pre-cutover")
+        return
     metadata = MetaData()
     metadata.reflect(bind=engine)
     table = metadata.tables["model_evaluation"]
@@ -187,6 +191,9 @@ def _write_evaluation_row(eval_date, eval_window, base_row, metric_dict):
 
 def _write_calibration(eval_date, cal_bins):
     """Upsert calibration curve bins for a date."""
+    if eval_date < V1_CUTOVER_DATE:
+        print(f"  [freeze] skip model_calibration write for {eval_date}; pre-cutover")
+        return
     if not cal_bins:
         return
     with engine.begin() as conn:
@@ -203,6 +210,9 @@ def _write_calibration(eval_date, cal_bins):
 
 def _write_feature_importance(eval_date, importance_dict):
     """Upsert feature importance for a date."""
+    if eval_date < V1_CUTOVER_DATE:
+        print(f"  [freeze] skip model_feature_importance write for {eval_date}; pre-cutover")
+        return
     if not importance_dict:
         return
     with engine.begin() as conn:
@@ -216,6 +226,9 @@ def _write_feature_importance(eval_date, importance_dict):
 
 def _write_edge_buckets(eval_date, eval_window, buckets):
     """Upsert edge bucket stats."""
+    if eval_date < V1_CUTOVER_DATE:
+        print(f"  [freeze] skip model_edge_buckets write for {eval_date} ({eval_window}); pre-cutover")
+        return
     if not buckets:
         return
     with engine.begin() as conn:
@@ -369,11 +382,12 @@ def main(model=None, cv_metrics=None, best_params=None):
     # --- Build bet ledger ---
     ledger = _build_bet_ledger(eval_df)
 
-    eval_date = pd.to_datetime(eval_df["game_date"].max()).date()
+    # eval_date is always yesterday so the same date can never be re-targeted
+    # from a different angle (e.g. a manual rerun during the day shifting max).
+    eval_date = today - datetime.timedelta(days=1)
 
-    # --- Compute metrics for multiple windows ---
     eval_df["game_date"] = pd.to_datetime(eval_df["game_date"])
-    latest_date = eval_df["game_date"].max()
+    latest_date = pd.Timestamp(eval_date)
 
     windows = {
         "day": eval_df[eval_df["game_date"] == latest_date],
