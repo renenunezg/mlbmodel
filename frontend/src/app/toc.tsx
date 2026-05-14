@@ -4,13 +4,16 @@ import { useEffect, useState } from "react";
 
 const sections = [
   { id: "overview", label: "Overview" },
+  { id: "example", label: "Example" },
+  { id: "changelog", label: "Changelog" },
+  { id: "flow", label: "Architecture" },
   { id: "pipeline", label: "Pipeline" },
-  { id: "features", label: "Features" },
-  { id: "model", label: "Model" },
-  { id: "probability", label: "Win Probability" },
-  { id: "calibration", label: "Calibration" },
-  { id: "betting", label: "Bet Sizing" },
+  { id: "skill", label: "Skill Layer" },
+  { id: "simulator", label: "Simulator" },
+  { id: "markets", label: "Markets" },
+  { id: "backtest", label: "Backtest" },
   { id: "stack", label: "Tech Stack" },
+  { id: "legacy-v1", label: "Legacy v1" },
 ];
 
 export function TableOfContents() {
