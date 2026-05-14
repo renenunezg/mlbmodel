@@ -249,8 +249,11 @@ def equity_curve_from_ledger(ledger, initial=1.0):
     return daily.reset_index()[["date", "equity"]]
 
 
-def hit_rate_by_edge_bucket(ledger, buckets=(0.03, 0.05, 0.10, 0.20)):
+def hit_rate_by_edge_bucket(ledger, buckets=(0.045, 0.065, 0.10, 0.20)):
     """Hit rate and ROI per edge bucket.
+
+    Default boundaries align with EV_THRESHOLDS (ml/rl 4.5%, totals 6.5%) so no
+    bucket can contain sub-threshold bets.
 
     ledger must have columns: edge, won (bool), stake, payout.
     Returns list of dicts: [{bucket_label, n_bets, hit_rate, roi}, ...]
@@ -258,11 +261,15 @@ def hit_rate_by_edge_bucket(ledger, buckets=(0.03, 0.05, 0.10, 0.20)):
     if ledger.empty or "edge" not in ledger.columns:
         return []
 
+    def _fmt(p):
+        v = p * 100
+        return f"{v:g}"  # 4.5 → "4.5", 10 → "10"
+
     edges = sorted(buckets)
     results = []
     for i, lo in enumerate(edges):
         hi = edges[i + 1] if i + 1 < len(edges) else np.inf
-        label = f"{int(lo*100)}-{int(hi*100)}%" if hi != np.inf else f"{int(lo*100)}%+"
+        label = f"{_fmt(lo)}-{_fmt(hi)}%" if hi != np.inf else f"{_fmt(lo)}%+"
         mask = (ledger["edge"] >= lo) & (ledger["edge"] < hi)
         subset = ledger[mask]
         if subset.empty:
