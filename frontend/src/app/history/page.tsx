@@ -1,7 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { ModelOutput, GameInfo } from "@/lib/types";
 import { cn, formatDate, formatOdds, formatRuns, formatPct } from "@/lib/utils";
-import { getFirstV2Date } from "@/lib/constants";
+import { V2_CUTOVER_DATE } from "@/lib/constants";
 import { V2Badge } from "@/components/v2-badge";
 import Filters from "@/components/filters";
 import { LastUpdated } from "@/components/last-updated";
@@ -73,8 +73,10 @@ export default async function HistoryPage({
   if (periodDate) rq = rq.gte("date", periodDate);
   if (team) rq = rq.eq("team", team);
 
-  // Run both main queries in parallel
-  const [{ data: rows, count, error }, { data: rRows }, { data: latest }] = await Promise.all([
+  // Run main queries in parallel. The firstV2Game query finds the globally
+  // chronologically-first v2-era game so the V2 STARTS badge appears once,
+  // on that exact row, regardless of which page you're viewing.
+  const [{ data: rows, count, error }, { data: rRows }, { data: latest }, { data: firstV2GameRows }] = await Promise.all([
     query,
     rq,
     supabase
@@ -82,7 +84,15 @@ export default async function HistoryPage({
       .select("updated_at")
       .order("updated_at", { ascending: false })
       .limit(1),
+    supabase
+      .from("games")
+      .select("game_pk")
+      .gte("game_date", V2_CUTOVER_DATE)
+      .order("start_time", { ascending: true })
+      .limit(1),
   ]);
+
+  const firstV2GamePk: number | null = firstV2GameRows?.[0]?.game_pk ?? null;
 
   const lastUpdated: string | null = latest?.[0]?.updated_at ?? null;
 
@@ -108,6 +118,19 @@ export default async function HistoryPage({
   for (const g of (gamesRes.data ?? []) as GameInfo[]) {
     gamesMap[g.game_pk] = g;
   }
+
+  // Server sorts predictions by date DESC, game_pk ASC. game_pk order has no
+  // relation to chronological start, so resort within each date by start_time.
+  // Stable sort: rows for the same game (home + away) stay paired.
+  predictions.sort((a, b) => {
+    const da = (a.date ?? "").slice(0, 10);
+    const db = (b.date ?? "").slice(0, 10);
+    if (da !== db) return db.localeCompare(da); // date DESC
+    const sa = gamesMap[a.game_pk]?.start_time ?? "";
+    const sb = gamesMap[b.game_pk]?.start_time ?? "";
+    if (sa !== sb) return sa.localeCompare(sb); // start_time ASC
+    return a.game_pk - b.game_pk; // tiebreaker within same game
+  });
 
   const recordGamesMap: Record<number, GameInfo> = {};
   for (const g of (rGamesRes.data ?? []) as GameInfo[]) {
@@ -268,11 +291,11 @@ export default async function HistoryPage({
             </TableHeader>
             <TableBody>
               {(() => {
-                const firstV2Date = getFirstV2Date(predictions);
-                const firstV2Idx = firstV2Date
-                  ? predictions.findIndex(
-                      (r) => r.date && r.date.slice(0, 10) === firstV2Date,
-                    )
+                // Badge appears once globally, on the first row of the
+                // chronologically-first v2 game across the entire dataset.
+                // If that game isn't on the current page, no badge here.
+                const firstV2Idx = firstV2GamePk !== null
+                  ? predictions.findIndex((r) => r.game_pk === firstV2GamePk)
                   : -1;
                 return predictions.map((row, i) => {
                 const nextRow = predictions[i + 1];
