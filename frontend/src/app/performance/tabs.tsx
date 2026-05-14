@@ -8,6 +8,7 @@ import type {
   EdgeBucket,
   PosteriorSkill,
   PosteriorSigma,
+  LiveKpis,
 } from "@/lib/types";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { KpiCard } from "@/components/kpi-card";
@@ -37,6 +38,7 @@ interface PerformanceTabsProps {
   residuals: number[];
   posteriorSkills: PosteriorSkill[];
   posteriorSigmas: PosteriorSigma[];
+  liveKpis: LiveKpis;
 }
 
 function pct(value: number | null | undefined): string {
@@ -69,6 +71,7 @@ export function PerformanceTabs({
   residuals,
   posteriorSkills,
   posteriorSigmas,
+  liveKpis,
 }: PerformanceTabsProps) {
   // Split evaluations by window type
   const dailyEvals = evaluations.filter(
@@ -122,17 +125,17 @@ export function PerformanceTabs({
         <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-baseline gap-x-4 gap-y-3 font-mono text-sm">
           <KpiCard
             label="ROI"
-            value={pct(latest?.roi)}
+            value={pct(liveKpis.roi)}
             tooltip="Profit per dollar risked. ROI = total P&L ÷ total stakes. 13% ROI means 13¢ profit per $1 staked, on average - not 13% of your bankroll."
           />
           <KpiCard
             label="Sharpe"
-            value={fmt(latest?.sharpe, 2)}
+            value={fmt(liveKpis.sharpe, 2)}
             tooltip="Risk-adjusted return: mean daily P&L ÷ std dev of daily P&L. >1 is good, >2 excellent."
           />
           <KpiCard
             label="Max DD"
-            value={latest?.max_drawdown != null ? `${fmtSigned(latest.max_drawdown)}u` : "-"}
+            value={liveKpis.max_drawdown != null ? `${fmtSigned(liveKpis.max_drawdown)}u` : "-"}
             tooltip="Worst peak-to-trough decline of cumulative P&L, in units. With flat 1u stake sizing (no compounding), drawdown is reported in absolute units rather than as a % of equity - a Kelly-style % would misrepresent a non-compounding strategy."
           />
           <KpiCard
@@ -240,56 +243,56 @@ export function PerformanceTabs({
         <div className="grid grid-cols-3 sm:flex sm:flex-wrap items-baseline gap-x-4 gap-y-3 font-mono text-sm">
           <KpiCard
             label="ROI"
-            value={pct(latest?.roi)}
+            value={pct(liveKpis.roi)}
             tooltip="Profit per dollar risked. ROI = total P&L ÷ total stakes. 13% ROI means the model returns 13¢ profit on every $1 staked, on average. Independent of bankroll size."
           />
           <KpiCard
             label="Sharpe"
-            value={fmt(latest?.sharpe, 2)}
+            value={fmt(liveKpis.sharpe, 2)}
             tooltip="Risk-adjusted return: mean daily P&L ÷ std dev of daily P&L. Higher is better. >1 is good, >2 is excellent."
           />
           <KpiCard
             label="Sortino"
-            value={fmt(latest?.sortino, 2)}
+            value={fmt(liveKpis.sortino, 2)}
             tooltip="Like Sharpe but penalizes only downside volatility. Better metric for asymmetric strategies (gambling, where upside variance is fine)."
           />
           <KpiCard
             label="Max Drawdown"
-            value={latest?.max_drawdown != null ? `${fmtSigned(latest.max_drawdown)}u` : "-"}
+            value={liveKpis.max_drawdown != null ? `${fmtSigned(liveKpis.max_drawdown)}u` : "-"}
             tooltip="Worst peak-to-trough decline of cumulative P&L, in units. Stakes are flat fractions of a fixed 1u base (no compounding), so reporting drawdown as a % of running equity (the Kelly-style metric) would be misleading."
           />
           <KpiCard
             label="P&L"
-            value={`${fmtSigned(latest?.net_profit_units)}u`}
-            sub={`${fmt(latest?.total_staked_units, 2)}u staked`}
+            value={`${fmtSigned(liveKpis.net_profit_units)}u`}
+            sub={`${fmt(liveKpis.total_staked_units, 2)}u staked`}
             tooltip="Net profit in units. 1 unit = your chosen bankroll size - if your bankroll is $100, 1u = $100. Stakes shown below are TOTAL summed across all bets in the window, not a single bet. Bankroll never compounds; each bet is sized as a fraction of a fixed 1u."
           />
           <KpiCard
             label="Favorites"
-            value={pct(latest?.roi_favorites)}
-            sub={`(${latest?.favorites_correct ?? 0}-${(latest?.n_favorites ?? 0) - (latest?.favorites_correct ?? 0)})`}
+            value={pct(liveKpis.roi_favorites)}
+            sub={`(${liveKpis.favorites_correct}-${liveKpis.n_favorites - liveKpis.favorites_correct})`}
           />
           <KpiCard
             label="Underdogs"
-            value={pct(latest?.roi_underdogs)}
-            sub={`(${latest?.underdogs_correct ?? 0}-${(latest?.n_underdogs ?? 0) - (latest?.underdogs_correct ?? 0)})`}
+            value={pct(liveKpis.roi_underdogs)}
+            sub={`(${liveKpis.underdogs_correct}-${liveKpis.n_underdogs - liveKpis.underdogs_correct})`}
           />
           <KpiCard
             label="Run Line"
-            value={pct(latest?.roi_run_line)}
-            sub={`(${latest?.run_line_bets_correct ?? 0}-${(latest?.n_run_line ?? 0) - (latest?.run_line_bets_correct ?? 0)})`}
+            value={pct(liveKpis.roi_run_line)}
+            sub={`(${liveKpis.run_line_bets_correct}-${liveKpis.n_run_line - liveKpis.run_line_bets_correct})`}
             tooltip="Run-line bet ROI. Computed from the same ledger as the headline ROI; bets sized via quarter-Kelly on the model's cover probability vs. book spread odds."
           />
-          <KpiCard label="Avg Line" value={fmtAmerican(latest?.avg_ml_line)} />
+          <KpiCard label="Avg Line" value={fmtAmerican(liveKpis.avg_ml_line)} />
           <KpiCard
             label="Overs"
-            value={pct(latest?.overs_roi)}
-            sub={`(${latest?.overs_correct ?? 0}-${(latest?.overs_predictions ?? 0) - (latest?.overs_correct ?? 0)})`}
+            value={pct(liveKpis.overs_roi)}
+            sub={`(${liveKpis.overs_correct}-${liveKpis.overs_predictions - liveKpis.overs_correct})`}
           />
           <KpiCard
             label="Unders"
-            value={pct(latest?.unders_roi)}
-            sub={`(${latest?.unders_correct ?? 0}-${(latest?.unders_predictions ?? 0) - (latest?.unders_correct ?? 0)})`}
+            value={pct(liveKpis.unders_roi)}
+            sub={`(${liveKpis.unders_correct}-${liveKpis.unders_predictions - liveKpis.unders_correct})`}
           />
         </div>
 

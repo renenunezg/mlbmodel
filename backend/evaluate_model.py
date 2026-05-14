@@ -21,7 +21,6 @@ from sqlalchemy.dialects.postgresql import insert
 
 from backend.cutover import V1_CUTOVER_DATE
 from backend.db import engine
-from backend.kelly import american_to_decimal
 from backend.metrics import (
     regression_summary,
     probabilistic_summary,
@@ -32,133 +31,37 @@ from backend.metrics import (
     hit_rate_by_edge_bucket,
 )
 from backend.model import FEATURE_COLS
-from backend.strategy import EV_THRESHOLDS
 
 
-def _calc_run_line_pick(row):
-    try:
-        spread_value = float(row["spread"])
-    except Exception:
-        return np.nan
-    margin = row.get("actual_margin", np.nan)
-    if pd.isna(margin):
-        return np.nan
-    if spread_value < 0:
-        return 1 if margin >= abs(spread_value) else 0
-    elif spread_value > 0:
-        return 1 if (row["actual_win"] == 1 or margin >= -spread_value) else 0
-    return np.nan
+def _build_bet_ledger(eval_df=None):
+    """Bet ledger from the canonical SQL view `bet_ledger_v`.
 
+    The view is the single source of truth shared with the frontend
+    (History records widget and Performance betting KPIs both query it),
+    so Python and TS cannot drift on filter / grading logic.
 
-def _calc_total_pick(row):
-    try:
-        line = float(row["total"])
-    except Exception:
-        return np.nan
-    actual = row["game_total"]
-    if pd.isna(actual):
-        return np.nan
-    direction = row["total_play"].strip().lower()
-    if direction == "over":
-        return 1 if actual > line else (np.nan if actual == line else 0)
-    elif direction == "under":
-        return 1 if actual < line else (np.nan if actual == line else 0)
-    return np.nan
-
-
-def _build_bet_ledger(eval_df):
-    """Bet ledger from evaluated predictions. Re-checks EV threshold; totals deduped per game_pk."""
-    rows = []
-    seen_total_pks = set()
-
-    for _, r in eval_df.iterrows():
-        date = r.get("game_date", r.get("date"))
-
-        # Moneyline
-        if r.get("ev_flag") == r.get("team") and pd.notna(r.get("moneyline")):
-            dec_odds = american_to_decimal(r["moneyline"])
-            stake = r.get("kelly_quarter_ml")
-            wp = r.get("win_prob")
-            if (
-                dec_odds
-                and pd.notna(stake) and stake > 0
-                and pd.notna(wp)
-            ):
-                edge = float(wp) - 1.0 / dec_odds
-                if edge >= EV_THRESHOLDS["ml"]:
-                    won = bool(r.get("actual_win") == 1)
-                    rows.append({
-                        "date": date, "bet_type": "ml", "team": r["team"],
-                        "game_pk": r["game_pk"], "stake": float(stake),
-                        "decimal_odds": float(dec_odds), "won": won,
-                        "payout": float(stake * dec_odds) if won else 0.0,
-                        "edge": edge,
-                        "american_odds": float(r["moneyline"]),
-                        "totals_side": None,
-                    })
-
-        # Run line
-        if r.get("run_line_ev_flag") == r.get("team") and pd.notna(r.get("spread_odds")):
-            dec_odds = american_to_decimal(r["spread_odds"])
-            stake = r.get("kelly_quarter_rl")
-            p_cover = r.get("p_cover")
-            if (
-                dec_odds
-                and pd.notna(stake) and stake > 0
-                and pd.notna(p_cover)
-            ):
-                edge = float(p_cover) - 1.0 / dec_odds
-                if edge >= EV_THRESHOLDS["rl"]:
-                    rl_correct = _calc_run_line_pick(r)
-                    won = bool(rl_correct == 1) if pd.notna(rl_correct) else False
-                    rows.append({
-                        "date": date, "bet_type": "rl", "team": r["team"],
-                        "game_pk": r["game_pk"], "stake": float(stake),
-                        "decimal_odds": float(dec_odds), "won": won,
-                        "payout": float(stake * dec_odds) if won else 0.0,
-                        "edge": edge,
-                        "american_odds": None,
-                        "totals_side": None,
-                    })
-
-        # Totals (deduped per game_pk)
-        if (
-            r.get("total_play") in ("Over", "Under")
-            and pd.notna(r.get("game_total"))
-            and r["game_pk"] not in seen_total_pks
-        ):
-            direction = r["total_play"].strip().lower()
-            odds_col = "total_over_odds" if direction == "over" else "total_under_odds"
-            book_odds = r.get(odds_col)
-            stake = r.get("kelly_quarter_total")
-            model_p = r.get("p_over") if direction == "over" else r.get("p_under")
-            if (
-                pd.notna(book_odds)
-                and pd.notna(stake) and stake > 0
-                and pd.notna(model_p)
-            ):
-                dec_odds = american_to_decimal(book_odds)
-                if dec_odds:
-                    edge = float(model_p) - 1.0 / dec_odds
-                    if edge >= EV_THRESHOLDS["totals"]:
-                        seen_total_pks.add(r["game_pk"])
-                        total_correct = _calc_total_pick(r)
-                        won = bool(total_correct == 1) if pd.notna(total_correct) else False
-                        rows.append({
-                            "date": date, "bet_type": "total", "team": r["team"],
-                            "game_pk": r["game_pk"], "stake": float(stake),
-                            "decimal_odds": float(dec_odds), "won": won,
-                            "payout": float(stake * dec_odds) if won else 0.0,
-                            "edge": edge,
-                            "american_odds": None,
-                            "totals_side": direction,
-                        })
-
-    return pd.DataFrame(rows) if rows else pd.DataFrame(
-        columns=["date", "bet_type", "team", "game_pk", "stake",
-                 "decimal_odds", "won", "payout", "edge",
-                 "american_odds", "totals_side"]
+    `eval_df` is accepted for backwards compatibility with callers but
+    ignored - the view computes its own join against `model_outputs_season`
+    and `games`.
+    """
+    del eval_df
+    ledger = pd.read_sql(
+        text(
+            "SELECT date, bet_type, team, game_pk, stake, decimal_odds, "
+            "won, payout, edge, american_odds, totals_side "
+            "FROM bet_ledger_v"
+        ),
+        con=engine,
     )
+    if ledger.empty:
+        return pd.DataFrame(
+            columns=["date", "bet_type", "team", "game_pk", "stake",
+                     "decimal_odds", "won", "payout", "edge",
+                     "american_odds", "totals_side"]
+        )
+    ledger["date"] = pd.to_datetime(ledger["date"])
+    ledger["won"] = ledger["won"].astype(bool)
+    return ledger
 
 
 def _write_evaluation_row(eval_date, eval_window, base_row, metric_dict):

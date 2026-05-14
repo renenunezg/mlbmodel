@@ -55,33 +55,26 @@ export default async function HistoryPage({
     query = query.lte("date", to);
   }
 
-  // Compute record period date up front
+  // Records widget reads the canonical bet_ledger_agg_v Postgres view. The
+  // view does the same filter + grading work that this page used to do in
+  // TS, so History and Performance can't drift. Range capped at 10k to
+  // defeat the Supabase JS default 1000-row limit.
   const periodDate = period === "7"
     ? new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0]
     : period === "30"
       ? new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0]
       : "";
 
-  // Build record query (runs in parallel with main pagination query).
-  // Pull odds + market probabilities so we can revalidate the +EV threshold
-  // here - ev_flag values stored in model_outputs_season can be sub-threshold
-  // due to win_prob rounding or stale odds snapshots.
-  let rq = supabase
-    .from("model_outputs_season")
-    .select(
-      "game_pk, team, win_prob, ev_flag, run_line_ev_flag, total_play, our_total, total, " +
-      "moneyline, spread, spread_odds, p_cover, p_over, p_under, total_over_odds, total_under_odds, " +
-      "kelly_quarter_ml, kelly_quarter_rl, kelly_quarter_total"
-    );
-  if (periodDate) rq = rq.gte("date", periodDate);
-  if (team) rq = rq.eq("team", team);
+  let aq = supabase
+    .from("bet_ledger_agg_v")
+    .select("bet_type, won")
+    .range(0, 9999);
+  if (periodDate) aq = aq.gte("date", periodDate);
+  if (team) aq = aq.eq("team", team);
 
-  // Run main queries in parallel. The firstV2Game query finds the globally
-  // chronologically-first v2-era game so the V2 STARTS badge appears once,
-  // on that exact row, regardless of which page you're viewing.
-  const [{ data: rows, count, error }, { data: rRows }, { data: latest }, { data: firstV2GameRows }] = await Promise.all([
+  const [{ data: rows, count, error }, { data: ledgerRows }, { data: latest }, { data: firstV2GameRows }] = await Promise.all([
     query,
-    rq,
+    aq,
     supabase
       .from("games")
       .select("updated_at")
@@ -102,101 +95,25 @@ export default async function HistoryPage({
   const predictions: ModelOutput[] = rows ?? [];
   const totalRows = count ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
-  const recordPredictions: ModelOutput[] = (rRows ?? []) as unknown as ModelOutput[];
 
-  // Fetch games for both sets of pks in parallel
+  // Fetch games for current page's pks (for the row-level result columns).
   const gamePks = [...new Set(predictions.map((p) => p.game_pk))];
-  const rPks = [...new Set(recordPredictions.map((p) => p.game_pk))];
-
-  const [gamesRes, rGamesRes] = await Promise.all([
-    gamePks.length > 0
-      ? supabase.from("games").select("*").in("game_pk", gamePks)
-      : Promise.resolve({ data: [] }),
-    rPks.length > 0
-      ? supabase.from("games").select("*").eq("status", "Final").in("game_pk", rPks)
-      : Promise.resolve({ data: [] }),
-  ]);
+  const gamesRes = gamePks.length > 0
+    ? await supabase.from("games").select("*").in("game_pk", gamePks)
+    : { data: [] };
 
   const gamesMap: Record<number, GameInfo> = {};
   for (const g of (gamesRes.data ?? []) as GameInfo[]) {
     gamesMap[g.game_pk] = g;
   }
 
-  const recordGamesMap: Record<number, GameInfo> = {};
-  for (const g of (rGamesRes.data ?? []) as GameInfo[]) {
-    recordGamesMap[g.game_pk] = g;
-  }
-
-  // Tally records. Mirrors backend/strategy.py thresholds and
-  // backend/evaluate_model.py's _calc_run_line_pick / _calc_total_pick logic
-  // so the History records reconcile with the Performance eval.
-  const ML_THRESHOLD = 0.045;
-  const RL_THRESHOLD = 0.045;
-  const TOT_THRESHOLD = 0.065;
-
-  function americanToImplied(odds: number | null): number | null {
-    if (odds == null) return null;
-    return odds > 0 ? 100 / (odds + 100) : -odds / (-odds + 100);
-  }
-
   let mlWins = 0, mlLosses = 0;
   let rlWins = 0, rlLosses = 0;
   let totalsWins = 0, totalsLosses = 0;
-  const seenTotalsPks = new Set<number>();
-
-  for (const row of recordPredictions) {
-    const game = recordGamesMap[row.game_pk];
-    if (!game) continue;
-
-    const isHome = game.home_team === row.team;
-    const teamScore = isHome ? game.home_score : game.away_score;
-    const oppScore = isHome ? game.away_score : game.home_score;
-    if (teamScore == null || oppScore == null) continue;
-
-    const won = teamScore > oppScore;
-    const margin = teamScore - oppScore;
-
-    if (row.ev_flag === row.team && (row.kelly_quarter_ml ?? 0) > 0) {
-      const book = americanToImplied(row.moneyline);
-      if (book != null && row.win_prob - book >= ML_THRESHOLD) {
-        if (won) mlWins++; else mlLosses++;
-      }
-    }
-
-    if (row.run_line_ev_flag === row.team && row.spread != null && (row.kelly_quarter_rl ?? 0) > 0) {
-      const book = americanToImplied(row.spread_odds);
-      const pCover = (row as ModelOutput & { p_cover: number | null }).p_cover;
-      if (book != null && pCover != null && pCover - book >= RL_THRESHOLD) {
-        const covered = row.spread < 0
-          ? margin >= -row.spread
-          : (won || margin >= -row.spread);
-        if (covered) rlWins++; else rlLosses++;
-      }
-    }
-
-    if (
-      (row.total_play === "Over" || row.total_play === "Under")
-      && !seenTotalsPks.has(row.game_pk)
-      && (row.kelly_quarter_total ?? 0) > 0
-    ) {
-      const r = row as ModelOutput & {
-        p_over: number | null; p_under: number | null;
-        total_over_odds: number | null; total_under_odds: number | null;
-      };
-      const isOver = row.total_play === "Over";
-      const modelP = isOver ? r.p_over : r.p_under;
-      const book = americanToImplied(isOver ? r.total_over_odds : r.total_under_odds);
-      if (modelP != null && book != null && modelP - book >= TOT_THRESHOLD) {
-        seenTotalsPks.add(row.game_pk);
-        const actualTotal = (game.home_score ?? 0) + (game.away_score ?? 0);
-        const bookTotal = row.total ?? 0;
-        if (isOver) {
-          if (actualTotal > bookTotal) totalsWins++; else if (actualTotal < bookTotal) totalsLosses++;
-        } else {
-          if (actualTotal < bookTotal) totalsWins++; else if (actualTotal > bookTotal) totalsLosses++;
-        }
-      }
-    }
+  for (const r of (ledgerRows ?? []) as { bet_type: string; won: boolean }[]) {
+    if (r.bet_type === "ml") { r.won ? mlWins++ : mlLosses++; }
+    else if (r.bet_type === "rl") { r.won ? rlWins++ : rlLosses++; }
+    else if (r.bet_type === "total") { r.won ? totalsWins++ : totalsLosses++; }
   }
 
   function fmtRecord(w: number, l: number) {
