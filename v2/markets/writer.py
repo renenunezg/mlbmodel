@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from sqlalchemy import text
+from sqlalchemy.dialects.postgresql import JSONB
 
 from backend.db import engine
 from v2.bayesian._common import POSTERIORS_DIR
@@ -99,6 +100,13 @@ def build_game_rows(
     total_arr = h + a
     t_p10, t_p50, t_p90 = runs_percentiles(total_arr)
 
+    # Empirical run-distribution histograms (21 bins, 0..20 runs) for the frontend.
+    # The capped-bin trick: runs > 20 land in bin 20. Tail mass past 20 is tiny.
+    h_clipped = np.minimum(h, 20)
+    a_clipped = np.minimum(a, 20)
+    h_hist = (np.bincount(h_clipped, minlength=21)[:21] / n).round(5).tolist()
+    a_hist = (np.bincount(a_clipped, minlength=21)[:21] / n).round(5).tolist()
+
     # away band is the complement of the home band (perfectly anti-correlated
     # by construction: every per-draw home_wp_k pairs with away_wp_k = 1 - home_wp_k).
     if home_wp_p10 is not None and home_wp_p90 is not None:
@@ -157,6 +165,7 @@ def build_game_rows(
         "ml_confidence": ml_confidence(p_home_win, home_ml),
         "run_line_confidence": rl_confidence(p_home_cover, home_spread_odds),
         "high_variance_flag": high_variance_flag(h),
+        "runs_hist": h_hist,
     }
     home_row.update(_kelly_block(home_row, p_home_win, p_home_cover, p_over, p_under,
                                  home_ml, home_spread_odds, home_total_over, home_total_under))
@@ -192,6 +201,7 @@ def build_game_rows(
         "ml_confidence": ml_confidence(p_away_win, away_ml),
         "run_line_confidence": rl_confidence(p_away_cover, away_spread_odds),
         "high_variance_flag": high_variance_flag(a),
+        "runs_hist": a_hist,
     }
     away_row.update(_kelly_block(away_row, p_away_win, p_away_cover, p_over, p_under,
                                  away_ml, away_spread_odds, away_total_over, away_total_under))
@@ -248,7 +258,7 @@ def write_daily(date: pd.Timestamp, rows: list[dict]) -> None:
                 text("DELETE FROM model_outputs WHERE game_pk = :g AND team = :t"),
                 {"g": int(game_pk), "t": team},
             )
-        df.to_sql("model_outputs", con=conn, if_exists="append", index=False)
+        df.to_sql("model_outputs", con=conn, if_exists="append", index=False, dtype={"runs_hist": JSONB})
 
 
 def append_season(rows: list[dict]) -> None:
@@ -265,7 +275,7 @@ def append_season(rows: list[dict]) -> None:
                 text("DELETE FROM model_outputs_season WHERE game_pk = :g AND team = :t"),
                 {"g": int(game_pk), "t": team},
             )
-        df.to_sql("model_outputs_season", con=conn, if_exists="append", index=False)
+        df.to_sql("model_outputs_season", con=conn, if_exists="append", index=False, dtype={"runs_hist": JSONB})
 
 
 def posterior_age_days(now: datetime | None = None, posteriors_dir: Path = POSTERIORS_DIR) -> int:

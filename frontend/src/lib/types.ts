@@ -21,6 +21,16 @@ export interface ModelOutput {
   kelly_quarter_rl: number | null;
   kelly_quarter_total: number | null;
   high_variance_flag: string;
+  // v2 percentile bands (nullable on legacy v1 archive rows)
+  expected_runs_p10?: number | null;
+  expected_runs_p50?: number | null;
+  expected_runs_p90?: number | null;
+  total_p10?: number | null;
+  total_p50?: number | null;
+  total_p90?: number | null;
+  win_prob_p10?: number | null;
+  win_prob_p90?: number | null;
+  runs_hist?: number[] | null;
 }
 
 export interface GameInfo {
