@@ -230,16 +230,24 @@ def _to_float(v):
 
 
 def write_daily(date: pd.Timestamp, rows: list[dict]) -> None:
-    """Replace today's slate in model_outputs: delete prior rows for the date, insert new."""
+    """Upsert per (game_pk, team) into model_outputs.
+
+    Per-game upsert (not date-wide DELETE) so a partial scoring run, e.g. the
+    hourly lineup refresh that only touches changed games, can't blank out the
+    rest of the day's slate between DELETE and INSERT.
+    """
     if not rows:
         return
     df = pd.DataFrame(rows)
-    target_date = pd.Timestamp(date).to_pydatetime().date()
+    pairs = list(df[["game_pk", "team"]].itertuples(index=False, name=None))
+    if not pairs:
+        return
     with engine.begin() as conn:
-        conn.execute(
-            text("DELETE FROM model_outputs WHERE date::date = :d"),
-            {"d": target_date},
-        )
+        for game_pk, team in pairs:
+            conn.execute(
+                text("DELETE FROM model_outputs WHERE game_pk = :g AND team = :t"),
+                {"g": int(game_pk), "t": team},
+            )
         df.to_sql("model_outputs", con=conn, if_exists="append", index=False)
 
 

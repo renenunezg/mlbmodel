@@ -26,6 +26,12 @@ def _lineup_hash(lineup: dict[str, list[int]]) -> str:
 
 
 def _fetch_scheduled_games(date_str: str) -> pd.DataFrame:
+    """Games on `date_str` that haven't started yet.
+
+    The lock is on first pitch: `home_score IS NULL` rules out finals,
+    `start_time > NOW()` rules out anything in progress. Once a game is
+    underway its prediction is frozen — refresh can never rewrite it.
+    """
     q = text("""
         SELECT g.game_pk, COALESCE(o.lineup_hash, '') AS stored_hash
         FROM games g
@@ -33,6 +39,8 @@ def _fetch_scheduled_games(date_str: str) -> pd.DataFrame:
           ON o.game_pk = g.game_pk AND o.team = g.home_team
         WHERE g.game_date = :d
           AND g.home_score IS NULL
+          AND g.start_time IS NOT NULL
+          AND g.start_time > NOW()
     """)
     with engine.begin() as conn:
         return pd.read_sql(q, conn, params={"d": date_str})
@@ -46,7 +54,7 @@ def main() -> None:
 
     games = _fetch_scheduled_games(args.date)
     if games.empty:
-        print(f"[refresh_lineups] no scheduled games on {args.date}")
+        print(f"[refresh_lineups] no unstarted games on {args.date}")
         return
 
     changed = []
@@ -54,14 +62,22 @@ def main() -> None:
         lineup = fetch_lineup(row.game_pk)
         h = _lineup_hash(lineup)
         if any(lineup.get("home", [])) and h != row.stored_hash:
-            changed.append(row.game_pk)
+            changed.append(int(row.game_pk))
 
     if not changed:
         print(f"[refresh_lineups] no lineup changes on {args.date}")
         return
 
     print(f"[refresh_lineups] {len(changed)} games with new lineups: {changed}")
-    score(args.date, n_sims=args.n_sims, write=True)
+    # Re-score only the changed games, write live only — never mutate the
+    # historical model_outputs_season record from an in-day refresh.
+    score(
+        args.date,
+        n_sims=args.n_sims,
+        write=True,
+        game_pks=changed,
+        update_season=False,
+    )
 
 
 if __name__ == "__main__":

@@ -4,7 +4,9 @@ on:
   schedule:
     # 12 AM PT (07:00 UTC) - evaluates yesterday's results, then refreshes
     # starters/odds and scores tomorrow's games with v2.
-    - cron: "0 7 * * *"
+    # Offset 13 min from the hour: GitHub Actions suggests avoiding exact-hour
+    # cron times since :00 is the most congested slot.
+    - cron: "13 7 * * *"
   workflow_dispatch:
 
 concurrency:
