@@ -6,7 +6,9 @@ import type {
   EdgeBucket,
   PosteriorSkill,
   PosteriorSigma,
+  BetLedgerRow,
 } from "@/lib/types";
+import { aggregateLedger } from "@/lib/betting-aggs";
 import { PerformanceTabs } from "./tabs";
 import { LastUpdated } from "@/components/last-updated";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
@@ -15,7 +17,7 @@ export const revalidate = 300;
 
 export default async function PerformancePage() {
   // Fetch all data in parallel
-  const [evalRes, calRes, featRes, edgeRes, residRes, latestRes, skillsRes, sigmasRes] = await Promise.all([
+  const [evalRes, calRes, featRes, edgeRes, residRes, latestRes, skillsRes, sigmasRes, ledgerRes] = await Promise.all([
     supabase
       .from("model_evaluation")
       .select("*")
@@ -56,6 +58,13 @@ export default async function PerformancePage() {
       .select("*")
       .order("refit_date", { ascending: false })
       .limit(20),
+    // Live bet ledger - drives the headline betting KPIs without depending
+    // on yesterday's model_evaluation snapshot. Range cap defeats the
+    // Supabase JS default 1000-row limit.
+    supabase
+      .from("bet_ledger_v")
+      .select("date, team, game_pk, bet_type, stake, decimal_odds, american_odds, totals_side, won, edge, payout")
+      .range(0, 9999),
   ]);
 
   const evaluations = (evalRes.data ?? []) as ModelEvaluation[];
@@ -65,6 +74,8 @@ export default async function PerformancePage() {
   const edgeBuckets = (edgeRes.data ?? []) as EdgeBucket[];
   const posteriorSkills = (skillsRes.data ?? []) as PosteriorSkill[];
   const posteriorSigmas = (sigmasRes.data ?? []) as PosteriorSigma[];
+  const ledger = (ledgerRes.data ?? []) as BetLedgerRow[];
+  const liveKpis = aggregateLedger(ledger);
 
   // Residuals: fetch model_outputs_season for graded game_pks and join client-side.
   // PostgREST embedded !inner requires an FK constraint, which these tables lack.
@@ -128,6 +139,7 @@ export default async function PerformancePage() {
         residuals={residuals}
         posteriorSkills={posteriorSkills}
         posteriorSigmas={posteriorSigmas}
+        liveKpis={liveKpis}
       />
       <RealtimeRefresh tables={["model_evaluation"]} />
     </main>

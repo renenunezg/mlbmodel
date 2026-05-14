@@ -135,6 +135,45 @@ export interface PosteriorSigma {
   p90: number | null;
 }
 
+export interface BetLedgerRow {
+  date: string;
+  team: string;
+  game_pk: number;
+  bet_type: "ml" | "rl" | "total";
+  stake: number;
+  decimal_odds: number;
+  american_odds: number | null;
+  totals_side: "over" | "under" | null;
+  won: boolean;
+  edge: number;
+  payout: number;
+}
+
+export interface LiveKpis {
+  roi: number | null;
+  sharpe: number | null;
+  sortino: number | null;
+  max_drawdown: number | null;
+  total_staked_units: number;
+  net_profit_units: number;
+  roi_favorites: number | null;
+  n_favorites: number;
+  favorites_correct: number;
+  roi_underdogs: number | null;
+  n_underdogs: number;
+  underdogs_correct: number;
+  roi_run_line: number | null;
+  n_run_line: number;
+  run_line_bets_correct: number;
+  avg_ml_line: number | null;
+  overs_correct: number;
+  overs_predictions: number;
+  overs_roi: number | null;
+  unders_correct: number;
+  unders_predictions: number;
+  unders_roi: number | null;
+}
+
 export interface GameMatchup {
   game_pk: number;
   home_team: string;
