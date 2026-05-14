@@ -39,6 +39,7 @@ def build_game_rows(
     *,
     game_pk: int,
     game_date: pd.Timestamp,
+    start_time: pd.Timestamp | None,
     home_team: str,
     away_team: str,
     home_starter: str | None,
@@ -116,6 +117,7 @@ def build_game_rows(
     base = {
         "game_pk": int(game_pk),
         "date": pd.Timestamp(game_date).to_pydatetime().replace(tzinfo=None),
+        "start_time": pd.Timestamp(start_time).to_pydatetime() if start_time is not None else None,
         "our_total": our_total,
         "lineups_locked": lineups_locked,
         "lineup_source": lineup_source,

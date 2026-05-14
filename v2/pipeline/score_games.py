@@ -55,6 +55,7 @@ CACHE_DIR = Path(__file__).resolve().parents[2] / "cache"
 class GameContext:
     game_pk: int
     game_date: pd.Timestamp
+    start_time: pd.Timestamp | None
     home_team: str
     away_team: str
     home_starter_id: int | None
@@ -68,7 +69,7 @@ class GameContext:
 
 
 def fetch_games_for_date(date: str) -> pd.DataFrame:
-    q = text("SELECT game_pk, game_date, home_team, away_team FROM games WHERE game_date = :d")
+    q = text("SELECT game_pk, game_date, start_time, home_team, away_team FROM games WHERE game_date = :d")
     with engine.begin() as conn:
         return pd.read_sql(q, conn, params={"d": date})
 
@@ -117,6 +118,7 @@ def build_contexts(date: str) -> list[GameContext]:
             GameContext(
                 game_pk=gp,
                 game_date=pd.Timestamp(g.game_date),
+                start_time=pd.Timestamp(g.start_time) if pd.notna(g.start_time) else None,
                 home_team=g.home_team,
                 away_team=g.away_team,
                 home_starter_id=int(s_home.iloc[0].pitcher_id) if len(s_home) and pd.notna(s_home.iloc[0].pitcher_id) else None,
@@ -348,6 +350,7 @@ def score(date: str, n_sims: int = 10000, write: bool = True, seed: int = 0) -> 
         rows = build_game_rows(
             game_pk=ctx.game_pk,
             game_date=ctx.game_date,
+            start_time=ctx.start_time,
             home_team=ctx.home_team,
             away_team=ctx.away_team,
             home_starter=ctx.home_starter_name,
