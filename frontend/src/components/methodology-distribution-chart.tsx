@@ -133,9 +133,9 @@ export function MethodologyDistributionChart({
             }}
           />
           <Tooltip
-            formatter={(value: number, name: string) => [
-              `${value.toFixed(2)}%`,
-              name,
+            formatter={(value, name) => [
+              `${Number(value ?? 0).toFixed(2)}%`,
+              String(name ?? ""),
             ]}
             labelFormatter={(label) => `${label} runs`}
             contentStyle={{

@@ -4,6 +4,31 @@ import { MethodologyContent, type DistributionGameData } from "./methodology-con
 
 export const revalidate = 1800;
 
+interface PredRow {
+  game_pk: number;
+  date: string | null;
+  team: string;
+  expected_runs: number;
+  expected_runs_p10: number | null;
+  expected_runs_p50: number | null;
+  expected_runs_p90: number | null;
+  total: number | null;
+  total_p10: number | null;
+  total_p50: number | null;
+  total_p90: number | null;
+  win_prob: number;
+  win_prob_p10: number | null;
+  win_prob_p90: number | null;
+  runs_hist: number[] | null;
+}
+
+interface GameRow {
+  game_pk: number;
+  home_team: string;
+  away_team: string;
+  start_time: string | null;
+}
+
 async function fetchFeaturedGame(): Promise<DistributionGameData | null> {
   const today = new Date().toLocaleDateString("en-CA", {
     timeZone: "America/Los_Angeles",
@@ -13,16 +38,17 @@ async function fetchFeaturedGame(): Promise<DistributionGameData | null> {
     "game_pk, date, team, expected_runs, expected_runs_p10, expected_runs_p50, expected_runs_p90, " +
     "total, total_p10, total_p50, total_p90, win_prob, win_prob_p10, win_prob_p90, runs_hist";
 
-  const { data: preds } = await supabase
+  const { data: predsRaw } = await supabase
     .from("model_outputs")
     .select(cols)
     .eq("date", today)
     .order("game_pk");
 
-  if (!preds || preds.length === 0) return null;
+  const preds = (predsRaw ?? []) as unknown as PredRow[];
+  if (preds.length === 0) return null;
 
   // group by game_pk; pick the first scheduled (lowest game_pk) with both teams + band data
-  const byGame = new Map<number, typeof preds>();
+  const byGame = new Map<number, PredRow[]>();
   for (const p of preds) {
     const arr = byGame.get(p.game_pk) ?? [];
     arr.push(p);
@@ -30,13 +56,14 @@ async function fetchFeaturedGame(): Promise<DistributionGameData | null> {
   }
 
   const gamePks = Array.from(byGame.keys()).sort((a, b) => a - b);
-  const { data: games } = await supabase
+  const { data: gamesRaw } = await supabase
     .from("games")
     .select("game_pk, home_team, away_team, start_time")
     .in("game_pk", gamePks)
     .order("start_time");
+  const games = (gamesRaw ?? []) as unknown as GameRow[];
 
-  if (!games) return null;
+  if (games.length === 0) return null;
 
   for (const g of games) {
     const rows = byGame.get(g.game_pk);
