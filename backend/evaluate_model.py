@@ -79,6 +79,14 @@ def _write_evaluation_row(eval_date, eval_window, base_row, metric_dict):
         if isinstance(v, float) and (np.isnan(v) or np.isinf(v)):
             row[k] = None
 
+    # Skip the write entirely if the headline metrics are all NULL. This
+    # happens when nightly-eval fires before any of the target date's games
+    # have graded - inserting a placeholder row would leak NULLs into the
+    # frontend's "latest" lookup.
+    if all(row.get(k) is None for k in ("brier_score", "mae", "log_loss")):
+        print(f"  [skip] no graded data for {eval_date} ({eval_window}); skipping write")
+        return
+
     # Don't overwrite an existing populated cell with NULL. Partial reruns
     # (e.g. a refresh path that only computes counts and skips regression /
     # probabilistic / financial summaries) used to wipe valid metrics. Skip
