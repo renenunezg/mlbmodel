@@ -379,6 +379,16 @@ export function MethodologyContent({
             cron checks every 30 minutes between 7 AM and 4 PM PT and re-scores any game
             whose posted lineup has changed (detected via SHA-1 hash of sorted batter IDs).
           </p>
+          <p className="leading-relaxed text-muted-foreground">
+            Predictions reflect the best information available up to first pitch: lineups,
+            scratches, and late odds all feed back into the score. Once a game starts,
+            its row is frozen and the evaluation ledger uses that final pre-game value.
+            A flag visible on <span className="font-mono">/games</span> in the morning can
+            disappear later if the posted lineup re-score drops the edge below threshold,
+            and in that case the bet is also removed from <span className="font-mono">/history</span>{" "}
+            and from model evaluation. Posterior refits happen on their own nightly schedule,
+            independent of the intraday lineup refresh.
+          </p>
 
           <div className="mt-4 flex flex-col gap-2 md:flex-row md:items-start md:gap-0">
             {pipelineSteps.map((step, i) => (

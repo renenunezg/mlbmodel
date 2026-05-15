@@ -1,7 +1,9 @@
 """Hourly lineup refresh: re-scores games where posted lineups differ from what was used.
 
-Reads model_outputs.lineup_hash to detect changes. Only rewrites today's
-model_outputs rows — never touches model_outputs_season.
+Reads model_outputs.lineup_hash to detect changes. Rewrites both model_outputs
+and model_outputs_season so the historical record matches the last pre-game
+score. The unstarted-game filter in _fetch_scheduled_games freezes rows at
+first pitch, so evaluation reflects the closest-to-first-pitch prediction.
 
 Usage:
     python -m v2.pipeline.refresh_lineups [--date YYYY-MM-DD] [--n-sims N]
@@ -69,14 +71,15 @@ def main() -> None:
         return
 
     print(f"[refresh_lineups] {len(changed)} games with new lineups: {changed}")
-    # Re-score only the changed games, write live only — never mutate the
-    # historical model_outputs_season record from an in-day refresh.
+    # Re-score changed games and mirror to season so /history and the eval
+    # ledger see the post-lineup prediction. The unstarted-game filter above
+    # means once a game starts, its season row is frozen.
     score(
         args.date,
         n_sims=args.n_sims,
         write=True,
         game_pks=changed,
-        update_season=False,
+        update_season=True,
     )
 
 
