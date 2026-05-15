@@ -79,15 +79,24 @@ export function PerformanceTabs({
   );
   const seasonEvals = evaluations.filter((e) => e.eval_window === "season");
 
-  // Latest season row for headline KPIs
+  // Latest season row for headline KPIs. Skip rows where the headline metrics
+  // are all null (happens when today's eval runs before any games have graded).
+  const isPopulated = (e: ModelEvaluation) =>
+    e.brier_score != null || e.mae != null;
+  const findLastPopulated = (rows: ModelEvaluation[]) => {
+    for (let i = rows.length - 1; i >= 0; i--) {
+      if (isPopulated(rows[i])) return rows[i];
+    }
+    return rows[rows.length - 1];
+  };
   const latest =
     seasonEvals.length > 0
-      ? seasonEvals[seasonEvals.length - 1]
-      : dailyEvals[dailyEvals.length - 1];
+      ? findLastPopulated(seasonEvals)
+      : findLastPopulated(dailyEvals);
 
   // Latest day row for daily detail
   const latestDay =
-    dailyEvals.length > 0 ? dailyEvals[dailyEvals.length - 1] : latest;
+    dailyEvals.length > 0 ? findLastPopulated(dailyEvals) : latest;
 
   // Latest calibration data (most recent date)
   const latestCalDate =
@@ -360,9 +369,9 @@ export function PerformanceTabs({
       {/* ============================================================ */}
       <TabsContent value="diagnostics" className="space-y-8">
         <div>
-          <h2 className="font-heading text-lg mb-1">Recent-Form Leaderboard</h2>
+          <h2 className="font-heading text-lg mb-1">Posterior Skill Leaderboard</h2>
           <p className="text-muted-foreground text-xs mb-4">
-            Trailing 10-day Statcast xwOBA. Reflects who is hot or cold right now, not season-long talent.
+            xwOBA from the hierarchical Bayesian skill model. Season-long posterior estimate, refreshed after each refit.
           </p>
           {posteriorSkills.length > 0 ? (
             <TopSkillsLeaderboard skills={posteriorSkills} />
