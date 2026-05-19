@@ -288,6 +288,13 @@ def run_evaluation():
     )
 
 
+def update_weather():
+    """Keep the weather table fresh for the dates the pipeline touches."""
+    today = date.today()
+    for d in [today - timedelta(days=x) for x in range(3, -1, -1)] + [today + timedelta(days=1)]:
+        update_weather_for_date(d)
+
+
 STEPS = [
     ("Schedule & scores", update_scores_and_schedule),
     ("Statcast stats", fetch_statcast_stats),
@@ -308,13 +315,6 @@ NIGHTLY_STEPS = [
     ("Weather", update_weather),
     ("Evaluation", run_evaluation),
 ]
-
-
-def update_weather():
-    """Keep the weather table fresh for the dates the pipeline touches."""
-    today = date.today()
-    for d in [today - timedelta(days=x) for x in range(3, -1, -1)] + [today + timedelta(days=1)]:
-        update_weather_for_date(d)
 
 
 def _run_steps(steps):
