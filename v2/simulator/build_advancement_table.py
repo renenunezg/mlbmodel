@@ -27,6 +27,7 @@ from v2.data.pa_dataset import (
     NON_PA_EVENTS,
     OUTCOMES,
 )
+from v2.simulator.gb_quartiles import MEDIAN_Q, build_gb_quartiles
 
 CACHE_DIR = Path(__file__).resolve().parents[2] / "cache"
 TABLES_DIR = Path(__file__).resolve().parent / "tables"
@@ -78,6 +79,7 @@ def _load_pa_rows(years: list[int]) -> pd.DataFrame:
             "events", "outs_when_up",
             "on_1b", "on_2b", "on_3b",
             "bat_score", "post_bat_score",
+            "batter", "pitcher",
         ]
         frames.append(pd.read_parquet(path, columns=cols))
     df = pd.concat(frames, ignore_index=True)
@@ -116,9 +118,13 @@ def _load_pa_rows(years: list[int]) -> pd.DataFrame:
     # subtype only meaningful when outcome=OUT; for non-OUT we use a single sentinel "_NA_"
     df["subtype_key"] = np.where(df["outcome_idx"] == OUT_IDX, df["out_subtype"].fillna("field_out"), "_NA_")
 
+    df["batter"] = df["batter"].astype(np.int64)
+    df["pitcher"] = df["pitcher"].astype(np.int64)
+
     # filter degenerate rows (negative outs or outs_added > 3, sometimes from data quirks)
     df = df[(df["outs_added"].between(0, 3)) & (df["runs"].between(0, 4))].reset_index(drop=True)
-    return df[["state", "outs", "outcome_idx", "subtype_key", "new_state", "runs", "outs_added"]]
+    return df[["state", "outs", "outcome_idx", "subtype_key",
+               "new_state", "runs", "outs_added", "batter", "pitcher"]]
 
 
 def build_advancement(df: pd.DataFrame) -> pd.DataFrame:
@@ -191,38 +197,63 @@ def build_advancement(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _dist(g: pd.DataFrame) -> dict[str, float]:
+    n = g["n"].sum()
+    return {r.subtype_key: r.n / n for r in g.itertuples()}
+
+
 def build_out_subtype(df: pd.DataFrame) -> pd.DataFrame:
-    """P(out_subtype | state, outs) for outcome=OUT."""
-    outs_only = df[df["outcome_idx"] == OUT_IDX].copy()
-    cells = outs_only.groupby(["state", "outs", "subtype_key"]).size().rename("n").reset_index()
-    cell_n = cells.groupby(["state", "outs"])["n"].transform("sum")
-    cells["prob"] = cells["n"] / cell_n
-    cells["cell_n"] = cell_n
+    """P(out_subtype | state, outs, batter_gb_q, pitcher_gb_q) for outcome=OUT.
 
-    marg = outs_only.groupby(["outs", "subtype_key"]).size().rename("m_n").reset_index()
-    marg_total = marg.groupby("outs")["m_n"].transform("sum")
-    marg["m_prob"] = marg["m_n"] / marg_total
+    Two-level shrinkage on thin cells:
+      L0 cell    (state, outs, b_q, p_q)  - the stratified target
+      L1 marginal (state, outs)           - drops quartiles, keeps base/out context
+      L2 marginal (outs)                  - coarse backstop when L1 itself is thin
 
-    keys = outs_only[["state", "outs"]].drop_duplicates().reset_index(drop=True)
+    Thin extreme-quartile cells shrink toward the neutral (state, outs) league
+    rate, so a small high-GB matchup cell can't manufacture an extreme GIDP rate.
+    """
+    o = df[df["outcome_idx"] == OUT_IDX].copy()
+
+    cell = o.groupby(["state", "outs", "b_q", "p_q", "subtype_key"]).size().rename("n").reset_index()
+    cell_n = cell.groupby(["state", "outs", "b_q", "p_q"])["n"].transform("sum")
+    cell["prob"] = cell["n"] / cell_n
+    cell["cell_n"] = cell_n
+
+    l1 = o.groupby(["state", "outs", "subtype_key"]).size().rename("n").reset_index()
+    l1_n = {(s, ou): int(g["n"].sum()) for (s, ou), g in l1.groupby(["state", "outs"])}
+    l1_dist = {(s, ou): _dist(g) for (s, ou), g in l1.groupby(["state", "outs"])}
+
+    l2 = o.groupby(["outs", "subtype_key"]).size().rename("n").reset_index()
+    l2_dist = {ou: _dist(g) for ou, g in l2.groupby("outs")}
+
+    keys = o[["state", "outs", "b_q", "p_q"]].drop_duplicates().reset_index(drop=True)
     rows = []
     for _, k in keys.iterrows():
-        cell = cells[(cells["state"] == k.state) & (cells["outs"] == k.outs)]
-        n_cell = int(cell["cell_n"].iloc[0]) if len(cell) else 0
-        m = marg[marg["outs"] == k.outs]
+        c = cell[
+            (cell["state"] == k.state) & (cell["outs"] == k.outs)
+            & (cell["b_q"] == k.b_q) & (cell["p_q"] == k.p_q)
+        ]
+        n_cell = int(c["cell_n"].iloc[0]) if len(c) else 0
         if n_cell >= SUBTYPE_MIN_OBS:
-            for _, r in cell.iterrows():
-                rows.append((k.state, k.outs, r.subtype_key, float(r.prob)))
+            for _, r in c.iterrows():
+                rows.append((k.state, k.outs, k.b_q, k.p_q, r.subtype_key, float(r.prob)))
+            continue
+        # pick the fallback: L1 if it has enough obs, else the coarse L2.
+        if l1_n.get((k.state, k.outs), 0) >= SUBTYPE_MIN_OBS:
+            fallback = l1_dist[(k.state, k.outs)]
         else:
-            w = n_cell / SUBTYPE_MIN_OBS
-            mix = {}
-            for _, r in cell.iterrows():
-                mix[r.subtype_key] = w * float(r.prob)
-            for _, r in m.iterrows():
-                mix[r.subtype_key] = mix.get(r.subtype_key, 0.0) + (1 - w) * float(r.m_prob)
-            tot = sum(mix.values())
-            for st, p in mix.items():
-                rows.append((k.state, k.outs, st, p / tot))
-    return pd.DataFrame(rows, columns=["state", "outs", "subtype_key", "prob"])
+            fallback = l2_dist[k.outs]
+        w = n_cell / SUBTYPE_MIN_OBS
+        mix: dict[str, float] = {}
+        for _, r in c.iterrows():
+            mix[r.subtype_key] = w * float(r.prob)
+        for st, p in fallback.items():
+            mix[st] = mix.get(st, 0.0) + (1 - w) * p
+        tot = sum(mix.values())
+        for st, p in mix.items():
+            rows.append((k.state, k.outs, k.b_q, k.p_q, st, p / tot))
+    return pd.DataFrame(rows, columns=["state", "outs", "b_q", "p_q", "subtype_key", "prob"])
 
 
 def main():
@@ -236,6 +267,19 @@ def main():
 
     runs_per_pa = df["runs"].mean()
     print(f"  sanity: runs per PA = {runs_per_pa:.4f}  (MLB norm ~0.12)")
+
+    print("Building GB quartiles ...")
+    gbq = build_gb_quartiles(args.years)
+    TABLES_DIR.mkdir(parents=True, exist_ok=True)
+    gbq.to_parquet(TABLES_DIR / "gb_quartiles.parquet", index=False)
+    bat_map = dict(zip(gbq.loc[gbq.role == "B", "player_id"], gbq.loc[gbq.role == "B", "gb_q"]))
+    pit_map = dict(zip(gbq.loc[gbq.role == "P", "player_id"], gbq.loc[gbq.role == "P", "gb_q"]))
+    df["b_q"] = df["batter"].map(bat_map).fillna(MEDIAN_Q).astype(np.int64)
+    df["p_q"] = df["pitcher"].map(pit_map).fillna(MEDIAN_Q).astype(np.int64)
+    # mean-conservation sanity: runs/PA by pitcher GB quartile (should rise as
+    # GB% drops; the stratification must not crush runs in the high-GB bin).
+    rp = df.groupby("p_q")["runs"].mean().round(4).to_dict()
+    print(f"  runs/PA by pitcher GB quartile (0=low GB .. 3=high GB): {rp}")
 
     print("Building advancement table ...")
     adv = build_advancement(df)

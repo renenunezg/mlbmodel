@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from v2.markets.ev import (
     flag_ml,
@@ -25,21 +26,33 @@ def test_flag_runline_above_threshold():
     assert flag_runline("NYY", 0.60, +120) == "NYY"
 
 
-def test_flag_total_play_over():
+@pytest.fixture
+def totals_on(monkeypatch):
+    """Threshold-logic tests must run with the kill-switch off (it's a
+    separate concern; the math has to keep working for reactivation)."""
+    monkeypatch.setattr("v2.markets.ev.TOTALS_ENABLED", True)
+
+
+def test_flag_total_play_killswitch_off():
+    """Default: totals disabled, always No Play regardless of edge."""
+    assert flag_total_play(0.60, 0.40, -110, -110) == "No Play"
+
+
+def test_flag_total_play_over(totals_on):
     # p_over=0.60 vs -110 over (implied 0.524) → edge 0.076 > 0.065
     assert flag_total_play(0.60, 0.40, -110, -110) == "Over"
 
 
-def test_flag_total_play_under():
+def test_flag_total_play_under(totals_on):
     assert flag_total_play(0.40, 0.60, -110, -110) == "Under"
 
 
-def test_flag_total_play_no_play():
+def test_flag_total_play_no_play(totals_on):
     # both edges below 0.065 threshold
     assert flag_total_play(0.55, 0.45, -110, -110) == "No Play"
 
 
-def test_flag_total_play_fallback_diff_over():
+def test_flag_total_play_fallback_diff_over(totals_on):
     # No book over/under odds; total_diff drives direction
     assert flag_total_play(float("nan"), float("nan"), float("nan"), float("nan"), total_diff=1.5) == "Over"
 

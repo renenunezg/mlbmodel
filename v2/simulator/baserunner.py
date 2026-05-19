@@ -35,6 +35,8 @@ NA_SUBTYPE_IDX = SUBTYPE_TO_IDX["_NA_"]
 N_STATES = 8
 N_OUTS = 3
 N_OUTCOMES = len(OUTCOMES)
+N_BQ = 4  # batter GB quartile bins
+N_PQ = 4  # pitcher GB quartile bins
 
 
 def _key_advancement(state: np.ndarray, outs: np.ndarray, outcome: np.ndarray, subtype: np.ndarray) -> np.ndarray:
@@ -42,8 +44,9 @@ def _key_advancement(state: np.ndarray, outs: np.ndarray, outcome: np.ndarray, s
     return ((state * N_OUTS + outs) * N_OUTCOMES + outcome) * N_SUBTYPES + subtype
 
 
-def _key_subtype(state: np.ndarray, outs: np.ndarray) -> np.ndarray:
-    return state * N_OUTS + outs
+def _key_subtype(state: np.ndarray, outs: np.ndarray, b_q: np.ndarray, p_q: np.ndarray) -> np.ndarray:
+    """Flatten (state, outs, batter_gb_q, pitcher_gb_q) → single int64 key."""
+    return (((state * N_OUTS + outs) * N_BQ + b_q) * N_PQ + p_q)
 
 
 @dataclass
@@ -107,8 +110,20 @@ class OutSubtypeTable:
     cdf: np.ndarray
     subtype: np.ndarray      # int subtype indices
 
-    def sample(self, rng: np.random.Generator, state: np.ndarray, outs: np.ndarray) -> np.ndarray:
-        keys = _key_subtype(state.astype(np.int64), outs.astype(np.int64))
+    def sample(
+        self,
+        rng: np.random.Generator,
+        state: np.ndarray,
+        outs: np.ndarray,
+        b_q: np.ndarray,
+        p_q: np.ndarray,
+    ) -> np.ndarray:
+        keys = _key_subtype(
+            state.astype(np.int64),
+            outs.astype(np.int64),
+            b_q.astype(np.int64),
+            p_q.astype(np.int64),
+        )
         starts = self.starts[keys]
         ends = self.starts[keys + 1]
         if (ends - starts == 0).any():
@@ -124,18 +139,17 @@ class OutSubtypeTable:
         return out
 
 
-def _build_flat_lookup(df: pd.DataFrame, key_cols: list[str], n_keys: int, prob_col: str = "prob") -> tuple:
+def _build_flat_lookup(
+    df: pd.DataFrame, key_cols: list[str], n_keys: int, kind: str, prob_col: str = "prob"
+) -> tuple:
     """Take a long-format prob table, group by key_cols, return (starts, cdf, *value_arrays)."""
-    # Make a single int key column
-    if len(key_cols) == 4:
-        key = _key_advancement(
-            df[key_cols[0]].to_numpy(np.int64),
-            df[key_cols[1]].to_numpy(np.int64),
-            df[key_cols[2]].to_numpy(np.int64),
-            df[key_cols[3]].to_numpy(np.int64),
-        )
-    else:  # 2 cols (subtype table)
-        key = _key_subtype(df[key_cols[0]].to_numpy(np.int64), df[key_cols[1]].to_numpy(np.int64))
+    cols = [df[c].to_numpy(np.int64) for c in key_cols]
+    if kind == "advancement":
+        key = _key_advancement(*cols)
+    elif kind == "subtype":
+        key = _key_subtype(*cols)
+    else:
+        raise ValueError(f"unknown lookup kind {kind!r}")
     df = df.assign(_key=key).sort_values(["_key", prob_col], ascending=[True, False]).reset_index(drop=True)
 
     counts = np.bincount(df["_key"].to_numpy(), minlength=n_keys)
@@ -157,7 +171,7 @@ def load_advancement_table() -> AdvancementTable:
     df["subtype_idx"] = df["subtype_key"].map(SUBTYPE_TO_IDX).astype(np.int64)
     n_keys = N_STATES * N_OUTS * N_OUTCOMES * N_SUBTYPES
     starts, cdf, df = _build_flat_lookup(
-        df, ["state", "outs", "outcome_idx", "subtype_idx"], n_keys
+        df, ["state", "outs", "outcome_idx", "subtype_idx"], n_keys, kind="advancement"
     )
     return AdvancementTable(
         starts=starts,
@@ -171,8 +185,10 @@ def load_advancement_table() -> AdvancementTable:
 def load_out_subtype_table() -> OutSubtypeTable:
     df = pd.read_parquet(TABLES_DIR / "out_subtype.parquet")
     df["subtype_idx"] = df["subtype_key"].map(SUBTYPE_TO_IDX).astype(np.int64)
-    n_keys = N_STATES * N_OUTS
-    starts, cdf, df = _build_flat_lookup(df, ["state", "outs"], n_keys)
+    n_keys = N_STATES * N_OUTS * N_BQ * N_PQ
+    starts, cdf, df = _build_flat_lookup(
+        df, ["state", "outs", "b_q", "p_q"], n_keys, kind="subtype"
+    )
     return OutSubtypeTable(
         starts=starts,
         cdf=cdf,
@@ -185,11 +201,13 @@ def sample_subtypes_for_outs(
     outcome_idx: np.ndarray,
     state: np.ndarray,
     outs: np.ndarray,
+    b_q: np.ndarray,
+    p_q: np.ndarray,
     sub_table: OutSubtypeTable,
 ) -> np.ndarray:
     """Return a (N,) subtype-index array. Non-OUT rows get _NA_ (index 0)."""
     out = np.full(len(outcome_idx), NA_SUBTYPE_IDX, dtype=np.int64)
     mask = outcome_idx == OUT_IDX
     if mask.any():
-        out[mask] = sub_table.sample(rng, state[mask], outs[mask])
+        out[mask] = sub_table.sample(rng, state[mask], outs[mask], b_q[mask], p_q[mask])
     return out
