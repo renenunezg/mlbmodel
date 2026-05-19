@@ -15,6 +15,7 @@ from backend.db import engine
 from backend.data.mlb_api import fetch_schedule, fetch_probable_starters
 from backend.data.fangraphs import fetch_pitcher_stats, fetch_bullpen_stats, fetch_team_batting
 from backend.data.bullpen_daily import update_bullpen_daily
+from backend.data.weather import update_weather_for_date
 from backend.data.savant import fetch_park_factors
 from backend.data.odds_api import fetch_odds
 
@@ -293,6 +294,7 @@ STEPS = [
     ("Bullpen daily", update_bullpen_daily),
     ("Park factors", fetch_and_load_park_factors),
     ("Odds", fetch_and_load_odds),
+    ("Weather", update_weather),
     ("Model", run_model),
     ("Evaluation", run_evaluation),
 ]
@@ -303,8 +305,16 @@ NIGHTLY_STEPS = [
     ("Schedule & scores", update_scores_and_schedule),
     ("Bullpen daily", update_bullpen_daily),
     ("Odds", fetch_and_load_odds),
+    ("Weather", update_weather),
     ("Evaluation", run_evaluation),
 ]
+
+
+def update_weather():
+    """Keep the weather table fresh for the dates the pipeline touches."""
+    today = date.today()
+    for d in [today - timedelta(days=x) for x in range(3, -1, -1)] + [today + timedelta(days=1)]:
+        update_weather_for_date(d)
 
 
 def _run_steps(steps):

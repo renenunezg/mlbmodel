@@ -46,6 +46,7 @@ from v2.simulator.bullpen import LiveQueueContext, build_queues_live
 
 # K posterior draws per game. ~30 gives stable p10/p90 win-prob bands without
 # per-game cost ballooning (~30 × 50ms PosteriorMeans assembly = 1.5s overhead).
+# (K=60 was tried for wider totals tails; it tightens variance, not widens — reverted.)
 N_DRAWS = 30
 
 CACHE_DIR = Path(__file__).resolve().parents[2] / "cache"

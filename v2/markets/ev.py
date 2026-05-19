@@ -11,7 +11,7 @@ import pandas as pd
 
 from backend.kelly import american_to_decimal, compute_kelly_row, kelly_fraction
 from backend.simulation import american_to_prob, convert_to_odds
-from backend.strategy import EV_THRESHOLDS
+from backend.strategy import EV_THRESHOLDS, TOTALS_ENABLED
 
 
 HIGH_VARIANCE_RUNS_STDEV = 4.0
@@ -57,6 +57,8 @@ def flag_total_play(
     threshold: float = EV_THRESHOLDS["totals"],
 ) -> str:
     """Return 'Over' / 'Under' / 'No Play'."""
+    if not TOTALS_ENABLED:
+        return "No Play"
     over_book = american_to_prob(total_over_odds) if not pd.isna(total_over_odds) else float("nan")
     under_book = american_to_prob(total_under_odds) if not pd.isna(total_under_odds) else float("nan")
 

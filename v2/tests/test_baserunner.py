@@ -64,13 +64,40 @@ def test_subtype_sampler_only_outs():
     state = np.full(n, 1, dtype=np.int64)  # runner on 1B
     outs = np.zeros(n, dtype=np.int64)
     outcome = np.array([OUTCOME_TO_IDX["1B"]] * 500 + [OUTCOME_TO_IDX["OUT"]] * 500, dtype=np.int64)
-    subt = sample_subtypes_for_outs(rng, outcome, state, outs, sub_table)
+    b_q = np.full(n, 2, dtype=np.int64)
+    p_q = np.full(n, 2, dtype=np.int64)
+    subt = sample_subtypes_for_outs(rng, outcome, state, outs, b_q, p_q, sub_table)
     assert (subt[:500] == NA_SUBTYPE_IDX).all()
     assert (subt[500:] != NA_SUBTYPE_IDX).all()
     # at runner-on-1st 0-outs, GIDP should be a meaningful slice (~10-15%)
     gidp_idx = SUBTYPE_TO_IDX["gidp"]
     gidp_share = (subt[500:] == gidp_idx).mean()
     assert 0.03 < gidp_share < 0.30, f"GIDP share {gidp_share:.3f} outside [3%, 30%]"
+
+
+@skip_if_no_tables
+def test_high_gb_pitcher_more_gidp():
+    """At runner-on-1B, 0 outs: a high-GB pitcher (p_q=3) should induce more
+    GIDP than a low-GB pitcher (p_q=0) against a neutral batter. Direction check
+    on the stratification - the whole point of the variance fix."""
+    sub_table = load_out_subtype_table()
+    rng = np.random.default_rng(7)
+    n = 20_000
+    state = np.full(n, 1, dtype=np.int64)
+    outs = np.zeros(n, dtype=np.int64)
+    outcome = np.full(n, OUTCOME_TO_IDX["OUT"], dtype=np.int64)
+    b_q = np.full(n, 2, dtype=np.int64)
+    gidp_idx = SUBTYPE_TO_IDX["gidp"]
+
+    lo = sample_subtypes_for_outs(
+        rng, outcome, state, outs, b_q, np.zeros(n, np.int64), sub_table
+    )
+    hi = sample_subtypes_for_outs(
+        rng, outcome, state, outs, b_q, np.full(n, 3, np.int64), sub_table
+    )
+    lo_gidp = (lo == gidp_idx).mean()
+    hi_gidp = (hi == gidp_idx).mean()
+    assert hi_gidp > lo_gidp, f"high-GB GIDP {hi_gidp:.3f} !> low-GB {lo_gidp:.3f}"
 
 
 @skip_if_no_tables
@@ -90,7 +117,9 @@ def test_aggregate_runs_per_pa_sane():
     state = rng.choice(8, size=n, p=state_probs)
     outs = rng.choice(3, size=n)
 
-    subtypes = sample_subtypes_for_outs(rng, outcomes, state, outs, sub_table)
+    b_q = rng.integers(0, 4, size=n).astype(np.int64)
+    p_q = rng.integers(0, 4, size=n).astype(np.int64)
+    subtypes = sample_subtypes_for_outs(rng, outcomes, state, outs, b_q, p_q, sub_table)
     _, runs, _ = adv.sample(rng, state, outs, outcomes, subtypes)
     rpa = runs.mean()
     assert 0.08 < rpa < 0.18, f"runs/PA {rpa:.4f} outside sane range"

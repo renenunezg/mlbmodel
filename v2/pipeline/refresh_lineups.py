@@ -71,6 +71,10 @@ def main() -> None:
         return
 
     print(f"[refresh_lineups] {len(changed)} games with new lineups: {changed}")
+    # Weather updates as first pitch approaches; refresh it for the re-scored games.
+    from backend.data.weather import fetch_weather
+    for gp in changed:
+        fetch_weather(gp)
     # Re-score changed games and mirror to season so /history and the eval
     # ledger see the post-lineup prediction. The unstarted-game filter above
     # means once a game starts, its season row is frozen.
