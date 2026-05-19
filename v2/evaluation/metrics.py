@@ -9,8 +9,106 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from backend.evaluate_model import _build_bet_ledger
 from backend.metrics import brier_score, calibration_curve, log_loss
+
+# Mirrors bet_ledger_v's hardcoded edge gates. Kept literal (not imported from
+# EV_THRESHOLDS) so this stays pinned to the view's grading even if thresholds
+# move elsewhere - the head-to-head must grade v1 and v2 identically.
+_ML_EDGE = 0.045
+_RL_EDGE = 0.045
+_TOTAL_EDGE = 0.065
+
+
+def _american_to_implied(o: np.ndarray) -> np.ndarray:
+    o = o.astype(float)
+    return np.where(o > 0, 100.0 / (o + 100.0), (-o) / ((-o) + 100.0))
+
+
+def _american_to_decimal(o: np.ndarray) -> np.ndarray:
+    o = o.astype(float)
+    return np.where(o > 0, 1.0 + o / 100.0, 1.0 + 100.0 / np.abs(o))
+
+
+def _build_ledger_from_eval(e: pd.DataFrame) -> pd.DataFrame:
+    """Reconstruct the bet ledger from a single model's predictions+actuals.
+
+    Mirrors bet_ledger_v exactly, but grades the passed-in eval_df instead of
+    re-joining the date-partitioned live view (which would return v1's rows for
+    every pre-cutover date regardless of which model is being summarized).
+
+    eval_df must carry attach_actuals output: actual_win, actual_margin,
+    game_total, plus the _PRED_COLS prediction fields.
+    """
+    if e.empty:
+        return pd.DataFrame(columns=["bet_type", "stake", "payout"])
+    e = e.copy()
+    for c in ("win_prob", "p_cover", "p_over", "p_under", "moneyline", "spread",
+              "spread_odds", "total", "total_over_odds", "total_under_odds",
+              "kelly_quarter_ml", "kelly_quarter_rl", "kelly_quarter_total"):
+        e[c] = pd.to_numeric(e[c], errors="coerce")
+    won_ml = e["actual_win"].astype(int) == 1
+    margin = e["actual_margin"].astype(float)
+
+    frames = []
+
+    # --- moneyline ---
+    m = e[(e["ev_flag"] == e["team"]) & e["moneyline"].notna()
+          & e["kelly_quarter_ml"].notna() & (e["kelly_quarter_ml"] > 0)
+          & e["win_prob"].notna()].copy()
+    if not m.empty:
+        m["edge"] = m["win_prob"] - _american_to_implied(m["moneyline"].to_numpy())
+        m = m[m["edge"] >= _ML_EDGE]
+        m["bet_type"] = "ml"
+        m["stake"] = m["kelly_quarter_ml"].astype(float)
+        m["dec"] = _american_to_decimal(m["moneyline"].to_numpy())
+        m["won"] = won_ml.loc[m.index]
+        frames.append(m[["bet_type", "stake", "dec", "won"]])
+
+    # --- run line ---
+    r = e[(e["run_line_ev_flag"] == e["team"]) & e["spread"].notna()
+          & e["spread_odds"].notna() & e["kelly_quarter_rl"].notna()
+          & (e["kelly_quarter_rl"] > 0) & e["p_cover"].notna()].copy()
+    if not r.empty:
+        sp = r["spread"].astype(float)
+        mg = margin.loc[r.index]
+        r["won"] = np.where(
+            sp < 0, mg >= sp.abs(),
+            np.where(sp > 0, (mg > 0) | (mg >= -sp), False),
+        )
+        r["edge"] = r["p_cover"] - _american_to_implied(r["spread_odds"].to_numpy())
+        r = r[r["edge"] >= _RL_EDGE]
+        r["bet_type"] = "rl"
+        r["stake"] = r["kelly_quarter_rl"].astype(float)
+        r["dec"] = _american_to_decimal(r["spread_odds"].to_numpy())
+        frames.append(r[["bet_type", "stake", "dec", "won"]])
+
+    # --- totals (one bet per game: first team alphabetically, matching the
+    #     view's row_number() OVER (PARTITION BY game_pk ORDER BY team)) ---
+    t = e[e["total_play"].isin(["Over", "Under"]) & e["total"].notna()
+          & e["game_total"].notna() & e["kelly_quarter_total"].notna()
+          & (e["kelly_quarter_total"] > 0)].copy()
+    if not t.empty:
+        is_over = t["total_play"] == "Over"
+        t["p_sel"] = np.where(is_over, t["p_over"], t["p_under"])
+        t["odds_sel"] = np.where(is_over, t["total_over_odds"], t["total_under_odds"])
+        t = t[t["p_sel"].notna() & t["odds_sel"].notna()].copy()
+        gt = t["game_total"].astype(float)
+        tl = t["total"].astype(float)
+        t["won"] = np.where(is_over.loc[t.index], gt > tl, gt < tl)
+        t["edge"] = t["p_sel"] - _american_to_implied(t["odds_sel"].to_numpy())
+        t = t[t["edge"] >= _TOTAL_EDGE]
+        t = t.sort_values(["game_pk", "team"]).drop_duplicates("game_pk", keep="first")
+        t["bet_type"] = "total"
+        t["stake"] = t["kelly_quarter_total"].astype(float)
+        t["dec"] = _american_to_decimal(t["odds_sel"].to_numpy())
+        frames.append(t[["bet_type", "stake", "dec", "won"]])
+
+    if not frames:
+        return pd.DataFrame(columns=["bet_type", "stake", "payout"])
+    led = pd.concat(frames, ignore_index=True)
+    led["won"] = led["won"].astype(bool)
+    led["payout"] = led["stake"] * np.where(led["won"], led["dec"], 0.0)
+    return led[["bet_type", "stake", "payout"]]
 
 
 def max_calibration_gap(bins: list[dict]) -> float:
@@ -81,7 +179,7 @@ def model_summary(eval_df: pd.DataFrame) -> dict:
     outcomes = eval_df["actual_win"].astype(float).values
 
     bins = calibration_curve(probs, outcomes, n_bins=10)
-    ledger = _build_bet_ledger(eval_df)
+    ledger = _build_ledger_from_eval(eval_df)
 
     return {
         "n_team_rows": int(len(eval_df)),

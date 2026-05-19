@@ -14,6 +14,15 @@ EV_THRESHOLDS = {
     "totals": 0.065,
 }
 
+# Totals kill-switch. v2's per-PA sim is structurally miscalibrated on the
+# total-runs distribution: on the full 2026-03-26..05-09 backtest every totals
+# edge bucket lost money and model edge had no relationship to outcome (ML/RL
+# are edge-monotonic and beat v1). out-subtype stratification, weather, K=60,
+# and threshold tuning all failed to fix it. Totals stays OFF until the scoped
+# totals-recalibration rework lands (see CLAUDE.md). Flip to True to reactivate
+# in one place once the rework is verified.
+TOTALS_ENABLED = False
+
 # v1 → v2 model cutover. Eval / calibration / feature-importance writes are
 # blocked before this date so the v1-archive history stays frozen.
 V1_CUTOVER_DATE = date(2026, 5, 12)

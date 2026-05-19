@@ -27,8 +27,18 @@ from v2.simulator.baserunner import (
     sample_subtypes_for_outs,
 )
 from v2.simulator.bullpen import BullpenQueue, should_pull_starter
+from v2.simulator.gb_quartiles import GBQuartiles, load_gb_quartiles
 from v2.simulator.pa_sim import _build_full_logits, _sample_categorical, _softmax, pa_logits_batch
 from v2.simulator.posteriors import K_FREE, PosteriorMeans
+
+_GBQ_CACHE: GBQuartiles | None = None
+
+
+def _get_gbq() -> GBQuartiles:
+    global _GBQ_CACHE
+    if _GBQ_CACHE is None:
+        _GBQ_CACHE = load_gb_quartiles()
+    return _GBQ_CACHE
 
 GHOST_RUNNER_STATE = 2  # runner on 2B only
 
@@ -76,9 +86,11 @@ def simulate_game(
     n_sims: int = 1000,
     role_lookup: dict[int, int] | None = None,
     form_sigma: float = FORM_SIGMA,
+    gbq: GBQuartiles | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return (home_runs, away_runs), each (n_sims,) int64."""
     role_lookup = role_lookup or {}
+    gbq = gbq or _get_gbq()
 
     # ---- precompute pitcher arrays per side ----
     home_pids, home_lhp, home_role = _queue_arrays(inputs.home_queue, inputs.home_p_throws_lookup, role_lookup)
@@ -89,6 +101,12 @@ def simulate_game(
     home_arr = np.asarray(inputs.home_lineup, dtype=np.int64)
     away_arr = np.asarray(inputs.away_lineup, dtype=np.int64)
     venue_arr = np.array([inputs.venue], dtype=object).repeat(n_sims)
+
+    # GB quartiles, indexed parallel to the lineup / pitcher-queue arrays.
+    home_bq = gbq.batter_q(home_arr)
+    away_bq = gbq.batter_q(away_arr)
+    home_pq = gbq.pitcher_q(home_pids)
+    away_pq = gbq.pitcher_q(away_pids)
 
     # Per-sim "form" noise across all 8 outcomes (one per side). Zero-summed to
     # avoid systematic level-shift on the run rate. Held constant across the game.
@@ -141,7 +159,11 @@ def simulate_game(
         full_logits = full_logits + form
         probs = _softmax(full_logits)
         outcomes = _sample_categorical(rng, probs)
-        subtypes = sample_subtypes_for_outs(rng, outcomes, state, outs, sub_table)
+        batter_bq = np.where(is_top, away_bq[li_away % 9], home_bq[li_home % 9])
+        pitcher_pq = np.where(is_top, home_pq[p_idx_home], away_pq[p_idx_away])
+        subtypes = sample_subtypes_for_outs(
+            rng, outcomes, state, outs, batter_bq, pitcher_pq, sub_table
+        )
         new_state, runs_scored, outs_added = adv.sample(rng, state, outs, outcomes, subtypes)
 
         # ---- post outcome (only on active sims) ----

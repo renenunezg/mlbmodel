@@ -145,11 +145,10 @@ def test_runs_per_game_within_5pct():
     990 sims/game. Compare simulated mean & variance of runs/team-game to actual 2025.
 
     Mean threshold: 5%. Variance threshold: 7% (relaxed from 5% in Phase 5).
-    Phase 5 introduced per-game posterior draws, which structurally inflate the
-    mean ~3% (the model's true Bayesian posterior expectation). FORM_SIGMA=0.13
-    is the calibrated sweet spot: mean clears 5% by ~0.1pp, variance misses 5%
-    by ~1pp. Closing the var gap requires the deferred out-subtype-by-batter/
-    pitcher refinement (see CLAUDE.md deferred work).
+    FORM_SIGMA=0.13 is the calibrated sweet spot at K=30: mean clears 5%,
+    variance misses 5% by ~1pp. (K=60 tried to widen the var tail; it tightens
+    variance instead — reverted. Out-subtype-by-GB stratification is live but a
+    weak variance lever; see CLAUDE.md ACTIVE WORK.)
     """
     from v2.simulator import load_posterior_draws
     from v2.simulator.baserunner import load_advancement_table, load_out_subtype_table

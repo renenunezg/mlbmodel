@@ -18,6 +18,7 @@ from datetime import date
 
 from backend.data.bullpen_daily import update_bullpen_daily
 from backend.data.odds_api import fetch_odds
+from backend.data.weather import update_weather_for_date
 from pipeline import fetch_and_load_odds, update_scores_and_schedule
 from v2.pipeline.score_games import score
 from v2.pipeline.verify import run_checks
@@ -39,6 +40,9 @@ def main() -> None:
 
     print("[daily_run] step 3: odds")
     fetch_and_load_odds()
+
+    print("[daily_run] step 3b: weather")
+    update_weather_for_date(date.fromisoformat(args.date))
 
     print(f"[daily_run] step 4: scoring {args.date}")
     rows = score(args.date, n_sims=args.n_sims, write=True)
