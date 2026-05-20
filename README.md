@@ -44,11 +44,11 @@ inner sims (run-scoring noise). A play is flagged when modeled probability
 exceeds the sportsbook's de-vigged implied probability by more than 4.5%
 (ML/RL) or 6.5% (totals); sizing is quarter-Kelly.
 
-v2 replaced a prior XGBoost regressor (v1) after a 542-game head-to-head
-backtest: Brier −6.9%, log-loss −7.3%, max calibration gap from 41.9% to 3.2%,
-ROI improved on every market. v1 code is preserved at SHA `a84b4dd` in
-`v2/evaluation/baseline_v1/`; its predictions before 2026-05-12 are still
-served from `model_outputs_v1_archive` and `model_outputs_season_v1_archive`.
+v2 replaced an XGBoost regressor (v1) after a 542-game head-to-head backtest:
+Brier −6.9%, log-loss −7.3%, max calibration gap from 41.9% down to 3.2%, ROI
+up on every market. The v1 code is frozen at SHA `a84b4dd` under
+`v2/evaluation/baseline_v1/`. v1 predictions before 2026-05-12 still live in
+`model_outputs_v1_archive` and `model_outputs_season_v1_archive`.
 
 ## Repository layout
 
@@ -131,14 +131,13 @@ npm run dev                  # http://localhost:3000
 npm run build && npm start
 ```
 
-Pinning matters for the sampler: `numpyro==0.20.1` + `jax==0.7.2` +
-`jaxlib==0.7.2`. Newer JAX removed an internal primitive (`xla_pmap_p`) that
-numpyro depends on, so sampling fails silently otherwise. The pinned versions
-are in `v2/requirements.txt`.
+Sampler pins are load-bearing: `numpyro==0.20.1` + `jax==0.7.2` +
+`jaxlib==0.7.2`. Newer JAX dropped `xla_pmap_p`, which numpyro still uses, and
+sampling fails silently if those drift. Pins are in `v2/requirements.txt`.
 
-First Statcast fetch is slow (~30 min for a prior season's pitch data).
-Subsequent runs read from `cache/` and finish in seconds. The cache is
-gitignored and persisted across CI runs via `actions/cache`.
+The first Statcast fetch for a prior season takes ~30 min. After that runs
+read from `cache/` and finish in seconds. The cache is gitignored and reused
+across CI runs via `actions/cache`.
 
 ## Environment
 
@@ -164,9 +163,8 @@ are managed through the Supabase MCP tools, not loose migration files.
 
 ## Database
 
-All tables are keyed off `game_pk`, the integer ID assigned by the MLB Stats
-API. That makes joins trivial across data sources that otherwise disagree on
-team naming conventions.
+All tables key off `game_pk`, the integer ID from the MLB Stats API. Joins
+stay clean even when the underlying data sources disagree on team naming.
 
 | Table | Holds |
 |---|---|
@@ -183,31 +181,30 @@ team naming conventions.
 | `posterior_skills`, `posterior_sigmas` | Top-N xwOBA leaderboard and per-outcome σ rows, written after each refit. |
 | `experiment_runs` | Hyperparameters and CV scores per training run (legacy v1). |
 
-Row Level Security is enabled on every public table. The only policy is
-`public_read`, granting SELECT to the `anon` and `authenticated` roles. The
-browser sees only what the anon key plus that policy allows. Writes happen
-through `DATABASE_URL` as the `postgres` role (Python pipeline, bypasses RLS)
-or via the service-role key from server-only Next.js routes like
+RLS is on for every public table with one policy, `public_read`, granting
+SELECT to `anon` and `authenticated`. The browser only sees what that policy
+allows. Writes use `DATABASE_URL` as `postgres` (Python pipeline, bypasses
+RLS) or the service-role key from server-only Next.js routes like
 `/api/eval-game`.
 
 ## Live per-game evaluation
 
-`model_evaluation` rows are running tallies keyed on `(date, eval_window)`.
-They are written by two redundant paths:
+`model_evaluation` holds running tallies keyed on `(date, eval_window)`.
+Two paths write to it:
 
-1. The morning `daily-pipeline-v2.yml` and the midnight `nightly-eval.yml`
-   crons run the full Python evaluator and upsert all rows.
+1. The morning `daily-pipeline-v2.yml` and midnight `nightly-eval.yml` crons
+   run the full Python evaluator and upsert all rows.
 2. While the games page is open, `frontend/src/components/games-live.tsx`
-   polls the MLB Stats API every sixty seconds. The first time a game's
-   status flips to `Final`, the page POSTs to `/api/eval-game`, which writes
-   the score back to `games`, recomputes today's window rows, and upserts
-   them. The History tab fills in automatically because the W/L badges are
-   derived in JSX from `games.status` and the score columns.
+   polls MLB Stats API every 60s. The first time a game flips to `Final`, the
+   page POSTs to `/api/eval-game`, which writes the score back to `games`,
+   recomputes today's window rows, and upserts. History fills in
+   automatically since the W/L badges read from `games.status` and the score
+   columns in JSX.
 
-The live path makes the dashboard update within a minute of a game ending; the
-cron paths are the canonical reconciliation. The math lives in two places
-(`backend/evaluate_model.py` and `frontend/src/lib/eval.ts`); a fixture-based
-test covers the TypeScript port to catch drift.
+The live path updates the dashboard within a minute of a game ending. The
+cron paths are the source of truth for reconciliation. Eval math lives in two
+places (`backend/evaluate_model.py` and `frontend/src/lib/eval.ts`); a
+fixture-based test guards against drift between them.
 
 ## Schedule
 
@@ -219,8 +216,8 @@ test covers the TypeScript port to catch drift.
 | `nightly-eval.yml` | `0 7 * * *` (midnight PT) | Eval yesterday + write tomorrow's predictions. |
 | `daily-pipeline.yml` (v1) | disabled | Cron removed; `workflow_dispatch` retained for emergencies. v1 writes go to `_v1_archive`. |
 
-GitHub-hosted runners typically add thirty to sixty minutes of queue delay to
-scheduled workflows. Real start times therefore drift around the nominal cron.
+GitHub-hosted runners typically add 30-60 min of queue delay to scheduled
+workflows, so real start times drift around the nominal cron.
 
 ## Known limits
 
@@ -238,8 +235,8 @@ scheduled workflows. Real start times therefore drift around the nominal cron.
 - **No pipeline failure alerts yet.** A failing GitHub Action surfaces only
   as a red badge in the Actions tab. Email or Slack notification on failure
   is the next operational item.
-- **No weather, umpire, travel, or batter-pitcher interaction terms.** Listed
-  as deferred features in CLAUDE.md.
+- **No weather, umpire, travel, or batter-pitcher interaction terms yet.**
+  All deferred to v2.1+.
 
 ## Tests
 
@@ -251,5 +248,5 @@ pytest v2/                   # v2 tests: Bayesian, simulator, markets, eval.
 The v2 suite includes a slow acceptance gate
 (`v2/tests/test_game_sim.py::test_runs_per_game_within_5pct`) that simulates
 200 stratified 2025 games × 990 sims (= 396k team-game samples) and checks
-mean and variance against actual. It takes ~2 minutes; the default `pytest v2/` invocation excludes
-nothing, so use `--ignore=v2/tests/test_game_sim.py` for quick iteration.
+mean and variance against actuals. It takes ~2 min. `pytest v2/` runs it by
+default; pass `--ignore=v2/tests/test_game_sim.py` for quick iteration.
