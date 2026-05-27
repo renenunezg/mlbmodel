@@ -2,11 +2,11 @@ name: Nightly Evaluation and Refresh
 
 on:
   schedule:
-    # 12 AM PT (07:00 UTC) - evaluates yesterday's results, then refreshes
+    # 1:37 AM PT (08:37 UTC) - evaluates yesterday's results, then refreshes
     # starters/odds and scores tomorrow's games with v2.
-    # Offset 13 min from the hour: GitHub Actions suggests avoiding exact-hour
-    # cron times since :00 is the most congested slot.
-    - cron: "13 7 * * *"
+    # Off-peak + mid-hour: dispatches reliably within 5-15 min vs the 1-3 hr
+    # delays (and occasional dropped runs) seen at top-of-hour 07:00 UTC.
+    - cron: "37 8 * * *"
   workflow_dispatch:
 
 concurrency:
