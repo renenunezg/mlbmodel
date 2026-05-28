@@ -17,7 +17,7 @@ export default function Filters() {
   const team = searchParams.get("team") ?? "";
   const from = searchParams.get("from") ?? "";
   const to = searchParams.get("to") ?? "";
-  const period = searchParams.get("period") ?? "all";
+  const period = searchParams.get("period") ?? "7";
 
   const updateParam = useCallback(
     (key: string, value: string) => {
@@ -77,9 +77,9 @@ export default function Filters() {
         {(["7", "30", "all"] as const).map((p) => (
           <button
             key={p}
-            onClick={() => updateParam("period", p === "all" ? "" : p)}
+            onClick={() => updateParam("period", p)}
             className={`h-8 px-2.5 border transition-colors ${
-              period === p || (p === "all" && !searchParams.get("period"))
+              period === p
                 ? "border-foreground bg-foreground text-background"
                 : "border-input bg-transparent text-muted-foreground hover:text-foreground"
             }`}
