@@ -30,9 +30,19 @@ export default async function HistoryPage({
   const team = params.team ?? "";
   const from = params.from ?? "";
   const to = params.to ?? "";
-  const period = params.period ?? "";
+  const period = params.period ?? "7";
   const page = Math.max(1, parseInt(params.page ?? "1", 10));
   const offset = (page - 1) * PAGE_SIZE;
+
+  // 7D / 30D quick-filter applies a date floor to both the table and the
+  // records widget. Explicit from/to in the URL overrides it for the table.
+  const periodFloor =
+    period === "7"
+      ? new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0]
+      : period === "30"
+        ? new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0]
+        : "";
+  const effectiveFrom = from || periodFloor;
 
   // Read from the unified view so v1's pre-cutover history shows alongside
   // v2's post-cutover picks. start_time is the true chronological order;
@@ -49,8 +59,8 @@ export default async function HistoryPage({
   if (team) {
     query = query.eq("team", team);
   }
-  if (from) {
-    query = query.gte("date", from);
+  if (effectiveFrom) {
+    query = query.gte("date", effectiveFrom);
   }
   if (to) {
     query = query.lte("date", to);
@@ -60,17 +70,11 @@ export default async function HistoryPage({
   // view does the same filter + grading work that this page used to do in
   // TS, so History and Performance can't drift. Range capped at 10k to
   // defeat the Supabase JS default 1000-row limit.
-  const periodDate = period === "7"
-    ? new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0]
-    : period === "30"
-      ? new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0]
-      : "";
-
   let aq = supabase
     .from("bet_ledger_agg_v")
     .select("bet_type, won")
     .range(0, 9999);
-  if (periodDate) aq = aq.gte("date", periodDate);
+  if (periodFloor) aq = aq.gte("date", periodFloor);
   if (team) aq = aq.eq("team", team);
 
   const [{ data: rows, count, error }, { data: ledgerRows }, { data: latest }, { data: firstV2GameRows }] = await Promise.all([

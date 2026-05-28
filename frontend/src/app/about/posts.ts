@@ -9,6 +9,49 @@ export type Post = {
 // Add new entries at the top. Each entry appears as a card on the About page.
 export const posts: Post[] = [
   {
+    slug: "totals-problem",
+    date: "2026-05-27",
+    title: "The Totals Problem",
+    summary: "v2 beat v1 on moneyline and run line, but totals kept bleeding. Three fixes from inside the same modeling frame, none of them moved the number, and the question I probably should have been asking earlier.",
+    body: `When I built v1, I wrapped the whole thing around one output: expected runs per team. The reasoning was that expected runs gives you all three markets at once, which is clean if it works. If team A projects to 6.5 and team B to 3.5, a distribution over those gives you win probabilities for moneyline, the spread of the distributions gives you the runline (which is really just a moneyline derivative), and the sum gives you totals. 6.5 + 3.5 = 10, total line is 8, that's two runs of edge, flag the over. One number, three markets, done.
+
+v1 ran okay on moneyline, but totals were rough. Variance ran too high, runs were overdispersed, and the totals book was eating us alive while ML kind of held its own. So I rebuilt as v2 on a different premise, which was that instead of predicting an aggregate number and assuming a distribution around it, you simulate the actual game pitch by pitch, PA by PA, baserunners and bullpen and the whole flow, and let the run totals fall out of that. Moneyline got noticeably better under v2. Totals got noticeably worse, which was not what I'd hoped for.
+
+Here's the backtest, 2026-03-26 to 2026-05-09, v1 vs v2 on the same games:
+
+| metric | v1 | v2 |
+|---|---|---|
+| Brier (ML) | 0.2570 | 0.2393 |
+| Log-loss (ML) | 0.7244 | 0.6713 |
+| Max calibration gap | 41.92% | 3.20% |
+| ROI ML (flagged) | +15.82% | +26.25% |
+| ROI RL (flagged) | +5.04% | +14.96% |
+| ROI Totals (flagged) | -12.83% | -7.58% |
+
+Totals improved on paper but were still bleeding, and once v2 went live they got worse, not better. The other piece of the puzzle was the sim's run-distribution shape at the game level, which I'd been measuring against actual 2025 games with a 200-game variance gate:
+
+| | sim | actual | diff |
+|---|---|---|---|
+| runs/team-game mean | 4.59 | 4.38 | +4.86% |
+| runs/team-game variance | 9.72 | 10.32 | -5.86% |
+
+The mean clears the 5% gate, but the variance is short by about 6%, so the tails are too thin and the distribution is underdispersed at the game level. That underdispersion is exactly the kind of thing that would hurt totals more than moneyline, because totals lives in the tails (Over by 3, Under by 4) while moneyline only cares which side of zero the run differential lands on.
+
+So before giving up on totals I tried three things to widen the distribution or correct it. None of them landed.
+
+First was teaching the simulator about ground-ball matchups. When the sim records an out with runners on, it picks the subtype, double play vs force out vs sac fly vs productive groundout, from a league-average table keyed only on (state, outs), and the batter and pitcher don't enter the equation at all. So I stratified the table by batter GB% quartile and pitcher GB% quartile, on the theory that a heavy ground-ball hitter facing a heavy ground-ball pitcher should be seeing more double plays than the league average. Statistically it worked, the direction test passed cleanly, but the variance gap was basically unmoved, 6.0% vs the 5.86% baseline. Out-subtype just turns out to be a weak lever on game-level variance.
+
+Second was bumping the number of posterior draws. v2 samples K=30 random posterior realizations per game and concatenates the resulting run distributions, and I figured more draws would widen the band. The opposite happened, because more draws pulls each game closer to its posterior mean rather than away from it. Variance got worse, ended up at -6.3%, and I reverted it.
+
+Third was weather, and this is the one I was actually excited about going in. Every sharp will tell you wind and temperature are the biggest unpriced inputs in baseball, so I built the whole thing out, pulling per-game temp/wind from the MLB Stats API live feed (the official scorer records it in the boxscore weather block) and fitting coefficients on 363k PAs with park, batter-rate, and pitcher-rate controls. Wind blowing out lifted HR rate, warm air lifted HR and 2B, and the coefficients came out clean and significant (HR-wind +0.0105, p<.001; HR-temp +0.0103, p<.001). I wired it into the simulator and reran the backtest. Moneyline ticked up a hair, totals cratered. On a 16-day window they went from -19% to -41%, which is too small a window to mean much by itself (39 bets), but on the full window weather's effect on totals was essentially zero anyway, -19.0% vs -18.2%. The most physically motivated input I had did nothing for the actual problem.
+
+That's three serious attempts from inside the same modeling frame, and none of them moved the number. The thing that finally made the situation clear was the edge-bucket diagnostic, where you grade every candidate bet by the model's edge and bucket the outcomes. ML and RL come out cleanly edge-monotonic, meaning more model edge correlates with more ROI, exactly the shape you'd want from a working model. Totals don't do that at all. Every bucket loses, and there's no relationship between the model's edge and the actual outcome. That isn't a threshold problem and it isn't a selection problem, it's the run distribution being structurally wrong for the totals market.
+
+Which brings me to the question I probably should have been asking earlier, which is whether modeling totals as a mathematical distribution over expected runs is just inherently the wrong frame for that market. Maybe totals needs its own isolated model rather than a derivation off the same engine that prices the other two. Or maybe the deeper issue is that baseball's run distribution is too clustered, too sequence-dependent, too random for any aggregate-runs approach to find a real edge on a totals book in the first place. A 2.4-run MAE on game totals is a fine baseball number in the abstract, but it's useless for a market set at 8.5 where the line moves on half a run and you're off by five times that.
+
+I don't have an answer yet. Totals are off for now, \`TOTALS_ENABLED = False\`, one boolean in \`backend/strategy.py\`, and they stay off until I can actually point at a reason to believe a fix worked, instead of squinting at a 39-bet window and hoping.`,
+  },
+  {
     slug: "v2-coming",
     date: "2026-05-03",
     title: "V2 Is Coming and It's Bringing Bayes with It. Our Findings on XGBoost.",
