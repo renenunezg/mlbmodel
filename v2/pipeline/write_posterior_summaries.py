@@ -30,14 +30,24 @@ import statsapi
 from sqlalchemy import text
 
 from backend.db import engine
-from v2.bayesian._common import POSTERIORS_DIR
+from v2.bayesian._common import POSTERIORS_DIR, WOBA_WEIGHTS, encode_outcomes
 from v2.bayesian.pitcher_skill import classify_roles
-from v2.data.pa_dataset import EVENT_TO_OUTCOME, NON_PA_EVENTS
+from v2.data.pa_dataset import EVENT_TO_OUTCOME, NON_PA_EVENTS, OUTCOMES
+from v2.simulator.posteriors import PosteriorMeans, load_posteriors
 
 TOP_N = 10
 SIGMA_NAMES = ["sigma_batter", "sigma_platoon", "sigma_pitcher", "sigma_park"]
 CACHE_DIR = Path(__file__).resolve().parents[2] / "cache"
 WINDOW_DAYS_DEFAULT = 10
+
+# wOBA weights in OUTCOMES order; OUT is the last (reference) outcome.
+WOBA_VEC = np.array([WOBA_WEIGHTS[o] for o in OUTCOMES], dtype=np.float64)
+
+# Empirical-Bayes prior strength, in PA-equivalent pseudocounts: window outcomes
+# are shrunk toward each actor's trained posterior skill. At 100, the ~15-25 PA
+# in a 10-day window move the ranking only a little, which stops the daily churn
+# raw 10-day xwOBA had. Tunable via --prior-strength.
+PRIOR_STRENGTH_DEFAULT = 100.0
 
 # Minimum PA / batters faced for a player to be eligible for the leaderboard.
 # These scale with the window length passed at the CLI. vs_lhp gets a lower
@@ -49,14 +59,19 @@ MIN_BF_RP_PER_DAY = 1.0             # ~10 BF across 10 days ~ 5 outings
 
 PARQUET_COLS = [
     "game_pk", "game_date", "batter", "pitcher",
-    "p_throws", "stand", "events",
+    "p_throws", "events",
     "home_team", "away_team", "inning", "inning_topbot",
-    "estimated_woba_using_speedangle", "woba_value", "woba_denom",
 ]
 
 
 def _load_window_pa(window_start: date, window_end: date) -> pd.DataFrame:
-    """Load PA-terminating rows from cached parquet within [start, end]."""
+    """Load PA-terminating rows from cached parquet within [start, end].
+
+    Each PA is mapped to one of the 8 categorical OUTCOMES; `outcome_code` is
+    the index into OUTCOMES. The leaderboard skill is a wOBA computed from this
+    categorical distribution (not statcast's speedangle xwOBA), so it shares the
+    exact parameterization the Bayesian prior was fit on.
+    """
     year = window_end.year
     path = CACHE_DIR / f"statcast_{year}.parquet"
     if not path.exists():
@@ -68,24 +83,51 @@ def _load_window_pa(window_start: date, window_end: date) -> pd.DataFrame:
     df = df[df["events"].notna() & ~df["events"].isin(NON_PA_EVENTS)]
     df = df[df["events"].isin(EVENT_TO_OUTCOME)]
 
-    # Per-PA xwOBA value and denominator. For balls in play we trust statcast's
-    # speedangle estimate. For K/BB/HBP it's not populated, so we fall back to
-    # the realized woba_value (constants 0 / 0.69 / 0.72). Other events with
-    # woba_denom NaN are excluded from the average (sac bunts, catcher_interf).
-    sa = df["estimated_woba_using_speedangle"].astype("float64")
-    wv = df["woba_value"].astype("float64")
-    df["xwoba_value"] = np.where(sa.notna(), sa, wv)
-    df["xwoba_denom"] = df["woba_denom"].astype("float64")
-    df = df.dropna(subset=["xwoba_value", "xwoba_denom"])
-    df = df[df["xwoba_denom"] > 0]
-
+    df["outcome"] = df["events"].map(EVENT_TO_OUTCOME)
+    df["outcome_code"] = encode_outcomes(df["outcome"])
     df["batter"] = df["batter"].astype("int64")
     df["pitcher"] = df["pitcher"].astype("int64")
     return df.reset_index(drop=True)
 
 
-def _player_xwoba(group: pd.DataFrame) -> float:
-    return float(group["xwoba_value"].sum() / group["xwoba_denom"].sum())
+def _outcome_counts(pa: pd.DataFrame, key: str) -> tuple[np.ndarray, np.ndarray]:
+    """Per-actor 8-vector of outcome counts. Returns (sorted ids, counts[N,8])."""
+    ids = np.sort(pa[key].unique()).astype(np.int64)
+    pos = np.searchsorted(ids, pa[key].to_numpy(dtype=np.int64))
+    counts = np.zeros((len(ids), len(OUTCOMES)), dtype=np.float64)
+    np.add.at(counts, (pos, pa["outcome_code"].to_numpy()), 1.0)
+    return ids, counts
+
+
+def _prior_probs(
+    pm: PosteriorMeans, actor_type: str, split: str, ids: np.ndarray
+) -> np.ndarray:
+    """Trained-posterior outcome probabilities per actor vs a league-average
+    opponent. Returns (len(ids), 8) in OUTCOMES order. Unknown ids resolve to
+    the league-mean fallback row in PosteriorMeans."""
+    if actor_type == "batter":
+        idx = pm.encode_batter(ids)
+        free = pm.intercept[None, :] + pm.batter_offset[idx]
+        if split == "vs_lhp":
+            free = free + pm.platoon_offset[idx]
+    else:
+        idx = pm.encode_pitcher(ids)
+        role = 0 if split == "sp" else 1
+        free = pm.intercept[None, :] + pm.pitcher_offset[idx, role]
+
+    # OUT is the reference outcome (last in OUTCOMES), logit fixed at 0.
+    logits = np.concatenate([free, np.zeros((len(ids), 1))], axis=1)
+    logits -= logits.max(axis=1, keepdims=True)
+    e = np.exp(logits)
+    return e / e.sum(axis=1, keepdims=True)
+
+
+def _eb_xwoba(prior_probs: np.ndarray, counts: np.ndarray, strength: float) -> np.ndarray:
+    """Dirichlet-Multinomial conjugate update: prior pseudocounts strength*prior
+    plus observed window counts, normalized and mapped to wOBA."""
+    n = counts.sum(axis=1, keepdims=True)
+    post = (strength * prior_probs + counts) / (strength + n)
+    return post @ WOBA_VEC
 
 
 def _batter_team_lookup(pa: pd.DataFrame) -> dict[int, str]:
@@ -149,16 +191,22 @@ def _build_leaderboard_rows(
     return rows
 
 
-def _per_actor_xwoba(pa: pd.DataFrame, key: str, min_n: int) -> pd.DataFrame:
-    """Group by `key`, return DataFrame with columns [key, xwoba, n] filtered to n >= min_n."""
-    g = pa.groupby(key, sort=False).agg(
-        value_sum=("xwoba_value", "sum"),
-        denom_sum=("xwoba_denom", "sum"),
-        n=("xwoba_denom", "size"),
-    )
-    g["xwoba"] = g["value_sum"] / g["denom_sum"]
-    g = g[g["n"] >= min_n].reset_index()
-    return g[[key, "xwoba", "n"]]
+def _eb_leaderboard(
+    sub: pd.DataFrame, key: str, split: str,
+    pm: PosteriorMeans, min_n: int, strength: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Empirical-Bayes posterior xwOBA per actor over the window, restricted to
+    actors with at least min_n window PA. Returns (sorted ids, skill)."""
+    actor_type = "batter" if key == "batter" else "pitcher"
+    if sub.empty:
+        return np.empty(0, np.int64), np.empty(0, np.float64)
+    ids, counts = _outcome_counts(sub, key)
+    keep = counts.sum(axis=1) >= min_n
+    ids, counts = ids[keep], counts[keep]
+    if len(ids) == 0:
+        return ids, np.empty(0, np.float64)
+    prior = _prior_probs(pm, actor_type, split, ids)
+    return ids, _eb_xwoba(prior, counts, strength)
 
 
 def _sigma_summary(idata: az.InferenceData, var: str) -> dict[str, float]:
@@ -175,10 +223,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--refit-date", default=str(date.today()))
     ap.add_argument("--window-days", type=int, default=WINDOW_DAYS_DEFAULT)
+    ap.add_argument("--prior-strength", type=float, default=PRIOR_STRENGTH_DEFAULT)
     args = ap.parse_args()
 
     refit_date = pd.Timestamp(args.refit_date).date()
     window_days = args.window_days
+    strength = args.prior_strength
     window_end = refit_date
     window_start = window_end - timedelta(days=window_days - 1)
     min_pa_vs_rhp = max(1, int(round(MIN_PA_BATTER_VS_RHP_PER_DAY * window_days)))
@@ -190,19 +240,19 @@ def main():
     print(f"[posterior_summaries] min PA: vs_rhp={min_pa_vs_rhp}  vs_lhp={min_pa_vs_lhp}  sp={min_bf_sp}  rp={min_bf_rp}")
 
     pa = _load_window_pa(window_start, window_end)
-    print(f"[posterior_summaries] {len(pa):,} PAs in window")
+    print(f"[posterior_summaries] {len(pa):,} PAs in window  (prior-strength={strength})")
+
+    pm = load_posteriors()
 
     # --- Batter leaderboards: vs_rhp and vs_lhp ---
     batter_rows: list[dict] = []
     batter_teams = _batter_team_lookup(pa)
     for split_label, hand, min_pa in (("vs_rhp", "R", min_pa_vs_rhp), ("vs_lhp", "L", min_pa_vs_lhp)):
         sub = pa[pa["p_throws"] == hand]
-        agg = _per_actor_xwoba(sub, "batter", min_pa)
-        print(f"  batter {split_label}: {len(agg)} qualifying")
-        if agg.empty:
+        ids, skill = _eb_leaderboard(sub, "batter", split_label, pm, min_pa, strength)
+        print(f"  batter {split_label}: {len(ids)} qualifying")
+        if len(ids) == 0:
             continue
-        ids = agg["batter"].to_numpy(dtype=np.int64)
-        skill = agg["xwoba"].to_numpy(dtype=np.float64)
         batter_rows.append((split_label, ids, skill))
 
     # --- Pitcher leaderboards: filter to actual SP / RP via classify_roles ---
@@ -213,12 +263,10 @@ def main():
         eligible_ids = set(role_series[role_series == role].index.astype(int))
         sub = pa[pa["pitcher"].isin(eligible_ids)]
         min_bf = min_bf_sp if role == "SP" else min_bf_rp
-        agg = _per_actor_xwoba(sub, "pitcher", min_bf)
-        print(f"  pitcher {split_label}: {len(agg)} qualifying (of {len(eligible_ids)} {role}-classified)")
-        if agg.empty:
+        ids, skill = _eb_leaderboard(sub, "pitcher", split_label, pm, min_bf, strength)
+        print(f"  pitcher {split_label}: {len(ids)} qualifying (of {len(eligible_ids)} {role}-classified)")
+        if len(ids) == 0:
             continue
-        ids = agg["pitcher"].to_numpy(dtype=np.int64)
-        skill = agg["xwoba"].to_numpy(dtype=np.float64)
         pitcher_rows.append((split_label, ids, skill))
 
     # --- Resolve names in one batch ---
