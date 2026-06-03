@@ -187,8 +187,16 @@ def _write_experiment_run(cv_metrics, best_params):
 def _compute_base_row(window_df, window_ledger):
     """Accuracy counts for a window. Bet-level counts come from the ledger
     so they always agree with the ROI / segment metrics."""
-    total_correct = int((window_df["pred_win"] == window_df["actual_win"]).sum())
-    total_predictions = len(window_df)
+    # Pick accuracy is per-game: take the team the model favored (higher
+    # win_prob) and check whether it won. Counting both team rows would
+    # double-count, and a row-level `pred_win == actual_win` mislabels the
+    # loser row as correct on degenerate v1 days where both teams sit at exactly
+    # 0.500 (no favorite). Excluding those non-picks keeps it order-independent
+    # and consistent with the frontend. MAE / mean win_prob stay per-team-row.
+    picks = window_df.sort_values("win_prob").drop_duplicates("game_pk", keep="last")
+    picks = picks[picks["win_prob"] > 0.5]
+    total_correct = int((picks["actual_win"] == 1).sum())
+    total_predictions = len(picks)
     runs_mae = abs(window_df["expected_runs"] - window_df["actual_runs"]).mean()
 
     if window_ledger is not None and not window_ledger.empty:
