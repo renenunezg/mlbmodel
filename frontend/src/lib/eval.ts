@@ -95,23 +95,34 @@ function round4(n: number): number {
 }
 
 export function computeBaseRow(rows: EvalRow[]): BaseRow {
-  const total_predictions = rows.length;
-  const total_correct = rows.reduce(
-    (acc, r) => acc + ((r.win_prob > 0.5 ? 1 : 0) === r.actual_win ? 1 : 0),
+  // Pick accuracy is per-game: take the team the model favored (higher
+  // win_prob) and check whether it won. Counting both team rows double-counts,
+  // and games with no favorite (win_prob exactly 0.5, which happens on some
+  // degenerate v1 days) are not predictions and are excluded. Matches the
+  // backend's _compute_base_row so History and Performance can't drift.
+  const favored = new Map<number, EvalRow>();
+  for (const r of rows) {
+    const cur = favored.get(r.game_pk);
+    if (!cur || r.win_prob > cur.win_prob) favored.set(r.game_pk, r);
+  }
+  const picks = [...favored.values()].filter((r) => r.win_prob > 0.5);
+  const total_predictions = picks.length;
+  const total_correct = picks.reduce(
+    (acc, r) => acc + (r.actual_win === 1 ? 1 : 0),
     0,
   );
   const total_accuracy =
     total_predictions > 0 ? round4(total_correct / total_predictions) : null;
 
   const runs_mae =
-    total_predictions > 0
+    rows.length > 0
       ? rows.reduce((acc, r) => acc + Math.abs(r.expected_runs - r.actual_runs), 0) /
-        total_predictions
+        rows.length
       : null;
 
   const win_prob_mean =
-    total_predictions > 0
-      ? rows.reduce((acc, r) => acc + r.win_prob, 0) / total_predictions
+    rows.length > 0
+      ? rows.reduce((acc, r) => acc + r.win_prob, 0) / rows.length
       : null;
 
   const ml = dedupeByGamePk(rows.filter((r) => r.ev_flag === r.team));
