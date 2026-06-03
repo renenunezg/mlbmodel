@@ -20,7 +20,7 @@ import { ResidualsChart } from "@/components/residuals-chart";
 import { TopSkillsLeaderboard } from "@/components/top-skills-leaderboard";
 import { VarianceDecompositionChart } from "@/components/variance-decomposition-chart";
 import { V2Badge } from "@/components/v2-badge";
-import { getFirstV2Date } from "@/lib/constants";
+import { getV2BoundaryDate } from "@/lib/constants";
 import {
   Table,
   TableBody,
@@ -462,7 +462,7 @@ function EvalHistoryTable({ rows }: { rows: ModelEvaluation[] }) {
     windowKey === "season"
       ? filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
       : filtered;
-  const firstV2Date = getFirstV2Date(visible);
+  const firstV2Date = getV2BoundaryDate(visible);
 
   return (
     <div>
@@ -591,7 +591,7 @@ function DailyBettingHistory({ rows }: { rows: ModelEvaluation[] }) {
     windowKey === "season"
       ? filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
       : filtered;
-  const firstV2Date = getFirstV2Date(visible);
+  const firstV2Date = getV2BoundaryDate(visible);
 
   return (
     <div>

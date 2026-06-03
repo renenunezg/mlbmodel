@@ -22,3 +22,13 @@ export function getFirstV2Date(
   }
   return firstDate;
 }
+
+// Returns the first v2 date only when a v1 row is also present, i.e. the window
+// crosses the cutover. Without a v1 row the earliest visible v2 date is not the
+// boundary, so the badge would otherwise mark the wrong row.
+export function getV2BoundaryDate(
+  rows: { date?: string | null }[],
+): string | null {
+  const hasV1 = rows.some((r) => r.date && !isV2Era(r.date));
+  return hasV1 ? getFirstV2Date(rows) : null;
+}
