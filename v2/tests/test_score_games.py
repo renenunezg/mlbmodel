@@ -28,7 +28,9 @@ N_SIMS = 1000
 def test_score_games_end_to_end():
     from v2.pipeline.score_games import score
 
-    df = score(SMOKE_DATE, n_sims=N_SIMS, write=False, seed=0)
+    # SMOKE_DATE is in the past, so freeze_started would drop every game; opt
+    # out to exercise the full scoring path (this is the backtest-replay case).
+    df = score(SMOKE_DATE, n_sims=N_SIMS, write=False, seed=0, freeze_started=False)
     if df.empty:
         pytest.skip("no games for SMOKE_DATE; pick a different date")
 
@@ -76,5 +78,19 @@ def test_score_games_end_to_end():
     # ev_flag / total_play / run_line_ev_flag are strings, never null
     for col in ("ev_flag", "total_play", "run_line_ev_flag", "high_variance_flag"):
         assert df[col].notna().all(), f"{col} has nulls"
+
+
+def test_is_started_freeze_predicate():
+    """The freeze lock: a started game is frozen, a future one isn't, TBD isn't."""
+    import pandas as pd
+    from v2.pipeline.score_games import is_started
+
+    now = pd.Timestamp("2026-06-05 12:00:00", tz="UTC")
+    assert is_started(pd.Timestamp("2026-06-05 01:40:00", tz="UTC"), now) is True
+    assert is_started(pd.Timestamp("2026-06-05 23:10:00", tz="UTC"), now) is False
+    assert is_started(None, now) is False
+    assert is_started(pd.NaT, now) is False
+    # tz-naive start_time is coerced to UTC, not crashed on
+    assert is_started(pd.Timestamp("2026-06-05 01:40:00"), now) is True
 
 
