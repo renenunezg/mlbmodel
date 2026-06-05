@@ -75,7 +75,7 @@ def replay_range(start: date, end: date, n_sims: int, resume: bool, seed: int) -
 
         t0 = time.time()
         try:
-            df = score(str(d), n_sims=n_sims, write=True, seed=seed)
+            df = score(str(d), n_sims=n_sims, write=True, seed=seed, freeze_started=False)
         except Exception as e:
             wall = time.time() - t0
             print(f"[replay] {d}: ERROR after {wall:.1f}s: {type(e).__name__}: {e}")

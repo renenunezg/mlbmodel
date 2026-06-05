@@ -46,7 +46,7 @@ from v2.simulator.bullpen import LiveQueueContext, build_queues_live
 
 # K posterior draws per game. ~30 gives stable p10/p90 win-prob bands without
 # per-game cost ballooning (~30 × 50ms PosteriorMeans assembly = 1.5s overhead).
-# (K=60 was tried for wider totals tails; it tightens variance, not widens — reverted.)
+# (K=60 was tried for wider totals tails; it tightens variance, not widens, so reverted.)
 N_DRAWS = 30
 
 CACHE_DIR = Path(__file__).resolve().parents[2] / "cache"
@@ -67,6 +67,16 @@ class GameContext:
     away_starter_throws: str
     home_odds: dict | None
     away_odds: dict | None
+
+
+def is_started(start_time, now: pd.Timestamp) -> bool:
+    """True once first pitch has passed. A null/TBD start_time is treated as
+    not-started: we can't prove it began, so don't freeze it."""
+    if start_time is None or pd.isna(start_time):
+        return False
+    ts = pd.Timestamp(start_time)
+    ts = ts.tz_localize("UTC") if ts.tzinfo is None else ts.tz_convert("UTC")
+    return ts <= now
 
 
 def fetch_games_for_date(date: str) -> pd.DataFrame:
@@ -281,6 +291,7 @@ def score(
     seed: int = 0,
     game_pks: list[int] | None = None,
     update_season: bool = True,
+    freeze_started: bool = True,
 ) -> pd.DataFrame:
     """Score games for a date.
 
@@ -295,6 +306,11 @@ def score(
         update_season: if False, skip the model_outputs_season upsert. The
             historical record should only be written by the morning daily_run;
             in-day refreshes must not mutate it.
+        freeze_started: if True (the production default), games whose start_time
+            has passed are dropped before scoring, so neither model_outputs nor
+            model_outputs_season can be rewritten once a game is underway. The
+            pick is frozen at the last pre-first-pitch score. Backtest replay
+            passes False to (re)populate finished historical dates on purpose.
     """
     print(f"[score_games] loading {N_DRAWS} posterior draws + tables...")
     rng = np.random.default_rng(seed)
@@ -312,6 +328,15 @@ def score(
         contexts = [c for c in contexts if int(c.game_pk) in wanted]
         if not contexts:
             print(f"[score_games] none of the requested game_pks scheduled on {date}")
+            return pd.DataFrame()
+    if freeze_started:
+        now = pd.Timestamp.now(tz="UTC")
+        started = {c.game_pk for c in contexts if is_started(c.start_time, now)}
+        if started:
+            print(f"[score_games] freezing {len(started)} already-started games (not re-scored): {sorted(started)}")
+            contexts = [c for c in contexts if c.game_pk not in started]
+        if not contexts:
+            print(f"[score_games] all games on {date} already started; nothing to score")
             return pd.DataFrame()
     print(f"[score_games] {len(contexts)} games on {date}")
 
