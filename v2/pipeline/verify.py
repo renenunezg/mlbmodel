@@ -31,7 +31,8 @@ def run_checks(date_str: str) -> bool:
     q = text("""
         SELECT o.team, g.home_team, g.away_team, o.expected_runs, o.win_prob,
                o.win_prob_p10, o.win_prob_p90, o.posterior_age_days,
-               o.lineup_source, o.game_pk
+               o.lineup_source, o.game_pk, o.starter,
+               o.ev_flag, o.run_line_ev_flag, o.total_play
         FROM model_outputs o
         JOIN games g USING (game_pk)
         WHERE o.date::date = :d
@@ -84,6 +85,16 @@ def run_checks(date_str: str) -> bool:
                 diff = abs(float(away["win_prob_p10"].iloc[0]) - (1.0 - float(home["win_prob_p90"].iloc[0])))
                 if diff > ANTI_CORR_TOL:
                     failures.append(f"game {gp} anti-correlation violated (diff={diff:.4f})")
+
+    # A missing starter means the sim used a league-mean arm, so any flag on the
+    # game is untrustworthy; build_game_rows suppresses it. A flag here means that
+    # gate regressed.
+    flag_cols = ["ev_flag", "run_line_ev_flag", "total_play"]
+    for gp, grp in df.groupby("game_pk"):
+        if grp["starter"].isna().any():
+            flagged = grp[flag_cols].apply(lambda s: s.ne("No Play").any(), axis=0)
+            if flagged.any():
+                failures.append(f"game {gp} has a missing starter but is flagged on {flagged[flagged].index.tolist()}")
 
     # Posterior age
     max_age = df["posterior_age_days"].max()
