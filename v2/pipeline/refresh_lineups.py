@@ -1,8 +1,10 @@
-"""Hourly lineup refresh: re-scores games where posted lineups differ from what was used.
+"""Hourly refresh: re-scores games where the probable starter or posted lineup changed.
 
-Reads model_outputs.lineup_hash to detect changes. Rewrites both model_outputs
-and model_outputs_season so the historical record matches the last pre-game
-score. The unstarted-game filter in _fetch_scheduled_games freezes rows at
+Re-fetches probable starters (a starter announced after the morning run otherwise
+never lands in the DB until tomorrow) and reads model_outputs.lineup_hash to detect
+lineup changes. A game is re-scored when either input changed. Rewrites both
+model_outputs and model_outputs_season so the historical record matches the last
+pre-game score. The unstarted-game filter in _fetch_scheduled_games freezes rows at
 first pitch, so evaluation reflects the closest-to-first-pitch prediction.
 
 Usage:
@@ -17,8 +19,9 @@ from datetime import date
 import pandas as pd
 from sqlalchemy import text
 
-from backend.data.mlb_api import fetch_lineup
+from backend.data.mlb_api import fetch_lineup, fetch_probable_starters
 from backend.db import engine
+from pipeline import upsert_probable_starters
 from v2.pipeline.score_games import score
 
 
@@ -48,6 +51,25 @@ def _fetch_scheduled_games(date_str: str) -> pd.DataFrame:
         return pd.read_sql(q, conn, params={"d": date_str})
 
 
+def _starter_map(date_str: str) -> dict[int, tuple]:
+    """game_pk -> (home_pitcher_id, away_pitcher_id); None on a side with no known starter."""
+    q = text("""
+        SELECT ps.game_pk, ps.is_home, ps.pitcher_id
+        FROM probable_starters ps
+        JOIN games g USING (game_pk)
+        WHERE g.game_date = :d
+    """)
+    with engine.begin() as conn:
+        df = pd.read_sql(q, conn, params={"d": date_str})
+    out: dict[int, tuple] = {}
+    for gp, grp in df.groupby("game_pk"):
+        def _side(is_home):
+            s = grp[grp.is_home == is_home]["pitcher_id"]
+            return int(s.iloc[0]) if len(s) and pd.notna(s.iloc[0]) else None
+        out[int(gp)] = (_side(True), _side(False))
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--date", default=str(date.today()))
@@ -59,18 +81,26 @@ def main() -> None:
         print(f"[refresh_lineups] no unstarted games on {args.date}")
         return
 
-    changed = []
+    before = _starter_map(args.date)
+    upsert_probable_starters(fetch_probable_starters(game_date=date.fromisoformat(args.date), days_ahead=0))
+    after = _starter_map(args.date)
+
+    changed = set()
     for row in games.itertuples(index=False):
-        lineup = fetch_lineup(row.game_pk)
+        gp = int(row.game_pk)
+        if before.get(gp) != after.get(gp):
+            changed.add(gp)
+        lineup = fetch_lineup(gp)
         h = _lineup_hash(lineup)
         if any(lineup.get("home", [])) and h != row.stored_hash:
-            changed.append(int(row.game_pk))
+            changed.add(gp)
 
     if not changed:
-        print(f"[refresh_lineups] no lineup changes on {args.date}")
+        print(f"[refresh_lineups] no starter or lineup changes on {args.date}")
         return
 
-    print(f"[refresh_lineups] {len(changed)} games with new lineups: {changed}")
+    changed = sorted(changed)
+    print(f"[refresh_lineups] {len(changed)} games changed (starter/lineup): {changed}")
     # Weather updates as first pitch approaches; refresh it for the re-scored games.
     from backend.data.weather import fetch_weather
     for gp in changed:
