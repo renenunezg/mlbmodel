@@ -113,18 +113,24 @@ def update_scores_and_schedule():
         print("  No probable starters announced")
         return
 
-    # Filter to only game_pks that exist in the games table (FK constraint)
+    n = upsert_probable_starters(starters)
+    print(f"  {n} probable starters refreshed" if n else "  No starters matched to games in DB")
+
+
+def upsert_probable_starters(starters: pd.DataFrame) -> int:
+    """Upsert probable starters (FK-filtered to games in the DB), return rows written.
+
+    Shared by the morning/nightly schedule refresh and the intraday lineup
+    refresh, so a starter announced after the morning run still lands in the DB.
+    """
+    if starters.empty:
+        return 0
     with engine.connect() as conn:
-        existing = pd.read_sql(text("SELECT game_pk FROM games"), conn)
-    existing_pks = set(existing["game_pk"].tolist())
+        existing_pks = set(pd.read_sql(text("SELECT game_pk FROM games"), conn)["game_pk"].tolist())
     starters = starters[starters["game_pk"].isin(existing_pks)]
     if starters.empty:
-        print("  No starters matched to games in DB")
-        return
-
-    # Deduplicate - keep last entry per (game_pk, team) to avoid unique constraint violations
+        return 0
     starters = starters.drop_duplicates(subset=["game_pk", "team"], keep="last")
-
     with engine.begin() as conn:
         for _, s in starters.iterrows():
             conn.execute(
@@ -146,8 +152,7 @@ def update_scores_and_schedule():
                     "is_home": bool(s["is_home"]),
                 },
             )
-
-    print(f"  {len(starters)} probable starters refreshed")
+    return len(starters)
 
 
 def fetch_statcast_stats():

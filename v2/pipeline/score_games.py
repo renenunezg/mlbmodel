@@ -392,6 +392,7 @@ def score(
             home_wp_p10=home_wp_p10,
             home_wp_p90=home_wp_p90,
             lineup_hash=lhash,
+            starters_known=ctx.home_starter_id is not None and ctx.away_starter_id is not None,
         )
         all_rows.extend(rows)
         for r in rows:

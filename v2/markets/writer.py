@@ -55,12 +55,17 @@ def build_game_rows(
     home_wp_p10: float | None = None,
     home_wp_p90: float | None = None,
     lineup_hash: str | None = None,
+    starters_known: bool = True,
 ) -> list[dict]:
     """Return two dict rows (home + away) ready to write to model_outputs.
 
     `home_odds` / `away_odds` come from the `odds` table; either may be None when
     no odds row matched. Per-row keys we read: moneyline, spread, spread_odds,
     total, total_over_odds, total_under_odds.
+
+    When starters_known is False a probable starter was missing, so the sim used a
+    league-mean arm in its place. That contaminates both teams' markets, not just
+    the TBD side, so flags are suppressed for both rows; the estimate still writes.
     """
     h = np.asarray(home_runs)
     a = np.asarray(away_runs)
@@ -206,7 +211,23 @@ def build_game_rows(
     away_row.update(_kelly_block(away_row, p_away_win, p_away_cover, p_over, p_under,
                                  away_ml, away_spread_odds, away_total_over, away_total_under))
 
+    if not starters_known:
+        _suppress_bet(home_row)
+        _suppress_bet(away_row)
+
     return [home_row, away_row]
+
+
+def _suppress_bet(row: dict) -> None:
+    """Strip every bettable field in place; the run/win-prob estimate stays."""
+    row["ev_flag"] = "No Play"
+    row["run_line_ev_flag"] = "No Play"
+    row["total_play"] = "No Play"
+    row["ml_confidence"] = float("nan")
+    row["run_line_confidence"] = float("nan")
+    for k in ("kelly_full_ml", "kelly_quarter_ml", "kelly_full_rl",
+              "kelly_quarter_rl", "kelly_full_total", "kelly_quarter_total"):
+        row[k] = 0.0
 
 
 def _kelly_block(row, win_prob, p_cover, p_over, p_under,
