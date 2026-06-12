@@ -3,8 +3,11 @@
 #
 # numpyro 0.20.1 is incompatible with jax >= 0.10 (xla_pmap_p was removed).
 # Pin jax/jaxlib until numpyro releases a fix.
+# matplotlib 3.11 removed style.core, which arviz 0.21 touches at import.
+# Pin until arviz is bumped to a release that supports it.
 pymc==5.22.0
 arviz==0.21.0
+matplotlib<3.11
 h5netcdf==1.6.1
 netcdf4==1.7.4
 numpyro==0.20.1
