@@ -56,6 +56,7 @@ def build_game_rows(
     home_wp_p90: float | None = None,
     lineup_hash: str | None = None,
     starters_known: bool = True,
+    lineups_live: bool = True,
 ) -> list[dict]:
     """Return two dict rows (home + away) ready to write to model_outputs.
 
@@ -66,6 +67,12 @@ def build_game_rows(
     When starters_known is False a probable starter was missing, so the sim used a
     league-mean arm in its place. That contaminates both teams' markets, not just
     the TBD side, so flags are suppressed for both rows; the estimate still writes.
+
+    lineups_live applies the same gate for batting lineups: when it's False the
+    sim ran on the top9-by-season-PA fallback for at least one side (lineup_tag
+    != "live"). That fallback can swing a game 10+ points and flip the favorite
+    (it still bats traded/resting stars and omits recent regulars), so any flag
+    it produces is unreliable. Suppress both rows; xR/win-prob still write.
     """
     h = np.asarray(home_runs)
     a = np.asarray(away_runs)
@@ -211,7 +218,7 @@ def build_game_rows(
     away_row.update(_kelly_block(away_row, p_away_win, p_away_cover, p_over, p_under,
                                  away_ml, away_spread_odds, away_total_over, away_total_under))
 
-    if not starters_known:
+    if not starters_known or not lineups_live:
         _suppress_bet(home_row)
         _suppress_bet(away_row)
 
