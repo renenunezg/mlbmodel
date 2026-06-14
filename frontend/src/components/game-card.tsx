@@ -123,6 +123,14 @@ export function GameCard({ matchup }: GameCardProps) {
 
   const showScores = isFinal || isLive;
 
+  // Pre-game and scored on the top9-by-PA fallback (no real lineup yet), so the
+  // model suppresses pick flags. Mark it so an empty pick slate reads as
+  // "waiting on lineups", not "no edges".
+  const lineupsPending =
+    !isFinal &&
+    !isLive &&
+    !(matchup.home.lineup_source ?? "").startsWith("lineup_live");
+
   const liveLabel = (() => {
     if (!isLive) return null;
     const inning = matchup.current_inning;
@@ -168,6 +176,11 @@ export function GameCard({ matchup }: GameCardProps) {
             {isLive && (
               <span className="bg-positive/15 text-positive px-1.5 py-0.5 text-[10px] font-mono font-medium">
                 {liveLabel}
+              </span>
+            )}
+            {lineupsPending && (
+              <span className="bg-muted px-1.5 py-0.5 text-[10px] font-mono font-medium text-muted-foreground">
+                Lineups pending
               </span>
             )}
           </div>

@@ -31,6 +31,7 @@ export interface ModelOutput {
   win_prob_p10?: number | null;
   win_prob_p90?: number | null;
   runs_hist?: number[] | null;
+  lineup_source?: string | null;
 }
 
 export interface GameInfo {
