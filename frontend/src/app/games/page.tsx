@@ -9,8 +9,11 @@ import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { runEvalForGame } from "@/lib/eval-game";
 import type { LiveScore } from "@/app/api/live-scores/route";
 
-// Re-render every 30s so SSR includes fresh live scores from MLB API
-export const revalidate = 30;
+// Render fresh on every request so predictions always reflect the current
+// model_outputs (the last pre-pitch re-score / frozen value), not a cached
+// snapshot from an earlier scoring pass. Live scores still come from the
+// client poll in GamesLive.
+export const dynamic = "force-dynamic";
 
 async function fetchLiveScores(): Promise<Map<number, LiveScore>> {
   const today = new Date().toLocaleDateString("en-CA", {
@@ -69,7 +72,8 @@ export default async function Page() {
   const lastUpdated: string | null = latest?.[0]?.updated_at ?? null;
 
   // Trigger eval for any game MLB shows Final that DB hasn't caught up on.
-  // Rides Next's SSR cache (revalidate = 30) so it fires at most ~2x/min.
+  // liveScores is cached 30s (see fetchLiveScores), so this self-throttles even
+  // though the page renders dynamically; runEvalForGame is idempotent regardless.
   const sbUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const sbServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (sbUrl && sbServiceKey && allGames) {
