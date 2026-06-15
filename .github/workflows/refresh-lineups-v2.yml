@@ -2,14 +2,18 @@ name: Refresh Lineups v2
 
 on:
   schedule:
-    # Every 30 min, offset to :17 and :47 to dodge the congested :00 / :30
-    # slots GitHub Actions warns about.
-    - cron: "17,47 14-23 * * *"
+    # :17/:47 dodges the congested :00/:30 slots. Hours 0-2 UTC cover late
+    # west-coast first pitches. Backup only: GitHub drops most cron triggers.
+    - cron: "17,47 14-23,0-2 * * *"
+  # Primary cadence: Supabase pg_cron fires this every ~20 min.
+  repository_dispatch:
+    types: [refresh-lineups]
   workflow_dispatch:
 
 concurrency:
+  # Serialize, not cancel: writes are idempotent, so queue overlapping runs.
   group: refresh-lineups-v2
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   refresh:
