@@ -92,7 +92,10 @@ def main() -> None:
             changed.add(gp)
         lineup = fetch_lineup(gp)
         h = _lineup_hash(lineup)
-        if any(lineup.get("home", [])) and h != row.stored_hash:
+        # Either side posting triggers a re-score (away-only was missed before).
+        # A fully-unposted game hashes to the stored empty hash, so the guard
+        # only skips the no-data case.
+        if (any(lineup.get("home", [])) or any(lineup.get("away", []))) and h != row.stored_hash:
             changed.add(gp)
 
     if not changed:
