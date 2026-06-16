@@ -25,10 +25,6 @@ K_FREE = len(NON_REF_IDX)
 WOBA_VEC_FREE = np.array(
     [WOBA_WEIGHTS[OUTCOMES[i]] for i in NON_REF_IDX], dtype=np.float64
 )
-INTERCEPT_TOLERANCE = 0.30  # batter and pitcher fits use slightly different
-# PA pools (pitcher fit drops position-player-pitchers), so per-outcome
-# intercepts can diverge a bit. The park-effect stage already averages the two
-# and the 1pp acceptance gate is the binding check.
 
 
 @dataclass(frozen=True)
@@ -41,7 +37,6 @@ class PosteriorMeans:
     batter_ids: np.ndarray           # sorted (n_b,), int64
     pitcher_ids: np.ndarray          # sorted (n_p,), int64
     venue_codes: np.ndarray          # (n_v,) array of str
-    intercept_diff: float            # max|intercept_b - intercept_p|
 
     def encode_batter(self, ids: np.ndarray) -> np.ndarray:
         return _encode_int(ids, self.batter_ids)
@@ -81,8 +76,7 @@ def _posterior_mean(idata: az.InferenceData, var: str) -> np.ndarray:
 
 def _assemble(
     *,
-    intercept_b: np.ndarray,
-    intercept_p: np.ndarray,
+    intercept: np.ndarray,
     sigma_batter: np.ndarray,
     z_batter: np.ndarray,
     sigma_platoon: np.ndarray,
@@ -93,15 +87,7 @@ def _assemble(
     batter_ids: np.ndarray,
     pitcher_ids: np.ndarray,
     venue_codes: np.ndarray,
-    enforce_intercept_tolerance: bool,
 ) -> PosteriorMeans:
-    intercept_diff = float(np.abs(intercept_b - intercept_p).max())
-    if enforce_intercept_tolerance and intercept_diff > INTERCEPT_TOLERANCE:
-        raise RuntimeError(
-            f"batter and pitcher intercepts disagree by {intercept_diff:.4f} > "
-            f"{INTERCEPT_TOLERANCE}; investigate before using the simulator."
-        )
-
     beta_main = sigma_batter[None, :] * z_batter
     beta_platoon = sigma_platoon[None, :] * z_platoon
     n_b = beta_main.shape[0]
@@ -128,8 +114,6 @@ def _assemble(
         pitcher_ids = pitcher_ids[order]
         pitcher_offset[:n_p] = pitcher_offset[:n_p][order]
 
-    intercept = 0.5 * (intercept_b + intercept_p)
-
     return PosteriorMeans(
         intercept=intercept,
         batter_offset=batter_offset,
@@ -139,7 +123,6 @@ def _assemble(
         batter_ids=batter_ids,
         pitcher_ids=pitcher_ids,
         venue_codes=venue_codes.copy(),
-        intercept_diff=intercept_diff,
     )
 
 
@@ -149,8 +132,7 @@ def load_posteriors(posteriors_dir: Path = POSTERIORS_DIR) -> PosteriorMeans:
     park = az.from_netcdf(posteriors_dir / "park_effects.nc")
 
     return _assemble(
-        intercept_b=_posterior_mean(bat, "intercept"),
-        intercept_p=_posterior_mean(pit, "intercept"),
+        intercept=_posterior_mean(pit, "intercept"),
         sigma_batter=_posterior_mean(bat, "sigma_batter"),
         z_batter=_posterior_mean(bat, "z_batter"),
         sigma_platoon=_posterior_mean(bat, "sigma_platoon"),
@@ -161,7 +143,6 @@ def load_posteriors(posteriors_dir: Path = POSTERIORS_DIR) -> PosteriorMeans:
         batter_ids=bat.posterior["batter"].values.astype(np.int64),
         pitcher_ids=pit.posterior["pitcher"].values.astype(np.int64),
         venue_codes=park.posterior["venue"].values.astype(str),
-        enforce_intercept_tolerance=True,
     )
 
 
@@ -177,9 +158,8 @@ def load_posterior_draws(
     resulting run distribution. K~30 is enough for stable p10/p90 win-prob bands;
     the simulator's per-PA randomness still dominates total variance.
 
-    Intercept tolerance is NOT enforced per-draw. The per-draw |int_b - int_p|
-    is much noisier than on means, but the means already pass the check via
-    load_posteriors().
+    The intercept comes from the pitcher trace (the single anchored baseline);
+    the batter trace contributes offsets only.
     """
     bat = az.from_netcdf(posteriors_dir / "batter_skill.nc")
     pit = az.from_netcdf(posteriors_dir / "pitcher_skill.nc")
@@ -194,7 +174,6 @@ def load_posterior_draws(
         raise ValueError(f"K={K} exceeds available draws {n_samples}")
     indices = rng.choice(n_samples, size=K, replace=False)
 
-    bat_intercept = bat_s["intercept"].isel(sample=indices).values    # (K_FREE, K)
     bat_sigma = bat_s["sigma_batter"].isel(sample=indices).values     # (K_FREE, K)
     bat_z = bat_s["z_batter"].isel(sample=indices).values             # (n_b, K_FREE, K)
     bat_sigma_pt = bat_s["sigma_platoon"].isel(sample=indices).values # (K_FREE, K)
@@ -213,8 +192,7 @@ def load_posterior_draws(
     out: list[PosteriorMeans] = []
     for k in range(K):
         out.append(_assemble(
-            intercept_b=bat_intercept[..., k],
-            intercept_p=pit_intercept[..., k],
+            intercept=pit_intercept[..., k],
             sigma_batter=bat_sigma[..., k],
             z_batter=bat_z[..., k],
             sigma_platoon=bat_sigma_pt[..., k],
@@ -225,6 +203,5 @@ def load_posterior_draws(
             batter_ids=batter_ids,
             pitcher_ids=pitcher_ids,
             venue_codes=venue_codes,
-            enforce_intercept_tolerance=False,
         ))
     return out
