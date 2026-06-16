@@ -53,7 +53,7 @@ def predict_woba_per_pa(
     bat_post = batter_idata.posterior
     pit_post = pitcher_idata.posterior
 
-    intercept_b = bat_post["intercept"].mean(("chain", "draw")).values  # (K_FREE,)
+    intercept = pit_post["intercept"].mean(("chain", "draw")).values  # (K_FREE,)
     sigma_b = bat_post["sigma_batter"].mean(("chain", "draw")).values
     z_b = bat_post["z_batter"].mean(("chain", "draw")).values  # (n_batter, K_FREE)
     sigma_pl = bat_post["sigma_platoon"].mean(("chain", "draw")).values
@@ -61,7 +61,6 @@ def predict_woba_per_pa(
     beta_main = sigma_b * z_b
     beta_platoon = sigma_pl * z_pl
 
-    intercept_p = pit_post["intercept"].mean(("chain", "draw")).values
     sigma_p = pit_post["sigma_pitcher"].mean(("chain", "draw")).values  # (role, K_FREE)
     z_p = pit_post["z_pitcher"].mean(("chain", "draw")).values  # (n_pitcher, K_FREE)
     # For pitcher posterior we only need beta = sigma_per_pitcher * z; sigma_per_pitcher
@@ -87,11 +86,10 @@ def predict_woba_per_pa(
     p_codes = np.array([pmap[int(p)] for p in ps])
     vs_lhp = (pa_df["p_throws"].to_numpy() == "L").astype(np.float64)[:, None]
 
-    # Combine: intercept appears in both models; subtract one copy so it isn't
-    # double-counted. Average the two intercept estimates.
-    intercept_combined = 0.5 * (intercept_b + intercept_p)
+    # Single shared baseline (batter-anchored); pitcher offsets are deviations
+    # from it, so nothing to double-count or average.
     logit_free = (
-        intercept_combined[None, :]
+        intercept[None, :]
         + beta_main[b_codes]
         + vs_lhp * beta_platoon[b_codes]
         + beta_pitcher[p_codes]
