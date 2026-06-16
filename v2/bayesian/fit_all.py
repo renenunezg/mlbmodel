@@ -57,14 +57,6 @@ def main() -> int:
         pa_df = pa_df.sample(args.subsample, random_state=args.seed).reset_index(drop=True)
         print(f"  subsampled to {len(pa_df):,} PAs")
 
-    print(f"[fit_all] === batter ===")
-    bat_idata, bat_meta, bat_elapsed = batter_skill.fit(
-        pa_df, draws=args.draws, tune=args.tune, chains=args.chains, random_seed=args.seed
-    )
-    bat_diag = _diag_block(bat_idata, batter_skill.summarize, bat_elapsed)
-    print(f"  rhat={bat_diag['max_rhat']:.4f}  ess={bat_diag['min_ess_bulk']:.0f}  "
-          f"div={bat_diag['n_divergent']}  gate={bat_diag['gate_passed']}  ({bat_elapsed/60:.1f} min)")
-
     print(f"[fit_all] === pitcher ===")
     pit_pa, dropped = pitcher_skill.filter_position_player_pitching(pa_df)
     print(f"  filtered position-player-pitching: dropped {len(dropped)}")
@@ -74,6 +66,16 @@ def main() -> int:
     pit_diag = _diag_block(pit_idata, pitcher_skill.summarize, pit_elapsed)
     print(f"  rhat={pit_diag['max_rhat']:.4f}  ess={pit_diag['min_ess_bulk']:.0f}  "
           f"div={pit_diag['n_divergent']}  gate={pit_diag['gate_passed']}  ({pit_elapsed/60:.1f} min)")
+
+    print(f"[fit_all] === batter ===")
+    pitcher_intercept = pit_idata.posterior["intercept"].mean(("chain", "draw")).values
+    bat_idata, bat_meta, bat_elapsed = batter_skill.fit(
+        pa_df, frozen_intercept=pitcher_intercept,
+        draws=args.draws, tune=args.tune, chains=args.chains, random_seed=args.seed
+    )
+    bat_diag = _diag_block(bat_idata, batter_skill.summarize, bat_elapsed)
+    print(f"  rhat={bat_diag['max_rhat']:.4f}  ess={bat_diag['min_ess_bulk']:.0f}  "
+          f"div={bat_diag['n_divergent']}  gate={bat_diag['gate_passed']}  anchored=True  ({bat_elapsed/60:.1f} min)")
 
     print(f"[fit_all] === park ===")
     woba_pred, pa_for_park = park_effects.predict_woba_per_pa(pa_df, bat_idata, pit_idata)

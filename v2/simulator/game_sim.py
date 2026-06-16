@@ -48,7 +48,10 @@ RELIEVER_PULL_RUNS = 3
 
 # Per-game form noise on logits, zero-sum across the 8-outcome vector. Captures
 # day-to-day form variance on top of the K-draw posterior parameter uncertainty.
-FORM_SIGMA = 0.13
+# Recalibrated 0.13 -> 0.18 for the pitcher-anchored baseline: that lower run
+# environment compresses run variance, so it needs more form noise to clear the
+# variance gate (see v2/tools/calibrate_form_sigma.py).
+FORM_SIGMA = 0.18
 
 
 @dataclass

@@ -53,14 +53,25 @@ def _classify_roles_2025(pa_df: pd.DataFrame) -> dict[int, int]:
 # ---------- sanity tests -------------------------------------------------
 
 
-@skip_if_no_posteriors
-def test_intercepts_match_within_tolerance():
-    pm = _load()
-    # Loose tolerance: the two fits use slightly different PA pools so a small
-    # gap is expected. The binding check is the 1pp acceptance gate below.
-    assert pm.intercept_diff < 0.30, (
-        f"batter and pitcher intercepts disagree by {pm.intercept_diff:.4f}"
+def test_assemble_uses_single_intercept():
+    from v2.simulator.posteriors import _assemble, K_FREE
+    n_b, n_p, n_v = 3, 2, 4
+    intercept = np.arange(K_FREE, dtype=float) * 0.1
+    pm = _assemble(
+        intercept=intercept,
+        sigma_batter=np.ones(K_FREE),
+        z_batter=np.zeros((n_b, K_FREE)),
+        sigma_platoon=np.ones(K_FREE),
+        z_platoon=np.zeros((n_b, K_FREE)),
+        sigma_pitcher=np.ones((2, K_FREE)),
+        z_pitcher=np.zeros((n_p, K_FREE)),
+        park_log_real=np.zeros(n_v),
+        batter_ids=np.array([10, 20, 30], dtype=np.int64),
+        pitcher_ids=np.array([100, 200], dtype=np.int64),
+        venue_codes=np.array(["AAA", "BBB", "CCC", "DDD"]),
     )
+    np.testing.assert_allclose(pm.intercept, intercept)
+    assert not hasattr(pm, "intercept_diff")
 
 
 @skip_if_no_posteriors

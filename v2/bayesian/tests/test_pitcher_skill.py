@@ -1,16 +1,37 @@
 """Fast unit tests for the pitcher skill model."""
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
 import pytest
 
 from v2.bayesian import pitcher_skill
+from v2.bayesian.pitcher_skill import K_FREE
 from v2.bayesian.tests._synth import synth_pitcher_pa
 
 
 @pytest.fixture(scope="module")
 def synthetic_pa():
     return synth_pitcher_pa(n_sp=20, n_rp=20, pa_per_sp=300, pa_per_rp=80, seed=7)
+
+
+def _free_rv_names(model):
+    return {rv.name for rv in model.free_RVs}
+
+
+def test_intercept_is_free_when_not_frozen(synthetic_pa):
+    pa_df, _ = synthetic_pa
+    model, _ = pitcher_skill.build_model(pa_df)
+    assert "intercept" in _free_rv_names(model)
+
+
+def test_frozen_intercept_removes_intercept_rv(synthetic_pa):
+    pa_df, _ = synthetic_pa
+    frozen = np.zeros(K_FREE)
+    model, meta = pitcher_skill.build_model(pa_df, frozen_intercept=frozen)
+    assert "intercept" not in _free_rv_names(model)
+    assert "sigma_pitcher" in _free_rv_names(model)
+    np.testing.assert_allclose(meta["frozen_intercept"], frozen)
 
 
 def test_filter_position_player_pitching():

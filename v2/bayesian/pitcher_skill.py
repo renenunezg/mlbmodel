@@ -61,7 +61,7 @@ def filter_position_player_pitching(pa_df: pd.DataFrame) -> pd.DataFrame:
     return pa_df, pitchers_to_drop
 
 
-def build_model(pa_df: pd.DataFrame) -> tuple[pm.Model, dict]:
+def build_model(pa_df: pd.DataFrame, frozen_intercept: np.ndarray | None = None) -> tuple[pm.Model, dict]:
     import pytensor.tensor as pt
 
     outcome_codes = encode_outcomes(pa_df["outcome"])
@@ -87,7 +87,12 @@ def build_model(pa_df: pd.DataFrame) -> tuple[pm.Model, dict]:
     }
 
     with pm.Model(coords=coords) as model:
-        intercept = pm.Normal("intercept", mu=intercept_prior, sigma=0.5, dims="outcome_free")
+        if frozen_intercept is None:
+            intercept = pm.Normal("intercept", mu=intercept_prior, sigma=0.5, dims="outcome_free")
+        else:
+            # Anchored to the batter fit's baseline so both halves share one
+            # league intercept; no free param, nothing to average downstream.
+            intercept = np.asarray(frozen_intercept, dtype=float)
         sigma_pitcher = pm.HalfNormal("sigma_pitcher", sigma=0.6, dims=("role", "outcome_free"))
         z_pitcher = pm.Normal("z_pitcher", 0.0, 1.0, dims=("pitcher", "outcome_free"))
         sigma_per_pitcher = sigma_pitcher[role_idx_for_sigma]  # (pitcher, outcome_free)
@@ -121,6 +126,8 @@ def build_model(pa_df: pd.DataFrame) -> tuple[pm.Model, dict]:
         "pitcher_idx": pitcher_idx,
         "log_p_league": log_p_lg.tolist(),
         "intercept_prior": intercept_prior.tolist(),
+        "frozen_intercept": (np.asarray(frozen_intercept, dtype=float).tolist()
+                             if frozen_intercept is not None else None),
         "n_pa": int(len(pa_df)),
         "n_pitchers": int(pitcher_idx.n),
         "n_sp": n_sp,
@@ -135,13 +142,14 @@ def build_model(pa_df: pd.DataFrame) -> tuple[pm.Model, dict]:
 def fit(
     pa_df: pd.DataFrame,
     *,
+    frozen_intercept: np.ndarray | None = None,
     draws: int = 1500,
     tune: int = 1500,
     chains: int = 4,
     target_accept: float = 0.95,
     random_seed: int = 20260504,
 ) -> tuple[az.InferenceData, dict, float]:
-    model, meta = build_model(pa_df)
+    model, meta = build_model(pa_df, frozen_intercept=frozen_intercept)
     t0 = time.time()
     with model:
         idata = pm.sample(
@@ -158,11 +166,9 @@ def fit(
     return idata, meta, elapsed
 
 
-GATE_VARS = ["intercept", "sigma_pitcher"]
-
-
 def summarize(idata: az.InferenceData) -> dict:
-    summary = az.summary(idata, var_names=GATE_VARS)
+    gate_vars = [v for v in ("intercept", "sigma_pitcher") if v in idata.posterior]
+    summary = az.summary(idata, var_names=gate_vars)
     return {
         "max_rhat": float(summary["r_hat"].max()),
         "min_ess_bulk": float(summary["ess_bulk"].min()),

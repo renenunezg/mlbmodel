@@ -43,7 +43,7 @@ def aggregate_counts(pa_df: pd.DataFrame, batter_idx: ActorIndex) -> tuple[np.nd
     return counts, n_per_cell
 
 
-def build_model(pa_df: pd.DataFrame) -> tuple[pm.Model, dict]:
+def build_model(pa_df: pd.DataFrame, frozen_intercept: np.ndarray | None = None) -> tuple[pm.Model, dict]:
     import pytensor.tensor as pt
 
     outcome_codes = encode_outcomes(pa_df["outcome"])
@@ -61,7 +61,12 @@ def build_model(pa_df: pd.DataFrame) -> tuple[pm.Model, dict]:
     }
 
     with pm.Model(coords=coords) as model:
-        intercept = pm.Normal("intercept", mu=intercept_prior, sigma=0.5, dims="outcome_free")
+        if frozen_intercept is None:
+            intercept = pm.Normal("intercept", mu=intercept_prior, sigma=0.5, dims="outcome_free")
+        else:
+            # Anchored to the pitcher fit's baseline so both halves share one
+            # league intercept; no free param, nothing to average downstream.
+            intercept = np.asarray(frozen_intercept, dtype=float)
 
         sigma_batter = pm.HalfNormal("sigma_batter", sigma=0.6, dims="outcome_free")
         z_batter = pm.Normal("z_batter", 0.0, 1.0, dims=("batter", "outcome_free"))
@@ -100,6 +105,8 @@ def build_model(pa_df: pd.DataFrame) -> tuple[pm.Model, dict]:
         "batter_idx": batter_idx,
         "log_p_league": log_p_lg.tolist(),
         "intercept_prior": intercept_prior.tolist(),
+        "frozen_intercept": (np.asarray(frozen_intercept, dtype=float).tolist()
+                             if frozen_intercept is not None else None),
         "n_pa": int(len(pa_df)),
         "n_batters": int(batter_idx.n),
         "min_pa_per_batter": int(n_per_batter.min()),
@@ -114,13 +121,14 @@ def build_model(pa_df: pd.DataFrame) -> tuple[pm.Model, dict]:
 def fit(
     pa_df: pd.DataFrame,
     *,
+    frozen_intercept: np.ndarray | None = None,
     draws: int = 1500,
     tune: int = 1500,
     chains: int = 4,
     target_accept: float = 0.95,
     random_seed: int = 20260504,
 ) -> tuple[az.InferenceData, dict, float]:
-    model, meta = build_model(pa_df)
+    model, meta = build_model(pa_df, frozen_intercept=frozen_intercept)
     t0 = time.time()
     with model:
         idata = pm.sample(
@@ -137,11 +145,9 @@ def fit(
     return idata, meta, elapsed
 
 
-GATE_VARS = ["intercept", "sigma_batter", "sigma_platoon"]
-
-
 def summarize(idata: az.InferenceData) -> dict:
-    summary = az.summary(idata, var_names=GATE_VARS)
+    gate_vars = [v for v in ("intercept", "sigma_batter", "sigma_platoon") if v in idata.posterior]
+    summary = az.summary(idata, var_names=gate_vars)
     return {
         "max_rhat": float(summary["r_hat"].max()),
         "min_ess_bulk": float(summary["ess_bulk"].min()),
