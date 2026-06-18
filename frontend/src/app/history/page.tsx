@@ -231,12 +231,17 @@ export default async function HistoryPage({
                 const mlWon: boolean | null =
                   mlIsPlay && won !== null ? won : null;
 
+                // Must match bet_ledger_v's cover logic, keyed on spread sign.
                 const rlWon: boolean | null =
                   rlIsPlay &&
                   isFinal &&
                   teamScore != null &&
-                  oppScore != null
-                    ? teamScore - oppScore >= 2
+                  oppScore != null &&
+                  row.spread != null
+                    ? row.spread < 0
+                      ? teamScore - oppScore >= Math.abs(row.spread)
+                      : teamScore > oppScore ||
+                        teamScore - oppScore >= -row.spread
                     : null;
 
                 const totalsWon: boolean | null = (() => {
