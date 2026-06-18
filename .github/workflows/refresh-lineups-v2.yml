@@ -1,11 +1,10 @@
 name: Refresh Lineups v2
 
 on:
-  schedule:
-    # :17/:47 dodges the congested :00/:30 slots. Hours 0-2 UTC cover late
-    # west-coast first pitches. Backup only: GitHub drops most cron triggers.
-    - cron: "17,47 14-23,0-2 * * *"
-  # Primary cadence: Supabase pg_cron fires this every ~20 min.
+  # Cadence is driven entirely by Supabase pg_cron (refresh-lineups-dispatch),
+  # which fires this every 20 min from ~5 AM to ~7:40 PM PT. The GitHub-native
+  # schedule was removed: it dropped/delayed most fires and produced stray
+  # off-window runs. workflow_dispatch stays for manual/emergency runs.
   repository_dispatch:
     types: [refresh-lineups]
   workflow_dispatch:
