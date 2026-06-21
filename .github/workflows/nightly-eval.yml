@@ -1,11 +1,15 @@
 name: Nightly Evaluation and Refresh
 
 on:
+  # Primary trigger: Supabase pg_cron (nightly-eval-dispatch) fires this via
+  # repository_dispatch at 12:01 AM PT (07:01 UTC), bypassing GitHub's unreliable
+  # scheduler. Same pg_cron + Vault PAT mechanism as refresh-lineups.
+  repository_dispatch:
+    types: [nightly-eval]
   schedule:
-    # 1:37 AM PT (08:37 UTC) - evaluates yesterday's results, then refreshes
-    # starters/odds and scores tomorrow's games with v2.
-    # Off-peak + mid-hour: dispatches reliably within 5-15 min vs the 1-3 hr
-    # delays (and occasional dropped runs) seen at top-of-hour 07:00 UTC.
+    # Backup only: once-daily safety net at 1:37 AM PT (08:37 UTC) in case the
+    # pg_cron dispatch misses. Runs are idempotent and serialized by concurrency,
+    # so a double-run with the dispatch is harmless.
     - cron: "37 8 * * *"
   workflow_dispatch:
 
