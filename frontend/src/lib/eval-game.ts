@@ -63,10 +63,16 @@ function shiftDays(date: string, days: number): string {
 
 async function fetchMlbGame(gamePk: number): Promise<MLBGameStatus | null> {
   const url = `https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`;
-  const res = await fetch(url, {
-    headers: { "User-Agent": "mlb-model-dashboard" },
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: { "User-Agent": "mlb-model-dashboard" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(4000),
+    });
+  } catch {
+    return null;
+  }
   if (!res.ok) return null;
   const data = await res.json();
   const game = data?.gameData;
