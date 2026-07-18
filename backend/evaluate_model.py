@@ -233,6 +233,29 @@ def _compute_base_row(window_df, window_ledger):
     }
 
 
+def _merge_predictions_with_results(model_df, all_results):
+    predictions = model_df.copy()
+    results = all_results.copy()
+    predictions["_prediction_date"] = pd.to_datetime(predictions["date"]).dt.date
+    results["_result_date"] = pd.to_datetime(results["game_date"]).dt.date
+
+    merged = pd.merge(
+        predictions,
+        results[[
+            "game_pk", "game_date", "team", "actual_runs", "winning_team",
+            "actual_margin", "_result_date",
+        ]],
+        on=["game_pk", "team"],
+        how="inner",
+    )
+    merged = merged[merged["_prediction_date"] == merged["_result_date"]]
+    return (
+        merged
+        .drop(columns=["_prediction_date", "_result_date"])
+        .dropna(subset=["actual_runs"])
+    )
+
+
 def main(model=None, cv_metrics=None, best_params=None, as_of: datetime.date | None = None):
     """Run full evaluation and write results to DB.
 
@@ -290,12 +313,7 @@ def main(model=None, cv_metrics=None, best_params=None, as_of: datetime.date | N
     all_results = pd.concat([home_df, away_df], ignore_index=True)
 
     # Merge predictions with results
-    eval_df = pd.merge(
-        model_df,
-        all_results[["game_pk", "game_date", "team", "actual_runs", "winning_team", "actual_margin"]],
-        on=["game_pk", "team"],
-        how="inner",
-    ).dropna(subset=["actual_runs"])
+    eval_df = _merge_predictions_with_results(model_df, all_results)
 
     # Also merge game_total for totals evaluation
     eval_df = eval_df.merge(
