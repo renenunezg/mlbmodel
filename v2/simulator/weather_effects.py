@@ -32,6 +32,15 @@ _TEMP_VEC[_IDX["HR"]] = 0.010337
 _TEMP_VEC[_IDX["2B"]] = 0.003147
 
 
+def weather_shift_vector(wind_signal: float, temp_c: float) -> np.ndarray:
+    """(8,) additive logit shift for one game's constant wind/temp.
+
+    wind_signal = wind_speed_mph * signed out-component; temp_c = temp_f - 70.
+    Dome / missing weather pass 0.0 for both and get a zero vector.
+    """
+    return wind_signal * _WIND_VEC + temp_c * _TEMP_VEC
+
+
 def apply_weather_shift(
     full_logits: np.ndarray,
     wind_signal: np.ndarray,

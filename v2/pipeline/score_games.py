@@ -24,6 +24,7 @@ from sqlalchemy import text
 
 from backend.data.mlb_api import fetch_lineup
 from backend.db import engine
+from backend.strategy import WEATHER_ENABLED
 from v2.markets.writer import (
     append_season,
     build_game_rows,
@@ -67,6 +68,10 @@ class GameContext:
     away_starter_throws: str
     home_odds: dict | None
     away_odds: dict | None
+    wind_speed_mph: float | None = None
+    wind_out_component: float | None = None
+    temp_f: float | None = None
+    is_dome: bool = False
 
 
 def is_started(start_time, now: pd.Timestamp) -> bool:
@@ -111,12 +116,24 @@ def fetch_odds(game_pks: list[int], book: str = "draftkings") -> pd.DataFrame:
     return df.drop_duplicates(subset=["game_pk", "team"], keep="first")
 
 
+def fetch_weather(game_pks: list[int]) -> pd.DataFrame:
+    if not game_pks:
+        return pd.DataFrame()
+    q = text(
+        "SELECT game_pk, wind_speed_mph, wind_out_component, temp_f, is_dome "
+        "FROM weather WHERE game_pk = ANY(:ids)"
+    )
+    with engine.begin() as conn:
+        return pd.read_sql(q, conn, params={"ids": game_pks})
+
+
 def build_contexts(date: str) -> list[GameContext]:
     games = fetch_games_for_date(date)
     if games.empty:
         return []
     starters = fetch_starters(games["game_pk"].tolist())
     odds = fetch_odds(games["game_pk"].tolist())
+    weather = fetch_weather(games["game_pk"].tolist())
 
     contexts = []
     for _, g in games.iterrows():
@@ -125,6 +142,8 @@ def build_contexts(date: str) -> list[GameContext]:
         s_away = starters[(starters.game_pk == gp) & (starters.is_home == False)]  # noqa: E712
         o_home = odds[(odds.game_pk == gp) & (odds.team == g.home_team)]
         o_away = odds[(odds.game_pk == gp) & (odds.team == g.away_team)]
+        wx = weather[weather.game_pk == gp] if not weather.empty else weather
+        wx_row = wx.iloc[0] if len(wx) else None
         contexts.append(
             GameContext(
                 game_pk=gp,
@@ -140,6 +159,10 @@ def build_contexts(date: str) -> list[GameContext]:
                 away_starter_throws=(s_away.iloc[0].handedness if len(s_away) and pd.notna(s_away.iloc[0].handedness) else "R"),
                 home_odds=o_home.iloc[0].to_dict() if len(o_home) else None,
                 away_odds=o_away.iloc[0].to_dict() if len(o_away) else None,
+                wind_speed_mph=float(wx_row.wind_speed_mph) if wx_row is not None and pd.notna(wx_row.wind_speed_mph) else None,
+                wind_out_component=float(wx_row.wind_out_component) if wx_row is not None and pd.notna(wx_row.wind_out_component) else None,
+                temp_f=float(wx_row.temp_f) if wx_row is not None and pd.notna(wx_row.temp_f) else None,
+                is_dome=bool(wx_row.is_dome) if wx_row is not None and pd.notna(wx_row.is_dome) else False,
             )
         )
     return contexts
@@ -235,6 +258,20 @@ def _resolve_queue(
     return BullpenQueue(starter=stub_starter, relievers=stub_relievers[:5]), "stub"
 
 
+def weather_scalars(ctx: GameContext) -> tuple[float, float]:
+    """(wind_signal, temp_c) for the sim. Zero when disabled, dome, or missing.
+
+    wind_signal = wind_speed_mph * signed out-component; temp_c = temp_f - 70.
+    """
+    if not WEATHER_ENABLED or ctx.is_dome:
+        return 0.0, 0.0
+    wind = 0.0
+    if ctx.wind_speed_mph is not None and ctx.wind_out_component is not None:
+        wind = float(ctx.wind_speed_mph) * float(ctx.wind_out_component)
+    temp_c = float(ctx.temp_f) - 70.0 if ctx.temp_f is not None else 0.0
+    return wind, temp_c
+
+
 def build_inputs(
     ctx: GameContext,
     live_home: list[int],
@@ -272,6 +309,7 @@ def build_inputs(
     if ctx.away_starter_id:
         away_throws[ctx.away_starter_id] = ctx.away_starter_throws or "R"
 
+    wind_signal, temp_c = weather_scalars(ctx)
     inputs = GameInputs(
         home_lineup=np.array(home_lineup, dtype=np.int64),
         away_lineup=np.array(away_lineup, dtype=np.int64),
@@ -280,6 +318,8 @@ def build_inputs(
         venue=ctx.home_team,
         home_p_throws_lookup=home_throws,
         away_p_throws_lookup=away_throws,
+        wind_signal=wind_signal,
+        temp_c=temp_c,
     )
     return inputs, lineup_tag, queue_source
 
