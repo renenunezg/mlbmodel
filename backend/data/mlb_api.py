@@ -78,8 +78,8 @@ def fetch_schedule(game_date: date = None) -> pd.DataFrame:
 
             rows.append({
                 "game_pk": game["gamePk"],
-                "game_date": date_entry["date"],
-                "start_time": game.get("gameDate"),  # ISO 8601 UTC timestamp
+                "game_date": game.get("officialDate") or date_entry["date"],
+                "start_time": game.get("rescheduleDate") or game.get("gameDate"),
                 "home_team": home.get("team", {}).get("abbreviation", ""),
                 "away_team": away.get("team", {}).get("abbreviation", ""),
                 "home_score": home.get("score"),
@@ -137,8 +137,8 @@ def fetch_schedule_range(start_date: date, end_date: date) -> pd.DataFrame:
 
             rows.append({
                 "game_pk": game["gamePk"],
-                "game_date": date_entry["date"],
-                "start_time": game.get("gameDate"),
+                "game_date": game.get("officialDate") or date_entry["date"],
+                "start_time": game.get("rescheduleDate") or game.get("gameDate"),
                 "home_team": home.get("team", {}).get("abbreviation", ""),
                 "away_team": away.get("team", {}).get("abbreviation", ""),
                 "home_score": home.get("score"),
