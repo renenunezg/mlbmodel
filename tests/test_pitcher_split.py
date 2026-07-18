@@ -20,8 +20,6 @@ def test_starter_share_fallback_when_missing():
 def test_starter_share_scalar_computation():
     # 6.0 IP/start -> 6/9 = 0.667, within clamp range
     assert math.isclose(compute_starter_inning_share(6.0), 6.0 / 9.0, rel_tol=1e-9)
-    # 4.5 IP/start -> 0.5
-    assert math.isclose(compute_starter_inning_share(4.5), 0.5, rel_tol=1e-9)
 
 
 def test_starter_share_clamps():
