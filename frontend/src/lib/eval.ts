@@ -193,7 +193,6 @@ export function computeSegmentRow(rows: EvalRow[]): SegmentRow {
     rows.filter((r) => r.ev_flag === r.team && r.moneyline != null),
   );
   if (mlBets.length > 0) {
-    let mlSum = 0;
     let favStake = 0,
       favPayout = 0,
       favN = 0,
@@ -204,7 +203,6 @@ export function computeSegmentRow(rows: EvalRow[]): SegmentRow {
       dogWins = 0;
     for (const r of mlBets) {
       const am = r.moneyline as number;
-      mlSum += am;
       const dec = americanToDecimal(am);
       let stake = r.kelly_quarter_ml ?? 0;
       if (stake <= 0) stake = 0.01;

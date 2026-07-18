@@ -38,9 +38,9 @@ export default async function HistoryPage({
   // records widget. Explicit from/to in the URL overrides it for the table.
   const periodFloor =
     period === "7"
-      ? new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0]
+      ? new Date(new Date().getTime() - 7 * 86400000).toISOString().split("T")[0]
       : period === "30"
-        ? new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0]
+        ? new Date(new Date().getTime() - 30 * 86400000).toISOString().split("T")[0]
         : "";
   const effectiveFrom = from || periodFloor;
 
@@ -116,9 +116,16 @@ export default async function HistoryPage({
   let rlWins = 0, rlLosses = 0;
   let totalsWins = 0, totalsLosses = 0;
   for (const r of (ledgerRows ?? []) as { bet_type: string; won: boolean }[]) {
-    if (r.bet_type === "ml") { r.won ? mlWins++ : mlLosses++; }
-    else if (r.bet_type === "rl") { r.won ? rlWins++ : rlLosses++; }
-    else if (r.bet_type === "total") { r.won ? totalsWins++ : totalsLosses++; }
+    if (r.bet_type === "ml") {
+      if (r.won) mlWins++;
+      else mlLosses++;
+    } else if (r.bet_type === "rl") {
+      if (r.won) rlWins++;
+      else rlLosses++;
+    } else if (r.bet_type === "total") {
+      if (r.won) totalsWins++;
+      else totalsLosses++;
+    }
   }
 
   function fmtRecord(w: number, l: number) {
