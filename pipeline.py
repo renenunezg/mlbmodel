@@ -38,6 +38,11 @@ def _batch_upsert_games(conn, games_df):
                 VALUES (:game_pk, :game_date, :home_team, :away_team,
                         :home_score, :away_score, :status, :venue, :start_time)
                 ON CONFLICT (game_pk) DO UPDATE SET
+                    game_date = EXCLUDED.game_date,
+                    start_time = EXCLUDED.start_time,
+                    home_team = EXCLUDED.home_team,
+                    away_team = EXCLUDED.away_team,
+                    venue = EXCLUDED.venue,
                     home_score = COALESCE(EXCLUDED.home_score, games.home_score),
                     away_score = COALESCE(EXCLUDED.away_score, games.away_score),
                     status = EXCLUDED.status,
