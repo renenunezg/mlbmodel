@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import type {
   ModelEvaluation,
   CalibrationBin,
-  FeatureImportance,
   EdgeBucket,
   PosteriorSkill,
   PosteriorSigma,
@@ -33,7 +32,6 @@ import {
 interface PerformanceTabsProps {
   evaluations: ModelEvaluation[];
   calibration: CalibrationBin[];
-  featureImportance: FeatureImportance[];
   edgeBuckets: EdgeBucket[];
   residuals: number[];
   posteriorSkills: PosteriorSkill[];
@@ -66,7 +64,6 @@ function fmtAmerican(value: number | null | undefined): string {
 export function PerformanceTabs({
   evaluations,
   calibration,
-  featureImportance,
   edgeBuckets,
   residuals,
   posteriorSkills,
@@ -93,10 +90,6 @@ export function PerformanceTabs({
     seasonEvals.length > 0
       ? findLastPopulated(seasonEvals)
       : findLastPopulated(dailyEvals);
-
-  // Latest day row for daily detail
-  const latestDay =
-    dailyEvals.length > 0 ? findLastPopulated(dailyEvals) : latest;
 
   // Latest calibration data (most recent date)
   const latestCalDate =

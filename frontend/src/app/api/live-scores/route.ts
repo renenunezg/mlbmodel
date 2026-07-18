@@ -5,10 +5,6 @@ import { NextResponse } from "next/server";
 
 export const revalidate = 30;
 
-interface MLBTeam {
-  score?: number;
-}
-
 interface MLBGame {
   gamePk: number;
   status?: {

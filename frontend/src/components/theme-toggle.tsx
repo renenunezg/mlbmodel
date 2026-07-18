@@ -2,19 +2,12 @@
 
 import { useTheme } from "next-themes";
 import { Sun, Moon, Monitor } from "lucide-react";
-import { useEffect, useState } from "react";
 
 const order = ["system", "light", "dark"] as const;
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  const current = mounted ? theme ?? "system" : "system";
+  const current = theme ?? "system";
   const Icon =
     current === "dark" ? Moon : current === "light" ? Sun : Monitor;
 
