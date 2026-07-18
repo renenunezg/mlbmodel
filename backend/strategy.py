@@ -1,4 +1,5 @@
 """+EV flagging and Kelly sizing."""
+import os
 from datetime import date
 
 import pandas as pd
@@ -22,6 +23,9 @@ EV_THRESHOLDS = {
 # totals-recalibration rework lands (see CLAUDE.md). Flip to True to reactivate
 # in one place once the rework is verified.
 TOTALS_ENABLED = False
+
+# Set to 0 for weather-off control runs.
+WEATHER_ENABLED = os.getenv("MLBMODEL_WEATHER_ENABLED", "1") == "1"
 
 # v1 → v2 model cutover. Eval / calibration / feature-importance writes are
 # blocked before this date so the v1-archive history stays frozen.

@@ -21,7 +21,11 @@ _TOTAL_EDGE = 0.065
 
 def _american_to_implied(o: np.ndarray) -> np.ndarray:
     o = o.astype(float)
-    return np.where(o > 0, 100.0 / (o + 100.0), (-o) / ((-o) + 100.0))
+    result = np.empty_like(o)
+    positive = o > 0
+    result[positive] = 100.0 / (o[positive] + 100.0)
+    result[~positive] = (-o[~positive]) / ((-o[~positive]) + 100.0)
+    return result
 
 
 def _american_to_decimal(o: np.ndarray) -> np.ndarray:
