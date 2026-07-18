@@ -14,11 +14,37 @@ from __future__ import annotations
 import argparse
 from datetime import date
 from pathlib import Path
+import time
+from typing import Callable
 
 import pandas as pd
 
 CACHE_DIR = Path(__file__).resolve().parents[2] / "cache"
 DEDUPE_COLS = ["game_pk", "at_bat_number", "pitch_number"]
+STATCAST_FETCH_ATTEMPTS = 3
+STATCAST_RETRY_SECONDS = 5
+
+
+def _fetch_statcast(
+    fetcher: Callable[..., pd.DataFrame],
+    start_dt: str,
+    end_dt: str,
+    sleep: Callable[[float], None] = time.sleep,
+) -> pd.DataFrame:
+    attempt = 1
+    while True:
+        try:
+            return fetcher(start_dt=start_dt, end_dt=end_dt)
+        except Exception as exc:
+            if attempt == STATCAST_FETCH_ATTEMPTS:
+                raise
+            delay = STATCAST_RETRY_SECONDS * attempt
+            print(
+                f"Statcast fetch failed ({exc}); retrying in {delay}s "
+                f"({attempt}/{STATCAST_FETCH_ATTEMPTS})"
+            )
+            sleep(delay)
+            attempt += 1
 
 
 def fetch_year(year: int, force: bool = False) -> pd.DataFrame:
@@ -44,7 +70,7 @@ def fetch_year(year: int, force: bool = False) -> pd.DataFrame:
         return cached
 
     print(f"[{year}] fetching {fetch_from} → {season_end}")
-    new_df = statcast(start_dt=str(fetch_from), end_dt=str(season_end))
+    new_df = _fetch_statcast(statcast, str(fetch_from), str(season_end))
     new_df = new_df[new_df["game_type"] == "R"]
 
     if not cached.empty:
