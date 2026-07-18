@@ -2,7 +2,6 @@ import { supabase } from "@/lib/supabase";
 import type {
   ModelEvaluation,
   CalibrationBin,
-  FeatureImportance,
   EdgeBucket,
   PosteriorSkill,
   PosteriorSigma,
@@ -17,7 +16,7 @@ export const revalidate = 300;
 
 export default async function PerformancePage() {
   // Fetch all data in parallel
-  const [evalRes, calRes, featRes, edgeRes, residRes, latestRes, skillsRes, sigmasRes, ledgerRes] = await Promise.all([
+  const [evalRes, calRes, edgeRes, residRes, latestRes, skillsRes, sigmasRes, ledgerRes] = await Promise.all([
     supabase
       .from("model_evaluation")
       .select("*")
@@ -27,11 +26,6 @@ export default async function PerformancePage() {
       .select("*")
       .order("date", { ascending: false })
       .limit(10),
-    supabase
-      .from("model_feature_importance")
-      .select("*")
-      .order("date", { ascending: false })
-      .limit(20),
     supabase
       .from("model_edge_buckets")
       .select("*")
@@ -70,7 +64,6 @@ export default async function PerformancePage() {
   const evaluations = (evalRes.data ?? []) as ModelEvaluation[];
   const lastUpdated: string | null = latestRes.data?.[0]?.created_at ?? null;
   const calibration = (calRes.data ?? []) as CalibrationBin[];
-  const featureImportance = (featRes.data ?? []) as FeatureImportance[];
   const edgeBuckets = (edgeRes.data ?? []) as EdgeBucket[];
   const posteriorSkills = (skillsRes.data ?? []) as PosteriorSkill[];
   const posteriorSigmas = (sigmasRes.data ?? []) as PosteriorSigma[];
@@ -134,7 +127,6 @@ export default async function PerformancePage() {
       <PerformanceTabs
         evaluations={evaluations}
         calibration={calibration}
-        featureImportance={featureImportance}
         edgeBuckets={edgeBuckets}
         residuals={residuals}
         posteriorSkills={posteriorSkills}
