@@ -30,6 +30,7 @@ from v2.simulator.bullpen import BullpenQueue, should_pull_starter
 from v2.simulator.gb_quartiles import GBQuartiles, load_gb_quartiles
 from v2.simulator.pa_sim import _build_full_logits, _sample_categorical, _softmax, pa_logits_batch
 from v2.simulator.posteriors import K_FREE, PosteriorMeans
+from v2.simulator.weather_effects import weather_shift_vector
 
 _GBQ_CACHE: GBQuartiles | None = None
 
@@ -63,6 +64,8 @@ class GameInputs:
     venue: str                # 3-letter home_team code
     home_p_throws_lookup: dict[int, str]  # pitcher_id → "L"/"R"
     away_p_throws_lookup: dict[int, str]
+    wind_signal: float = 0.0  # wind_speed_mph * signed out-component; 0 = dome/missing/disabled
+    temp_c: float = 0.0       # temp_f - 70; 0 = dome/missing/disabled
 
 
 def _queue_arrays(q: BullpenQueue, throws: dict[int, str], roles: dict[int, int]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -123,6 +126,11 @@ def simulate_game(
         away_form_full = np.zeros((n_sims, n_out))
         home_form_full = np.zeros((n_sims, n_out))
 
+    # Constant per-game weather shift on the 8-outcome logits. Zero vector when
+    # wind_signal and temp_c are both 0 (dome / missing / WEATHER_ENABLED off).
+    wx_shift = weather_shift_vector(inputs.wind_signal, inputs.temp_c)
+    apply_wx = bool(np.any(wx_shift))
+
     # ---- per-sim state ----
     state = np.zeros(n_sims, dtype=np.int64)
     outs = np.zeros(n_sims, dtype=np.int64)
@@ -158,6 +166,8 @@ def simulate_game(
         # Build logits once, add per-sim zero-sum form noise across all 8 outcomes,
         # softmax, sample.
         full_logits = pa_logits_batch(pm, batter_ids, pitcher_ids, vs_lhp, roles, venue_arr)
+        if apply_wx:
+            full_logits = full_logits + wx_shift
         form = np.where(is_top[:, None], away_form_full, home_form_full)
         full_logits = full_logits + form
         probs = _softmax(full_logits)
