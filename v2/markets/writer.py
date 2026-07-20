@@ -19,6 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import JSONB
 
 from backend.db import engine
+from backend.simulation import american_to_prob
 from v2.bayesian._common import POSTERIORS_DIR
 from v2.markets.ev import (
     flag_ml,
@@ -34,6 +35,74 @@ from v2.markets.ev import (
 from v2.markets.probs import market_probs, runs_percentiles
 
 
+def _offers(odds: dict | None) -> list[dict]:
+    if odds is None:
+        return []
+    return odds.get("offers") or [odds]
+
+
+def _price_edge(probability: float, price) -> float:
+    if pd.isna(price):
+        return float("-inf")
+    return probability - american_to_prob(price)
+
+
+def _best_moneyline(odds: dict | None, win_prob: float) -> dict:
+    offers = [offer for offer in _offers(odds) if pd.notna(_get(offer, "moneyline"))]
+    if not offers:
+        return {}
+    return max(offers, key=lambda offer: _price_edge(win_prob, offer["moneyline"]))
+
+
+def _best_runline(
+    odds: dict | None,
+    team_runs: np.ndarray,
+    opponent_runs: np.ndarray,
+) -> tuple[dict, float | None]:
+    candidates = []
+    for offer in _offers(odds):
+        spread = _get(offer, "spread")
+        if pd.isna(spread) or not np.isclose(abs(float(spread)), 1.5):
+            continue
+        p_cover = market_probs(
+            team_runs,
+            opponent_runs,
+            None,
+            float(spread),
+        )["p_home_cover"]
+        candidates.append((
+            _price_edge(p_cover, _get(offer, "spread_odds")),
+            offer,
+            p_cover,
+        ))
+    if not candidates:
+        return {}, None
+    _, offer, p_cover = max(candidates, key=lambda candidate: candidate[0])
+    return offer, p_cover
+
+
+def _best_total(
+    home_odds: dict | None,
+    away_odds: dict | None,
+    home_runs: np.ndarray,
+    away_runs: np.ndarray,
+) -> tuple[dict, float | None, float | None]:
+    offers = _offers(home_odds) or _offers(away_odds)
+    candidates = []
+    for offer in offers:
+        total = _get(offer, "total")
+        if pd.isna(total):
+            continue
+        probs = market_probs(home_runs, away_runs, float(total), None)
+        edge = max(
+            _price_edge(probs["p_over"], _get(offer, "total_over_odds")),
+            _price_edge(probs["p_under"], _get(offer, "total_under_odds")),
+        )
+        candidates.append((edge, offer, probs["p_over"], probs["p_under"]))
+    if not candidates:
+        return {}, None, None
+    _, offer, p_over, p_under = max(candidates, key=lambda candidate: candidate[0])
+    return offer, p_over, p_under
 
 
 def build_game_rows(
@@ -78,34 +147,27 @@ def build_game_rows(
     a = np.asarray(away_runs)
     n = len(h)
 
-    home_total_line = _get(home_odds, "total")
-    home_spread = _get(home_odds, "spread")  # signed from home perspective per odds_api.py
-    home_spread_odds = _get(home_odds, "spread_odds")
-    home_total_over = _get(home_odds, "total_over_odds")
-    home_total_under = _get(home_odds, "total_under_odds")
-    home_ml = _get(home_odds, "moneyline")
+    win_probs = market_probs(h, a, None, None)
+    p_home_win = win_probs["p_home_win"]
+    p_away_win = win_probs["p_away_win"]
 
-    away_total_line = _get(away_odds, "total")
-    away_spread = _get(away_odds, "spread")  # signed from away perspective
-    away_spread_odds = _get(away_odds, "spread_odds")
-    away_total_over = _get(away_odds, "total_over_odds")
-    away_total_under = _get(away_odds, "total_under_odds")
-    away_ml = _get(away_odds, "moneyline")
+    home_ml_offer = _best_moneyline(home_odds, p_home_win)
+    away_ml_offer = _best_moneyline(away_odds, p_away_win)
+    home_rl_offer, p_home_cover = _best_runline(home_odds, h, a)
+    away_rl_offer, p_away_cover = _best_runline(away_odds, a, h)
+    total_offer, p_over, p_under = _best_total(home_odds, away_odds, h, a)
 
-    # Same total line for both sides (they always match in MLB books). Prefer
-    # whichever side actually populated it.
-    total_line = home_total_line if pd.notna(home_total_line) else away_total_line
-    spread_home = home_spread if pd.notna(home_spread) else (
-        -float(away_spread) if pd.notna(away_spread) else None
-    )
-
-    probs = market_probs(h, a, total_line, spread_home)
-    p_home_win = probs["p_home_win"]
-    p_away_win = probs["p_away_win"]
-    p_home_cover = probs["p_home_cover"]
-    p_away_cover = probs["p_away_cover"]
-    p_over = probs["p_over"]
-    p_under = probs["p_under"]
+    home_ml = _get(home_ml_offer, "moneyline")
+    away_ml = _get(away_ml_offer, "moneyline")
+    home_spread = _get(home_rl_offer, "spread")
+    away_spread = _get(away_rl_offer, "spread")
+    home_spread_odds = _get(home_rl_offer, "spread_odds")
+    away_spread_odds = _get(away_rl_offer, "spread_odds")
+    total_line = _get(total_offer, "total")
+    home_total_over = _get(total_offer, "total_over_odds")
+    home_total_under = _get(total_offer, "total_under_odds")
+    away_total_over = home_total_over
+    away_total_under = home_total_under
 
     h_p10, h_p50, h_p90 = runs_percentiles(h)
     a_p10, a_p50, a_p90 = runs_percentiles(a)
