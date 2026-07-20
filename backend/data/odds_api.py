@@ -17,6 +17,7 @@ load_dotenv()
 
 ODDS_API_BASE = "https://api.the-odds-api.com/v4/sports"
 SPORT = "baseball_mlb"
+DEFAULT_BOOKS = ("draftkings", "fanduel", "betmgm")
 
 # Map The Odds API team names to our abbreviations
 ODDS_TEAM_MAP = {
@@ -69,12 +70,11 @@ def _normalize_team(name: str) -> str:
     return ODDS_TEAM_MAP.get(name, name)
 
 
-def fetch_odds(books: list[str] = None) -> pd.DataFrame:
+def fetch_odds(books: list[str] | None = None) -> pd.DataFrame:
     """Fetch current MLB odds from The Odds API.
 
     Args:
-        books: List of bookmaker keys. Defaults to major US books.
-               Options: 'draftkings', 'fanduel', 'betmgm', 'pointsbet', 'bet365'
+        books: Bookmaker keys. Defaults to DraftKings, FanDuel, and BetMGM.
 
     Returns DataFrame with columns:
         game_id (from odds API), game_pk (to be matched later),
@@ -87,7 +87,7 @@ def fetch_odds(books: list[str] = None) -> pd.DataFrame:
     api_key = _get_api_key()
 
     if books is None:
-        books = ["draftkings"]
+        books = list(DEFAULT_BOOKS)
 
     markets = "h2h,spreads,totals"
     bookmakers_str = ",".join(books)

@@ -23,6 +23,7 @@ import pandas as pd
 from sqlalchemy import text
 
 from backend.data.mlb_api import fetch_lineup
+from backend.data.odds_api import DEFAULT_BOOKS
 from backend.db import engine
 from backend.strategy import WEATHER_ENABLED
 from v2.markets.writer import (
@@ -101,19 +102,31 @@ def fetch_starters(game_pks: list[int]) -> pd.DataFrame:
         return pd.read_sql(q, conn, params={"ids": game_pks})
 
 
-def fetch_odds(game_pks: list[int], book: str = "draftkings") -> pd.DataFrame:
+def fetch_odds(
+    game_pks: list[int],
+    books: tuple[str, ...] = DEFAULT_BOOKS,
+) -> pd.DataFrame:
     if not game_pks:
         return pd.DataFrame()
     q = text(
         "SELECT game_pk, team, book, moneyline, spread, spread_odds, total, "
         "total_over_odds, total_under_odds "
-        "FROM odds WHERE game_pk = ANY(:ids) AND book = :b"
+        "FROM odds WHERE game_pk = ANY(:ids) AND book = ANY(:books)"
     )
     with engine.begin() as conn:
-        df = pd.read_sql(q, conn, params={"ids": game_pks, "b": book})
+        df = pd.read_sql(q, conn, params={"ids": game_pks, "books": list(books)})
     if df.empty:
         return df
-    return df.drop_duplicates(subset=["game_pk", "team"], keep="first")
+    return df.drop_duplicates(subset=["game_pk", "team", "book"], keep="first")
+
+
+def _odds_package(rows: pd.DataFrame) -> dict | None:
+    if rows.empty:
+        return None
+    rank = {book: i for i, book in enumerate(DEFAULT_BOOKS)}
+    records = rows.to_dict("records")
+    records.sort(key=lambda row: rank.get(row["book"], len(rank)))
+    return {**records[0], "offers": records}
 
 
 def fetch_weather(game_pks: list[int]) -> pd.DataFrame:
@@ -157,8 +170,8 @@ def build_contexts(date: str) -> list[GameContext]:
                 away_starter_name=s_away.iloc[0].pitcher_name if len(s_away) else None,
                 home_starter_throws=(s_home.iloc[0].handedness if len(s_home) and pd.notna(s_home.iloc[0].handedness) else "R"),
                 away_starter_throws=(s_away.iloc[0].handedness if len(s_away) and pd.notna(s_away.iloc[0].handedness) else "R"),
-                home_odds=o_home.iloc[0].to_dict() if len(o_home) else None,
-                away_odds=o_away.iloc[0].to_dict() if len(o_away) else None,
+                home_odds=_odds_package(o_home),
+                away_odds=_odds_package(o_away),
                 wind_speed_mph=float(wx_row.wind_speed_mph) if wx_row is not None and pd.notna(wx_row.wind_speed_mph) else None,
                 wind_out_component=float(wx_row.wind_out_component) if wx_row is not None and pd.notna(wx_row.wind_out_component) else None,
                 temp_f=float(wx_row.temp_f) if wx_row is not None and pd.notna(wx_row.temp_f) else None,
