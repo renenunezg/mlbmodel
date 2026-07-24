@@ -21,7 +21,7 @@ LEAGUE_AVG = {
     "xfip": 4.20, "whip": 1.30, "xfip_bullpen": 4.10, "bullpen_k_9": 9.0,
     "batting_ops": 0.720, "batting_iso": 0.160, "batting_k_pct": 22.0,
     "park_factor": 100, "avg_last5": 4.5, "avg_last10": 4.5, "std_last5": 2.5,
-    # Reliever outs in prior 2 days. League norm derived from analysis cache:
+    # Reliever outs in prior 2 days, derived from a historical workload sample:
     # mean ~17 outs / 2-day window across 826 (date, team) rows.
     "own_bp_outs_2d": 17.0, "opp_bp_outs_2d": 17.0,
 }

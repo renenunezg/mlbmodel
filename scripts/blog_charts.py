@@ -10,7 +10,7 @@ from sqlalchemy import text
 
 from backend.db import engine
 
-OUT_DIR = Path("analysis/blog_charts")
+OUT_DIR = Path("frontend/public/blog")
 
 ACCENT = "#2d7a4f"
 GRID_COLOR = "#e5e5e5"
