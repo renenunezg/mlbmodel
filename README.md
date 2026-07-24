@@ -53,9 +53,7 @@ predictions before 2026-05-12 still live in `model_outputs_v1_archive` and
 ## Repository layout
 
 ```
-pipeline.py             Legacy v1 daily orchestrator. Writes to *_v1_archive.
-verify_pipeline.py      v1 sanity checks.
-backtest.py             v1 walk-forward backtest.
+pipeline.py             Shared schedule and nightly evaluation orchestrator.
 backend/
   data/                 Fetchers: MLB Stats API, Statcast (pybaseball), Savant,
                         The Odds API, per-pitcher workload from boxscores.
@@ -213,8 +211,6 @@ fixture-based test guards against drift between them.
 | `daily-pipeline-v2.yml` | `workflow_run` on train-v2 success | Schedule → bullpen → odds → score → verify. Chained off train to guarantee fresh posteriors. |
 | `refresh-lineups-v2.yml` | `0/30 14-23 * * *` (every 30 min, 7 AM-4 PM PT) | Re-scores games whose posted lineup hash changed. |
 | `nightly-eval.yml` | `0 7 * * *` (midnight PT) | Eval yesterday + write tomorrow's predictions. |
-| `daily-pipeline.yml` (v1) | disabled | Cron removed; `workflow_dispatch` retained for emergencies. v1 writes go to `_v1_archive`. |
-
 GitHub-hosted runners typically add 30-60 min of queue delay to scheduled
 workflows, so real start times drift around the nominal cron.
 

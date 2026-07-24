@@ -67,14 +67,12 @@ v2/
 └── README.md
 ```
 
-## Coexistence with v1
+## Production status
 
-- v1 is untouched; `daily-pipeline.yml` keeps calling `pipeline.py`.
-- v2 writes to **`model_outputs_v2`** and **`model_outputs_season_v2`** -
-  parallel tables, same schema as v1 plus quantile + lineup-status columns.
-- Frontend continues reading v1 tables until cutover.
-- Cutover after Phase 6 passes: rename v2 tables → v1, sunset XGBoost
-  pipeline, update frontend types if quantile columns are surfaced.
+- v2 writes to `model_outputs` and `model_outputs_season`.
+- The frontend reads the live v2 tables.
+- Retired v1 history remains in the `_v1_archive` tables.
+- The retired v1 GitHub workflows and comparison tooling are no longer kept.
 
 ## Setup (Mac)
 

@@ -9,7 +9,5 @@ requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-# Project is consumed as a set of importable subpackages, not via a console
-# script. Listing them here lets `pip install -e .` make `backend` and
-# `scripts` importable from anywhere.
-packages = ["backend", "backend.data", "scripts"]
+# Project is consumed as importable backend packages, not via a console script.
+packages = ["backend", "backend.data"]
