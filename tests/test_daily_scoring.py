@@ -16,7 +16,7 @@ POSTERIORS_PRESENT = (POSTERIORS_DIR / "batter_skill.nc").exists() and (
     POSTERIORS_DIR / "pitcher_skill.nc"
 ).exists() and (POSTERIORS_DIR / "park_effects.nc").exists()
 
-CACHE_2026 = Path(__file__).resolve().parents[2] / "cache" / "statcast_2026.parquet"
+CACHE_2026 = Path(__file__).resolve().parents[1] / "cache" / "statcast_2026.parquet"
 
 
 SMOKE_DATE = "2026-04-15"
@@ -94,4 +94,3 @@ def test_is_started_freeze_predicate():
     assert is_started(pd.NaT, now) is False
     # tz-naive start_time is coerced to UTC, not crashed on
     assert is_started(pd.Timestamp("2026-06-05 01:40:00"), now) is True
-
