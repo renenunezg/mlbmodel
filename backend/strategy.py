@@ -15,11 +15,19 @@ EV_THRESHOLDS = {
     "totals": 0.065,
 }
 
+# Live v2 moneyline disagreements have not shown incremental signal beyond the
+# market price. Keep flags off until the market-residual gate passes.
+MONEYLINE_ENABLED = False
+
+# Runline probabilities fail the same market-residual gate as moneylines.
+# Keep flags off until they add chronological holdout signal beyond the line.
+RUNLINE_ENABLED = False
+
 # Totals kill-switch. v2's per-PA sim is structurally miscalibrated on the
 # total-runs distribution: on the full 2026-03-26..05-09 backtest every totals
-# edge bucket lost money and model edge had no relationship to outcome (ML/RL
-# are edge-monotonic and beat v1). out-subtype stratification, weather, K=60,
-# and threshold tuning all failed to fix it. Totals stays OFF until the scoped
+# edge bucket lost money and model edge had no relationship to outcome.
+# Out-subtype stratification, weather, K=60, and threshold tuning all failed
+# to fix it. Totals stays OFF until the scoped
 # totals-recalibration rework lands (see CLAUDE.md). Flip to True to reactivate
 # in one place once the rework is verified.
 TOTALS_ENABLED = False
@@ -44,6 +52,8 @@ def _warn_flag_error(fn_name: str, exc: Exception) -> None:
 
 
 def flag_ev(row, threshold=EV_THRESHOLDS["ml"]):
+    if not MONEYLINE_ENABLED:
+        return "No Play"
     try:
         our_prob = american_to_prob(row["our_odds"])
         book_prob = american_to_prob(row["moneyline"])
@@ -57,6 +67,8 @@ def flag_ev(row, threshold=EV_THRESHOLDS["ml"]):
 
 
 def flag_runline_ev(row, threshold=EV_THRESHOLDS["rl"]):
+    if not RUNLINE_ENABLED:
+        return "No Play"
     try:
         book_prob = american_to_prob(row["spread_odds"])
         model_prob = row.get("p_cover")
