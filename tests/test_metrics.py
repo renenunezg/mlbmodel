@@ -1,54 +1,40 @@
 import numpy as np
 import pandas as pd
 from backend.metrics import (
-    mae, rmse, r_squared, sharpness, calibration_curve, roi, max_drawdown,
-    equity_curve_from_ledger, hit_rate_by_edge_bucket,
+    brier_score, calibration_curve, equity_curve_from_ledger,
+    hit_rate_by_edge_bucket, log_loss, mae, max_drawdown, r_squared, rmse,
+    roi, sharpness,
 )
 
 
-def test_mae_known():
+def test_regression_metrics_known():
     y_true = np.array([1.0, 2.0, 3.0])
     y_pred = np.array([2.0, 3.0, 4.0])
     assert mae(y_true, y_pred) == 1.0
-
-
-def test_rmse_known():
-    y_true = np.array([1.0, 2.0, 3.0])
-    y_pred = np.array([2.0, 3.0, 4.0])
     assert abs(rmse(y_true, y_pred) - 1.0) < 1e-9
-
-
-def test_r_squared_mean_prediction():
-    # R² = 0 when predicting the mean.
     y = np.array([1.0, 2.0, 3.0, 4.0])
     y_pred = np.full_like(y, y.mean())
     assert abs(r_squared(y, y_pred)) < 1e-9
-
-
-def test_sharpness_spread():
     probs = np.array([0.1, 0.9])
     assert sharpness(probs) > 0
 
 
-def test_calibration_curve_basic():
+def test_probability_metrics_and_calibration():
     probs = np.array([0.1, 0.2, 0.8, 0.9])
     outcomes = np.array([0, 0, 1, 1])
+    assert brier_score(probs, outcomes) < 0.03
+    assert log_loss(probs, outcomes) < 0.2
     bins = calibration_curve(probs, outcomes, n_bins=2)
     assert len(bins) == 2
-    assert bins[0]["observed_rate"] == 0.0  # both low-prob bets lost
-    assert bins[1]["observed_rate"] == 1.0  # both high-prob bets won
+    assert bins[0]["observed_rate"] == 0.0
+    assert bins[1]["observed_rate"] == 1.0
 
 
-# --- Financial ---
-
-def test_roi_breakeven():
-    ledger = pd.DataFrame({"stake": [1.0, 1.0], "payout": [2.0, 0.0]})
-    assert roi(ledger) == 0.0  # net = 0
-
-
-def test_roi_profit():
-    ledger = pd.DataFrame({"stake": [1.0, 1.0], "payout": [2.5, 0.0]})
-    assert roi(ledger) == 0.25  # net = 0.5 / 2.0 staked
+def test_roi():
+    breakeven = pd.DataFrame({"stake": [1.0, 1.0], "payout": [2.0, 0.0]})
+    profit = pd.DataFrame({"stake": [1.0, 1.0], "payout": [2.5, 0.0]})
+    assert roi(breakeven) == 0.0
+    assert roi(profit) == 0.25
 
 
 def test_max_drawdown_known():
