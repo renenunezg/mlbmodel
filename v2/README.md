@@ -35,10 +35,9 @@ MARKET LAYER (integrals over sim distribution)
   moneyline.py / totals.py / run_line.py / kelly.py
           │
           ▼
-EVALUATION
-  baseline_v1/       - frozen XGBoost snapshot for benchmarking
-  metrics.py         - Brier, log loss, calibration, Sharpe, CLV
-  backtester.py      - walk-forward harness
+MARKET MODEL RESEARCH
+  residual.py        - market-relative signal validation
+  features.py        - chronological feature-block evaluation
 ```
 
 ## Layout
@@ -57,10 +56,9 @@ v2/
 │   ├── bullpen_state.py
 │   └── lineup.py
 ├── markets/{moneyline,totals,run_line,kelly}.py
-├── evaluation/
-│   ├── baseline_v1/            # frozen v1 model.py + simulation.py + calibrator
-│   ├── metrics.py
-│   └── backtester.py
+├── market_model/
+│   ├── residual.py
+│   └── features.py
 ├── pipeline/
 │   ├── daily_run.py            # 5 AM PT full predict
 │   ├── train.py                # full or incremental Bayesian fit
