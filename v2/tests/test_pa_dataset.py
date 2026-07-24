@@ -34,14 +34,9 @@ def _synthetic_pitches(events: list[str | None]) -> pd.DataFrame:
     })
 
 
-def test_every_canonical_bucket_reachable():
-    """Every canonical outcome must be reachable from at least one statcast event."""
+def test_event_mapping_reaches_every_canonical_bucket():
     reached = set(EVENT_TO_OUTCOME.values())
     assert reached == set(OUTCOMES), f"missing buckets: {set(OUTCOMES) - reached}"
-
-
-def test_event_mapping_round_trip():
-    """Every event in EVENT_TO_OUTCOME produces exactly one row with a valid outcome."""
     events = list(EVENT_TO_OUTCOME)
     df = transform_pitch_frame(_synthetic_pitches(events))
     assert len(df) == len(events)
@@ -49,9 +44,8 @@ def test_event_mapping_round_trip():
     assert df["outcome"].isna().sum() == 0
 
 
-def test_non_pa_events_dropped():
-    """Caught stealing, pickoffs, balks etc. must not appear in the output."""
-    events = ["single", "caught_stealing_2b", "pickoff_1b", "balk", "strikeout"]
+def test_non_pa_and_null_events_dropped():
+    events = ["single", None, "caught_stealing_2b", "pickoff_1b", "balk", "strikeout"]
     df = transform_pitch_frame(_synthetic_pitches(events))
     assert len(df) == 2
     assert set(df["outcome"]) == {"1B", "K"}
@@ -66,14 +60,6 @@ def test_unmapped_event_dropped_with_warning(capsys):
     assert df.iloc[0]["outcome"] == "1B"
     out = capsys.readouterr().out
     assert "made_up_event_xyz" in out
-
-
-def test_null_events_dropped():
-    """Pitch rows that don't terminate a PA (events is null) are excluded."""
-    events = ["single", None, None, "home_run"]
-    df = transform_pitch_frame(_synthetic_pitches(events))
-    assert len(df) == 2
-    assert list(df["outcome"]) == ["1B", "HR"]
 
 
 def test_out_subtype_only_for_outs():
@@ -95,5 +81,4 @@ def test_strikeouts_have_correct_subtype():
     sub = df.set_index("events")["out_subtype"]
     assert pd.isna(sub["strikeout"])
     assert sub["strikeout_double_play"] == "k_dp"
-
 

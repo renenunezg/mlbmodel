@@ -29,7 +29,8 @@ def _rows(lineups_live: bool):
     )
 
 
-def test_live_lineup_keeps_pick():
+def test_live_lineup_keeps_pick(monkeypatch):
+    monkeypatch.setattr("v2.markets.ev.MONEYLINE_ENABLED", True)
     home, _ = _rows(lineups_live=True)
     assert home["ev_flag"] == "LAD"
 

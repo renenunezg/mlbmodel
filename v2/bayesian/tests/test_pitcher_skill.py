@@ -19,18 +19,14 @@ def _free_rv_names(model):
     return {rv.name for rv in model.free_RVs}
 
 
-def test_intercept_is_free_when_not_frozen(synthetic_pa):
+def test_intercept_configuration(synthetic_pa):
     pa_df, _ = synthetic_pa
-    model, _ = pitcher_skill.build_model(pa_df)
-    assert "intercept" in _free_rv_names(model)
-
-
-def test_frozen_intercept_removes_intercept_rv(synthetic_pa):
-    pa_df, _ = synthetic_pa
+    free_model, _ = pitcher_skill.build_model(pa_df)
+    assert "intercept" in _free_rv_names(free_model)
     frozen = np.zeros(K_FREE)
-    model, meta = pitcher_skill.build_model(pa_df, frozen_intercept=frozen)
-    assert "intercept" not in _free_rv_names(model)
-    assert "sigma_pitcher" in _free_rv_names(model)
+    frozen_model, meta = pitcher_skill.build_model(pa_df, frozen_intercept=frozen)
+    assert "intercept" not in _free_rv_names(frozen_model)
+    assert "sigma_pitcher" in _free_rv_names(frozen_model)
     np.testing.assert_allclose(meta["frozen_intercept"], frozen)
 
 
@@ -70,5 +66,4 @@ def test_role_split_recovers_separate_widths(synthetic_pa):
     sp_avg = sigma_pitcher[0].mean()
     rp_avg = sigma_pitcher[1].mean()
     assert sp_avg > rp_avg, f"SP sigma not larger than RP: SP={sp_avg:.3f} RP={rp_avg:.3f}"
-
 
