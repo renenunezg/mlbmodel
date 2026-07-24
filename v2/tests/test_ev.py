@@ -11,18 +11,19 @@ from v2.markets.ev import (
 )
 
 
-def test_flag_ml_below_threshold():
-    # p=0.55 vs -110 (implied 0.524) → edge 0.026 < 0.045
+def test_flag_ml_threshold(monkeypatch):
+    monkeypatch.setattr("v2.markets.ev.MONEYLINE_ENABLED", True)
     assert flag_ml("LAD", 0.55, -110) == "No Play"
-
-
-def test_flag_ml_above_threshold():
-    # p=0.60 vs -110 → edge 0.076 > 0.045
     assert flag_ml("LAD", 0.60, -110) == "LAD"
 
 
-def test_flag_runline_above_threshold():
-    # p_cover=0.60 vs +120 (implied 0.4545) → edge 0.145 > 0.045
+def test_flag_ml_killswitch_off():
+    assert flag_ml("LAD", 0.60, -110) == "No Play"
+
+
+def test_flag_runline_threshold_and_killswitch(monkeypatch):
+    assert flag_runline("NYY", 0.60, +120) == "No Play"
+    monkeypatch.setattr("v2.markets.ev.RUNLINE_ENABLED", True)
     assert flag_runline("NYY", 0.60, +120) == "NYY"
 
 
@@ -38,17 +39,9 @@ def test_flag_total_play_killswitch_off():
     assert flag_total_play(0.60, 0.40, -110, -110) == "No Play"
 
 
-def test_flag_total_play_over(totals_on):
-    # p_over=0.60 vs -110 over (implied 0.524) → edge 0.076 > 0.065
+def test_flag_total_play_threshold(totals_on):
     assert flag_total_play(0.60, 0.40, -110, -110) == "Over"
-
-
-def test_flag_total_play_under(totals_on):
     assert flag_total_play(0.40, 0.60, -110, -110) == "Under"
-
-
-def test_flag_total_play_no_play(totals_on):
-    # both edges below 0.065 threshold
     assert flag_total_play(0.55, 0.45, -110, -110) == "No Play"
 
 
@@ -57,15 +50,13 @@ def test_flag_total_play_fallback_diff_over(totals_on):
     assert flag_total_play(float("nan"), float("nan"), float("nan"), float("nan"), total_diff=1.5) == "Over"
 
 
-def test_kelly_pair_positive_edge():
+def test_kelly_positive_edge():
     full, q = kelly_pair(0.65, -110)
     assert full > 0
     assert abs(q - full * 0.25) < 1e-5
-
-
-def test_kelly_total_over():
-    full, q = kelly_total("Over", 0.65, 0.35, -110, -110)
-    assert full > 0
+    total_full, total_q = kelly_total("Over", 0.65, 0.35, -110, -110)
+    assert total_full > 0
+    assert abs(total_q - total_full * 0.25) < 1e-5
 
 
 def test_high_variance_yes():

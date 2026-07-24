@@ -78,6 +78,8 @@ def test_score_games_end_to_end():
     # ev_flag / total_play / run_line_ev_flag are strings, never null
     for col in ("ev_flag", "total_play", "run_line_ev_flag", "high_variance_flag"):
         assert df[col].notna().all(), f"{col} has nulls"
+    for col in ("ev_flag", "total_play", "run_line_ev_flag"):
+        assert (df[col] == "No Play").all(), f"{col} bypassed its market kill switch"
 
 
 def test_is_started_freeze_predicate():
@@ -92,5 +94,4 @@ def test_is_started_freeze_predicate():
     assert is_started(pd.NaT, now) is False
     # tz-naive start_time is coerced to UTC, not crashed on
     assert is_started(pd.Timestamp("2026-06-05 01:40:00"), now) is True
-
 
