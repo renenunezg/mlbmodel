@@ -11,7 +11,12 @@ import pandas as pd
 
 from backend.kelly import american_to_decimal, compute_kelly_row, kelly_fraction
 from backend.simulation import american_to_prob, convert_to_odds
-from backend.strategy import EV_THRESHOLDS, TOTALS_ENABLED
+from backend.strategy import (
+    EV_THRESHOLDS,
+    MONEYLINE_ENABLED,
+    RUNLINE_ENABLED,
+    TOTALS_ENABLED,
+)
 
 
 HIGH_VARIANCE_RUNS_STDEV = 4.0
@@ -23,18 +28,24 @@ def our_odds_from_prob(p: float) -> int:
 
 
 def ml_confidence(win_prob: float, moneyline) -> float:
+    if not MONEYLINE_ENABLED:
+        return float("nan")
     if pd.isna(moneyline):
         return float("nan")
     return float(win_prob - american_to_prob(moneyline))
 
 
 def rl_confidence(p_cover: float, spread_odds) -> float:
+    if not RUNLINE_ENABLED:
+        return float("nan")
     if pd.isna(spread_odds) or pd.isna(p_cover):
         return float("nan")
     return float(p_cover - american_to_prob(spread_odds))
 
 
 def flag_ml(team: str, win_prob: float, moneyline, threshold: float = EV_THRESHOLDS["ml"]) -> str:
+    if not MONEYLINE_ENABLED:
+        return "No Play"
     if pd.isna(moneyline):
         return "No Play"
     edge = win_prob - american_to_prob(moneyline)
@@ -42,6 +53,8 @@ def flag_ml(team: str, win_prob: float, moneyline, threshold: float = EV_THRESHO
 
 
 def flag_runline(team: str, p_cover: float, spread_odds, threshold: float = EV_THRESHOLDS["rl"]) -> str:
+    if not RUNLINE_ENABLED:
+        return "No Play"
     if pd.isna(spread_odds) or pd.isna(p_cover):
         return "No Play"
     edge = p_cover - american_to_prob(spread_odds)
