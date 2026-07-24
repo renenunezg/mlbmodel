@@ -65,7 +65,6 @@ v2/
 │   ├── daily_run.py            # 5 AM PT full predict
 │   ├── train.py                # full or incremental Bayesian fit
 │   └── refresh_lineups.py      # hourly predict-only refresh
-├── tests/
 ├── requirements.txt
 └── README.md
 ```
@@ -99,7 +98,7 @@ python -m v2.pipeline.train --mode full          # weekly: fresh NUTS fit
 python -m v2.pipeline.train --mode incremental   # daily: warm-start from prev posterior
 python -m v2.pipeline.daily_run                  # 5 AM PT predict
 python -m v2.pipeline.refresh_lineups            # hourly predict-only refresh
-pytest v2/tests/
+pytest tests/
 ```
 
 ## Acceptance gates (non-negotiable)

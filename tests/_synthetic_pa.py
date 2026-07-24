@@ -1,4 +1,4 @@
-"""Synthetic PA generator for fast Bayesian skill-model unit tests."""
+"""Synthetic plate appearances for the Bayesian recovery gate."""
 from __future__ import annotations
 
 import numpy as np

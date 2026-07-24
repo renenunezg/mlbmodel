@@ -1,7 +1,4 @@
-"""The production write-gate in backend/db.py: a before_cursor_execute listener
-blocks write statements unless we're in CI or a human opted in. These cover the
-two pieces it composes; the listener body is `block iff write and not allowed`.
-"""
+"""The production write gate blocks writes unless CI or a human opts in."""
 from __future__ import annotations
 
 from backend.db import _is_write_statement, writes_allowed
