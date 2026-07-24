@@ -118,9 +118,8 @@ python -m v2.pipeline.refresh_lineups
 python -m v2.evaluation.replay --start 2026-03-26 --end 2026-05-09 --n-sims 2000 --resume
 python -m v2.evaluation.backtester --start 2026-03-26 --end 2026-05-09
 
-# Tests
-pytest                       # v1 unit tests (kelly, metrics, win_prob, splits)
-pytest v2/                   # v2 tests (Bayesian, simulator, markets, eval)
+# Lean production-critical suite
+pytest tests/
 ```
 
 ```
@@ -241,12 +240,11 @@ workflows, so real start times drift around the nominal cron.
 ## Tests
 
 ```
-pytest                       # v1 tests: kelly, metrics, win_prob, splits.
-pytest v2/                   # v2 tests: Bayesian, simulator, markets, eval.
+pytest tests/
 ```
 
-The v2 suite includes a slow acceptance gate
-(`v2/tests/test_game_sim.py::test_runs_per_game_within_5pct`) that simulates
+The suite includes a slow acceptance gate
+(`tests/test_simulator_acceptance.py::test_runs_per_game_within_5pct`) that simulates
 200 stratified 2025 games × 990 sims (= 396k team-game samples) and checks
-mean and variance against actuals. It takes ~2 min. `pytest v2/` runs it by
-default; pass `--ignore=v2/tests/test_game_sim.py` for quick iteration.
+mean and variance against actuals. It takes ~2 min. `pytest tests/` runs it by
+default; pass `--ignore=tests/test_simulator_acceptance.py` for quick iteration.

@@ -1,5 +1,4 @@
-"""Phase 4 acceptance gate: simulated 2025 runs/team-game mean and variance within 5%
-of actual MLB 2025."""
+"""Acceptance gates for the v2 plate-appearance and game simulators."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -69,7 +68,7 @@ def _build_game_inputs(pa_df: pd.DataFrame, queues: dict, role_lookup: dict[int,
 
     games = []
     for gp, grp in pa_df.groupby("game_pk", sort=False):
-        # batting side per PA: top → away batting, bot → home batting
+    # batting side per PA: top means away batting, bottom means home batting
         away_pa = grp[grp["inning_topbot"] == "Top"]
         home_pa = grp[grp["inning_topbot"] == "Bot"]
 
@@ -108,33 +107,62 @@ def _build_game_inputs(pa_df: pd.DataFrame, queues: dict, role_lookup: dict[int,
     return games
 
 
+def test_simulator_uses_the_pitcher_intercept():
+    from v2.simulator.posteriors import K_FREE, _assemble
+
+    intercept = np.arange(K_FREE, dtype=float) * 0.1
+    pm = _assemble(
+        intercept=intercept,
+        sigma_batter=np.ones(K_FREE),
+        z_batter=np.zeros((3, K_FREE)),
+        sigma_platoon=np.ones(K_FREE),
+        z_platoon=np.zeros((3, K_FREE)),
+        sigma_pitcher=np.ones((2, K_FREE)),
+        z_pitcher=np.zeros((2, K_FREE)),
+        park_log_real=np.zeros(4),
+        batter_ids=np.array([10, 20, 30], dtype=np.int64),
+        pitcher_ids=np.array([100, 200], dtype=np.int64),
+        venue_codes=np.array(["AAA", "BBB", "CCC", "DDD"]),
+    )
+
+    np.testing.assert_allclose(pm.intercept, intercept)
+    assert not hasattr(pm, "intercept_diff")
+
+
 @skip_if_missing
-def test_single_game_smoke():
-    """Smoke: run one 2025 game with n_sims=200, ensure runs are bounded and finite."""
-    from v2.simulator import load_posteriors
-    from v2.simulator.baserunner import load_advancement_table, load_out_subtype_table
-    from v2.simulator.bullpen import build_queues_from_cache
-    from v2.simulator.game_sim import simulate_game
+def test_league_pa_replay_within_1pp():
+    from v2.data.pa_dataset import OUTCOMES, load_pa_dataset
+    from v2.simulator import load_posteriors, simulate_pa_batch
 
-    pa = _build_pa_frame(2025)
-    role_lookup = _classify_roles_2025(pa)
-    queues = build_queues_from_cache(2025)
-    games = _build_game_inputs(pa, queues, role_lookup)
-    assert len(games) > 0, "no games built"
-
+    pa = load_pa_dataset(2025, 2025)
     pm = load_posteriors()
-    adv = load_advancement_table()
-    sub_table = load_out_subtype_table()
+    role_map = _classify_roles_2025(pa)
+    roles = pa["pitcher"].map(role_map).fillna(1).astype(np.int64).to_numpy()
+    rng = np.random.default_rng(20260508)
+    simulated = simulate_pa_batch(
+        rng,
+        pm,
+        pa["batter"].astype("int64").to_numpy(),
+        pa["pitcher"].astype("int64").to_numpy(),
+        pa["p_throws"].to_numpy() == "L",
+        roles,
+        pa["home_team"].astype(str).to_numpy(),
+    )
+    actual = pa["outcome"].map({outcome: i for i, outcome in enumerate(OUTCOMES)}).to_numpy()
 
-    rng = np.random.default_rng(0)
-    _, gi, _ = games[0]
-    h, a = simulate_game(rng, pm, adv, sub_table, gi, n_sims=200, role_lookup=role_lookup)
-    # the smoke test still uses load_posteriors() (point estimate) - it's a
-    # cheaper sanity check on simulate_game and doesn't need the full per-draw path.
-    assert h.shape == (200,) and a.shape == (200,)
-    assert (h >= 0).all() and (a >= 0).all()
-    assert h.max() < 30 and a.max() < 30, f"runaway scores: max h={h.max()} a={a.max()}"
-    print(f"\n  smoke: home {h.mean():.2f} ± {h.std():.2f}, away {a.mean():.2f} ± {a.std():.2f}")
+    def rates(codes):
+        counts = np.bincount(codes, minlength=len(OUTCOMES))
+        total = counts.sum()
+        strikeouts, walks, hbp, singles, doubles, triples, home_runs, _ = counts
+        babip_denominator = total - strikeouts - walks - hbp - home_runs
+        return np.array([
+            strikeouts / total,
+            walks / total,
+            home_runs / total,
+            (singles + doubles + triples) / babip_denominator,
+        ])
+
+    np.testing.assert_array_less(np.abs(rates(simulated) - rates(actual)), 0.01)
 
 
 @skip_if_missing
@@ -147,7 +175,7 @@ def test_runs_per_game_within_5pct():
     Mean threshold: 5%. Variance threshold: 7% (relaxed from 5% in Phase 5).
     FORM_SIGMA=0.13 is the calibrated sweet spot at K=30: mean clears 5%,
     variance misses 5% by ~1pp. (K=60 tried to widen the var tail; it tightens
-    variance instead — reverted. Out-subtype-by-GB stratification is live but a
+    variance instead and was reverted. Out-subtype-by-GB stratification is live but a
     weak variance lever; see CLAUDE.md ACTIVE WORK.)
     """
     from v2.simulator import load_posterior_draws
