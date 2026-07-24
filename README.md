@@ -46,9 +46,9 @@ exceeds the sportsbook's de-vigged implied probability by more than 4.5%
 
 v2 replaced an XGBoost regressor (v1) after a 542-game head-to-head backtest:
 Brier −6.9%, log-loss −7.3%, max calibration gap from 41.9% down to 3.2%, ROI
-up on every market. The v1 code is frozen at SHA `a84b4dd` under
-`v2/evaluation/baseline_v1/`. v1 predictions before 2026-05-12 still live in
-`model_outputs_v1_archive` and `model_outputs_season_v1_archive`.
+up on every market. The comparison tooling was retired after cutover. v1
+predictions before 2026-05-12 still live in `model_outputs_v1_archive` and
+`model_outputs_season_v1_archive`.
 
 ## Repository layout
 
@@ -71,9 +71,9 @@ v2/
                         baserunner table, rest-aware bullpen, game loop.
   markets/              Empirical market probs, EV flags, Kelly, writer to
                         Supabase model_outputs.
+  market_model/         Market-relative feature and residual research.
   pipeline/             daily_run, train, score_games, refresh_lineups,
                         verify, write_posterior_summaries.
-  evaluation/           Frozen v1 baseline + head-to-head backtester.
   data/                 Multi-year Statcast cache builder + per-PA dataset.
 frontend/               Next.js 16 app (App Router, TypeScript, Tailwind, shadcn/ui).
   src/app/
@@ -114,9 +114,9 @@ python -m v2.pipeline.score_games --date 2026-05-14 --n-sims 10000
 # Intraday lineup refresh (re-scores games whose posted lineup changed)
 python -m v2.pipeline.refresh_lineups
 
-# Head-to-head backtest vs frozen v1
-python -m v2.evaluation.replay --start 2026-03-26 --end 2026-05-09 --n-sims 2000 --resume
-python -m v2.evaluation.backtester --start 2026-03-26 --end 2026-05-09
+# Market-relative research
+python -m v2.market_model.residual --start 2026-03-26 --end 2026-07-21 --market ml
+python -m v2.market_model.features --start 2026-03-26 --end 2026-07-21
 
 # Lean production-critical suite
 pytest tests/
