@@ -15,13 +15,11 @@ EV_THRESHOLDS = {
     "totals": 0.065,
 }
 
-# Live v2 moneyline disagreements have not shown incremental signal beyond the
-# market price. Keep flags off until the market-residual gate passes.
-MONEYLINE_ENABLED = False
+# Moneyline recommendation switch.
+MONEYLINE_ENABLED = True
 
-# Runline probabilities fail the same market-residual gate as moneylines.
-# Keep flags off until they add chronological holdout signal beyond the line.
-RUNLINE_ENABLED = False
+# Run-line recommendation switch.
+RUNLINE_ENABLED = True
 
 # Totals kill-switch. v2's per-PA sim is structurally miscalibrated on the
 # total-runs distribution: on the full 2026-03-26..05-09 backtest every totals
