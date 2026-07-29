@@ -75,11 +75,14 @@ def test_score_games_end_to_end():
         assert abs((rows[0].win_prob_p10 + rows[1].win_prob_p90) - 1.0) < 1e-3
         assert abs((rows[0].win_prob_p90 + rows[1].win_prob_p10) - 1.0) < 1e-3
 
-    # ev_flag / total_play / run_line_ev_flag are strings, never null
+    # Recommendation fields are strings, never null. Moneyline and run line are
+    # enabled; totals remains behind its kill switch.
     for col in ("ev_flag", "total_play", "run_line_ev_flag", "high_variance_flag"):
         assert df[col].notna().all(), f"{col} has nulls"
-    for col in ("ev_flag", "total_play", "run_line_ev_flag"):
-        assert (df[col] == "No Play").all(), f"{col} bypassed its market kill switch"
+    valid_flags = set(df["team"]) | {"No Play"}
+    assert set(df["ev_flag"]) <= valid_flags
+    assert set(df["run_line_ev_flag"]) <= valid_flags
+    assert (df["total_play"] == "No Play").all(), "totals bypassed its market kill switch"
 
 
 def test_is_started_freeze_predicate():

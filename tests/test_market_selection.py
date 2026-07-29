@@ -65,10 +65,12 @@ def test_fallback_lineup_suppresses_market_flags(monkeypatch):
         "posterior_age_days": 0,
     }
     monkeypatch.setattr("v2.markets.ev.MONEYLINE_ENABLED", True)
+    monkeypatch.setattr("v2.markets.ev.RUNLINE_ENABLED", True)
     live_home, _ = build_game_rows(**kwargs, lineups_live=True)
     fallback_home, fallback_away = build_game_rows(**kwargs, lineups_live=False)
 
     assert live_home["ev_flag"] == "LAD"
+    assert live_home["run_line_ev_flag"] == "LAD"
     for row in (fallback_home, fallback_away):
         assert row["ev_flag"] == "No Play"
         assert row["run_line_ev_flag"] == "No Play"
