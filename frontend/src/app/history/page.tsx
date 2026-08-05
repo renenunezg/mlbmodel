@@ -19,6 +19,41 @@ import Link from "next/link";
 export const revalidate = 300;
 
 const PAGE_SIZE = 50;
+const LEDGER_PAGE_SIZE = 1000;
+
+type LedgerRecord = {
+  date: string;
+  team: string;
+  game_pk: number;
+  bet_type: string;
+  won: boolean;
+};
+
+async function fetchLedgerRecords(periodFloor: string, team: string): Promise<LedgerRecord[]> {
+  const rows: LedgerRecord[] = [];
+
+  for (let from = 0; ; from += LEDGER_PAGE_SIZE) {
+    let query = supabase
+      .from("bet_ledger_agg_v")
+      .select("date, team, game_pk, bet_type, won")
+      .order("date", { ascending: true })
+      .order("game_pk", { ascending: true })
+      .order("bet_type", { ascending: true })
+      .order("team", { ascending: true })
+      .range(from, from + LEDGER_PAGE_SIZE - 1);
+    if (periodFloor) query = query.gte("date", periodFloor);
+    if (team) query = query.eq("team", team);
+
+    const { data, error } = await query;
+    if (error) {
+      throw new Error(`Failed to load bet ledger records: ${error.message}`);
+    }
+
+    const page = (data ?? []) as LedgerRecord[];
+    rows.push(...page);
+    if (page.length < LEDGER_PAGE_SIZE) return rows;
+  }
+}
 
 export default async function HistoryPage({
   searchParams,
@@ -66,20 +101,9 @@ export default async function HistoryPage({
     query = query.lte("date", to);
   }
 
-  // Records widget reads the canonical bet_ledger_agg_v Postgres view. The
-  // view does the same filter + grading work that this page used to do in
-  // TS, so History and Performance can't drift. Range capped at 10k to
-  // defeat the Supabase JS default 1000-row limit.
-  let aq = supabase
-    .from("bet_ledger_agg_v")
-    .select("bet_type, won")
-    .range(0, 9999);
-  if (periodFloor) aq = aq.gte("date", periodFloor);
-  if (team) aq = aq.eq("team", team);
-
-  const [{ data: rows, count, error }, { data: ledgerRows }, { data: latest }, { data: firstV2GameRows }] = await Promise.all([
+  const [{ data: rows, count, error }, ledgerRows, { data: latest }, { data: firstV2GameRows }] = await Promise.all([
     query,
-    aq,
+    fetchLedgerRecords(periodFloor, team),
     supabase
       .from("games")
       .select("updated_at")
@@ -115,7 +139,7 @@ export default async function HistoryPage({
   let mlWins = 0, mlLosses = 0;
   let rlWins = 0, rlLosses = 0;
   let totalsWins = 0, totalsLosses = 0;
-  for (const r of (ledgerRows ?? []) as { bet_type: string; won: boolean }[]) {
+  for (const r of ledgerRows) {
     if (r.bet_type === "ml") {
       if (r.won) mlWins++;
       else mlLosses++;
