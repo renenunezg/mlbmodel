@@ -14,6 +14,31 @@ import { RealtimeRefresh } from "@/components/realtime-refresh";
 
 export const revalidate = 300;
 
+const LEDGER_PAGE_SIZE = 1000;
+
+async function fetchFullBetLedger(): Promise<BetLedgerRow[]> {
+  const rows: BetLedgerRow[] = [];
+
+  for (let from = 0; ; from += LEDGER_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from("bet_ledger_v")
+      .select("date, team, game_pk, bet_type, stake, decimal_odds, american_odds, totals_side, won, edge, payout")
+      .order("date", { ascending: true })
+      .order("game_pk", { ascending: true })
+      .order("bet_type", { ascending: true })
+      .order("team", { ascending: true })
+      .range(from, from + LEDGER_PAGE_SIZE - 1);
+
+    if (error) {
+      throw new Error(`Failed to load bet ledger: ${error.message}`);
+    }
+
+    const page = (data ?? []) as BetLedgerRow[];
+    rows.push(...page);
+    if (page.length < LEDGER_PAGE_SIZE) return rows;
+  }
+}
+
 export default async function PerformancePage() {
   // Fetch all data in parallel
   const [evalRes, calRes, edgeRes, residRes, latestRes, skillsRes, sigmasRes, ledgerRes] = await Promise.all([
@@ -52,13 +77,9 @@ export default async function PerformancePage() {
       .select("*")
       .order("refit_date", { ascending: false })
       .limit(20),
-    // Live bet ledger - drives the headline betting KPIs without depending
-    // on yesterday's model_evaluation snapshot. Range cap defeats the
-    // Supabase JS default 1000-row limit.
-    supabase
-      .from("bet_ledger_v")
-      .select("date, team, game_pk, bet_type, stake, decimal_odds, american_odds, totals_side, won, edge, payout")
-      .range(0, 9999),
+    // Supabase caps each response at 1000 rows, so load the ledger in stable
+    // pages. A single oversized range silently omitted every bet after row 1000.
+    fetchFullBetLedger(),
   ]);
 
   const evaluations = (evalRes.data ?? []) as ModelEvaluation[];
@@ -67,7 +88,7 @@ export default async function PerformancePage() {
   const edgeBuckets = (edgeRes.data ?? []) as EdgeBucket[];
   const posteriorSkills = (skillsRes.data ?? []) as PosteriorSkill[];
   const posteriorSigmas = (sigmasRes.data ?? []) as PosteriorSigma[];
-  const ledger = (ledgerRes.data ?? []) as BetLedgerRow[];
+  const ledger = ledgerRes;
   const liveKpis = aggregateLedger(ledger);
 
   // Residuals: fetch model_outputs_season for graded game_pks and join client-side.
