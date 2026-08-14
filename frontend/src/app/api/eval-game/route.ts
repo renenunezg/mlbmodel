@@ -45,7 +45,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "missing game_pk" }, { status: 400 });
   }
 
-  const sb = createClient(url, serviceKey, { auth: { persistSession: false } });
+  const sb = createClient(url, serviceKey, {
+    auth: { persistSession: false },
+    db: { schema: "mlb" },
+  });
   const result = await runEvalForGame(sb, game_pk);
   if ("error" in result && result.error) {
     return NextResponse.json({ error: result.error }, { status: 500 });
