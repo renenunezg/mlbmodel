@@ -8,7 +8,8 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL not set in .env")
 
-engine = create_engine(DATABASE_URL)
+# MLB objects live in the mlb schema; public holds only cross-project objects.
+engine = create_engine(DATABASE_URL, connect_args={"options": "-csearch_path=mlb,public"})
 
 _WRITE_KEYWORDS = ("insert", "update", "delete", "truncate", "create", "drop", "alter", "replace", "merge")
 
