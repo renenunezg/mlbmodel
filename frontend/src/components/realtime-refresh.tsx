@@ -16,7 +16,7 @@ export function RealtimeRefresh({ tables }: { tables: string[] }) {
       channel.on(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         "postgres_changes" as any,
-        { event: "*", schema: "public", table },
+        { event: "*", schema: "mlb", table },
         () => router.refresh()
       );
     }
