@@ -100,7 +100,8 @@ export type EvalResult =
   | { ok: false; error: string };
 
 export async function runEvalForGame(
-  sb: SupabaseClient,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sb: SupabaseClient<any, any, any, any, any>,
   game_pk: number,
 ): Promise<EvalResult> {
   const mlb = await fetchMlbGame(game_pk);
