@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { ModelOutput, GameInfo } from "@/lib/types";
+import { ModelOutput } from "@/lib/types";
 import { cn, formatDate, formatOdds, formatRuns, formatPct } from "@/lib/utils";
 import { V2_CUTOVER_DATE } from "@/lib/constants";
 import { V2Badge } from "@/components/v2-badge";
@@ -19,41 +19,18 @@ import Link from "next/link";
 export const revalidate = 300;
 
 const PAGE_SIZE = 50;
-const LEDGER_PAGE_SIZE = 1000;
 
-type LedgerRecord = {
-  date: string;
-  team: string;
-  game_pk: number;
-  bet_type: string;
-  won: boolean;
+// Extra columns the unified view carries from its games join, so row-level
+// results render without a follow-up query per page.
+type HistoryRow = ModelOutput & {
+  game_status: string | null;
+  home_team: string | null;
+  away_team: string | null;
+  home_score: number | null;
+  away_score: number | null;
 };
 
-async function fetchLedgerRecords(periodFloor: string, team: string): Promise<LedgerRecord[]> {
-  const rows: LedgerRecord[] = [];
-
-  for (let from = 0; ; from += LEDGER_PAGE_SIZE) {
-    let query = supabase
-      .from("bet_ledger_agg_v")
-      .select("date, team, game_pk, bet_type, won")
-      .order("date", { ascending: true })
-      .order("game_pk", { ascending: true })
-      .order("bet_type", { ascending: true })
-      .order("team", { ascending: true })
-      .range(from, from + LEDGER_PAGE_SIZE - 1);
-    if (periodFloor) query = query.gte("date", periodFloor);
-    if (team) query = query.eq("team", team);
-
-    const { data, error } = await query;
-    if (error) {
-      throw new Error(`Failed to load bet ledger records: ${error.message}`);
-    }
-
-    const page = (data ?? []) as LedgerRecord[];
-    rows.push(...page);
-    if (page.length < LEDGER_PAGE_SIZE) return rows;
-  }
-}
+type BetRecord = { bet_type: string; wins: number; losses: number };
 
 export default async function HistoryPage({
   searchParams,
@@ -101,9 +78,14 @@ export default async function HistoryPage({
     query = query.lte("date", to);
   }
 
-  const [{ data: rows, count, error }, ledgerRows, { data: latest }, { data: firstV2GameRows }] = await Promise.all([
+  const [{ data: rows, count, error }, { data: recordRows }, { data: latest }, { data: firstV2GameRows }] = await Promise.all([
     query,
-    fetchLedgerRecords(periodFloor, team),
+    // Win/loss record aggregated in the database — one tiny response instead
+    // of paging the full bet ledger view across sequential requests.
+    supabase.rpc("bet_record_summary", {
+      p_from: periodFloor || null,
+      p_team: team || null,
+    }),
     supabase
       .from("games")
       .select("updated_at")
@@ -121,34 +103,23 @@ export default async function HistoryPage({
 
   const lastUpdated: string | null = latest?.[0]?.updated_at ?? null;
 
-  const predictions: ModelOutput[] = rows ?? [];
+  const predictions: HistoryRow[] = rows ?? [];
   const totalRows = count ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
-
-  // Fetch games for current page's pks (for the row-level result columns).
-  const gamePks = [...new Set(predictions.map((p) => p.game_pk))];
-  const gamesRes = gamePks.length > 0
-    ? await supabase.from("games").select("*").in("game_pk", gamePks)
-    : { data: [] };
-
-  const gamesMap: Record<number, GameInfo> = {};
-  for (const g of (gamesRes.data ?? []) as GameInfo[]) {
-    gamesMap[g.game_pk] = g;
-  }
 
   let mlWins = 0, mlLosses = 0;
   let rlWins = 0, rlLosses = 0;
   let totalsWins = 0, totalsLosses = 0;
-  for (const r of ledgerRows) {
+  for (const r of (recordRows ?? []) as BetRecord[]) {
     if (r.bet_type === "ml") {
-      if (r.won) mlWins++;
-      else mlLosses++;
+      mlWins = r.wins;
+      mlLosses = r.losses;
     } else if (r.bet_type === "rl") {
-      if (r.won) rlWins++;
-      else rlLosses++;
+      rlWins = r.wins;
+      rlLosses = r.losses;
     } else if (r.bet_type === "total") {
-      if (r.won) totalsWins++;
-      else totalsLosses++;
+      totalsWins = r.wins;
+      totalsLosses = r.losses;
     }
   }
 
@@ -243,11 +214,10 @@ export default async function HistoryPage({
                 return predictions.map((row, i) => {
                 const nextRow = predictions[i + 1];
                 const showV2Badge = i === firstV2Idx;
-                const game = gamesMap[row.game_pk];
-                const isFinal = game?.status === "Final";
-                const isHome = game?.home_team === row.team;
-                const teamScore = isHome ? game?.home_score : game?.away_score;
-                const oppScore = isHome ? game?.away_score : game?.home_score;
+                const isFinal = row.game_status === "Final";
+                const isHome = row.home_team === row.team;
+                const teamScore = isHome ? row.home_score : row.away_score;
+                const oppScore = isHome ? row.away_score : row.home_score;
                 const won = isFinal && teamScore != null && oppScore != null
                   ? teamScore > oppScore
                   : null;
@@ -279,12 +249,12 @@ export default async function HistoryPage({
                   if (!totalsIsPlay) return null;
                   if (
                     !isFinal ||
-                    game?.home_score == null ||
-                    game?.away_score == null
+                    row.home_score == null ||
+                    row.away_score == null
                   )
                     return null;
                   if (row.total == null) return null;
-                  const actual = game.home_score + game.away_score;
+                  const actual = row.home_score + row.away_score;
                   const book = row.total;
                   if (actual === book) return null; // push
                   return row.total_play === "Over"

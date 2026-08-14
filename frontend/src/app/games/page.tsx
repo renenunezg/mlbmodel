@@ -22,7 +22,9 @@ async function fetchLiveScores(): Promise<Map<number, LiveScore>> {
     const res = await fetch(url, {
       next: { revalidate: 30 },
       headers: { "User-Agent": "mlb-model-dashboard" },
-      signal: AbortSignal.timeout(4000),
+      // Keep the first-paint block short: GamesLive re-polls live scores
+      // immediately on mount, so a slow MLB API only costs staleness, not 4s.
+      signal: AbortSignal.timeout(2000),
     });
     if (!res.ok) return new Map();
     const data = await res.json();
