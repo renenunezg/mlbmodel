@@ -32,7 +32,12 @@ from v2.markets.ev import (
     our_odds_from_prob,
     rl_confidence,
 )
-from v2.markets.probs import market_probs, runs_percentiles
+from v2.markets.probs import (
+    anchor_home_prob,
+    consensus_home_prob,
+    market_probs,
+    runs_percentiles,
+)
 
 
 def _offers(odds: dict | None) -> list[dict]:
@@ -147,9 +152,24 @@ def build_game_rows(
     a = np.asarray(away_runs)
     n = len(h)
 
-    win_probs = market_probs(h, a, None, None)
-    p_home_win = win_probs["p_home_win"]
-    p_away_win = win_probs["p_away_win"]
+    # Published win prob = HFA-shifted sim prob anchored to the de-vigged
+    # market consensus (see backend/strategy.py constants for the 2026-08-16
+    # measurements). The raw sim prob systematically over-rates big underdogs
+    # relative to what they actually win, which made them look +EV; anchoring
+    # is what the ML flag, Kelly, and the site all consume. Run-line and
+    # totals probs remain pure sim quantities.
+    p_home_sim = market_probs(h, a, None, None)["p_home_win"]
+    p_market_home = consensus_home_prob(home_odds, away_odds)
+    p_home_win = anchor_home_prob(p_home_sim, p_market_home)
+    p_away_win = round(1.0 - p_home_win, 4)
+
+    # Transform the per-draw band endpoints through the same monotonic map so
+    # the band brackets the published (anchored) prob; away stays the exact
+    # complement below.
+    if home_wp_p10 is not None:
+        home_wp_p10 = anchor_home_prob(home_wp_p10, p_market_home)
+    if home_wp_p90 is not None:
+        home_wp_p90 = anchor_home_prob(home_wp_p90, p_market_home)
 
     home_ml_offer = _best_moneyline(home_odds, p_home_win)
     away_ml_offer = _best_moneyline(away_odds, p_away_win)
