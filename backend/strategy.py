@@ -33,6 +33,22 @@ TOTALS_ENABLED = False
 # Set to 0 for weather-off control runs.
 WEATHER_ENABLED = os.getenv("MLBMODEL_WEATHER_ENABLED", "1") == "1"
 
+# Market anchoring of the published win probability (2026-08-16 diagnosis).
+# The sim's moneyline prob is honest but carries less information than the
+# market: on 1,778 finished 2026 games a joint logistic fit gave the model
+# +0.04 vs the market's +0.75, and hard market dogs (<33%) the sim priced at
+# 37% won 29% of the time. Publishing the raw sim prob therefore flags big
+# dogs +EV systematically. Blending on the logit scale at w_model≈0.2 was the
+# out-of-sample log-loss optimum (flat 0.15-0.25). Games with no paired
+# moneyline publish the un-anchored (HFA-shifted) sim prob.
+MARKET_ANCHOR_W_MODEL = 0.2
+
+# The sim has no home-field advantage: mean p(home)=0.4986 across 2026 vs an
+# actual home win rate of 0.5214. Batting last + walkoff logic nets ~zero.
+# Applied to the sim's home logit BEFORE market anchoring so each component
+# carries its own HFA exactly once.
+HOME_FIELD_LOGIT = 0.09
+
 # v1 → v2 model cutover. Eval / calibration / feature-importance writes are
 # blocked before this date so the v1-archive history stays frozen.
 V1_CUTOVER_DATE = date(2026, 5, 12)
