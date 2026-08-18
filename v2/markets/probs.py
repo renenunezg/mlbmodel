@@ -14,6 +14,9 @@ from __future__ import annotations
 
 import numpy as np
 
+from backend.simulation import american_to_prob
+from backend.strategy import HOME_FIELD_LOGIT, MARKET_ANCHOR_W_MODEL
+
 
 def market_probs(
     home_runs: np.ndarray,
@@ -64,6 +67,66 @@ def market_probs(
         out["p_under"] = round(p_under_strict + 0.5 * p_push_t, 4)
 
     return out
+
+
+def consensus_home_prob(home_odds: dict | None, away_odds: dict | None) -> float | None:
+    """De-vigged market home win prob, averaged over books quoting both sides.
+
+    Offers are paired by book so one book's vig cancels within its own pair.
+    Books quoting only one side are skipped. None when no complete pair exists.
+    """
+    home_by_book = _ml_by_book(home_odds)
+    away_by_book = _ml_by_book(away_odds)
+    probs = []
+    for book, home_ml in home_by_book.items():
+        away_ml = away_by_book.get(book)
+        if away_ml is None:
+            continue
+        imp_home = american_to_prob(home_ml)
+        imp_away = american_to_prob(away_ml)
+        overround = imp_home + imp_away
+        if overround <= 0:
+            continue
+        probs.append(imp_home / overround)
+    return float(np.mean(probs)) if probs else None
+
+
+def anchor_home_prob(p_home_sim: float, p_market_home: float | None) -> float:
+    """Published home win prob: HFA-shifted sim logit blended toward the market.
+
+    The sim carries no home-field advantage, so HOME_FIELD_LOGIT is added to its
+    logit first; the market prob already prices HFA, so the blend double-counts
+    nothing. With no market pair the shifted sim prob passes through unblended.
+    Monotonic in p_home_sim, so it can also transform the win-prob band
+    endpoints without breaking their ordering or pairwise anti-correlation.
+    """
+    logit_sim = _logit(p_home_sim) + HOME_FIELD_LOGIT
+    if p_market_home is None:
+        return round(_sigmoid(logit_sim), 4)
+    blended = MARKET_ANCHOR_W_MODEL * logit_sim + (1.0 - MARKET_ANCHOR_W_MODEL) * _logit(p_market_home)
+    return round(_sigmoid(blended), 4)
+
+
+def _ml_by_book(odds: dict | None) -> dict:
+    if odds is None:
+        return {}
+    offers = odds.get("offers") or [odds]
+    out = {}
+    for offer in offers:
+        ml = offer.get("moneyline")
+        if ml is None or _isnan(ml):
+            continue
+        out[offer.get("book")] = float(ml)
+    return out
+
+
+def _logit(p: float) -> float:
+    p = min(max(float(p), 1e-4), 1.0 - 1e-4)
+    return float(np.log(p / (1.0 - p)))
+
+
+def _sigmoid(x: float) -> float:
+    return float(1.0 / (1.0 + np.exp(-x)))
 
 
 def runs_percentiles(arr: np.ndarray) -> tuple[float, float, float]:
