@@ -97,3 +97,17 @@ def test_is_started_freeze_predicate():
     assert is_started(pd.NaT, now) is False
     # tz-naive start_time is coerced to UTC, not crashed on
     assert is_started(pd.Timestamp("2026-06-05 01:40:00"), now) is True
+
+
+def test_market_research_inputs_are_paired_and_pregame():
+    from v2.market_model.features import load_feature_games
+
+    games = load_feature_games("2026-05-12", "2026-05-31")
+
+    assert len(games) >= 100
+    assert (games["paired_books"] >= 1).all()
+    assert (games["max_pair_lag_seconds"] <= 5).all()
+    assert (games["market_quote_at"] < games["start_time"]).all()
+    assert (games["home_prediction_at"] < games["start_time"]).all()
+    assert (games["away_prediction_at"] < games["start_time"]).all()
+    assert games["home_market_prob"].between(0, 1, inclusive="neither").all()

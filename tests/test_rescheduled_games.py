@@ -4,7 +4,10 @@ from unittest.mock import Mock
 import pandas as pd
 
 from backend.data.mlb_api import fetch_schedule
-from backend.evaluate_model import _merge_predictions_with_results
+from backend.evaluate_model import (
+    _evaluation_update_values,
+    _merge_predictions_with_results,
+)
 from pipeline import _batch_upsert_games
 
 
@@ -85,3 +88,14 @@ def test_evaluation_rejects_prediction_from_original_date():
     merged = _merge_predictions_with_results(predictions, results)
 
     assert pd.to_datetime(merged["date"]).dt.date.tolist() == [date(2026, 6, 3)]
+
+
+def test_evaluation_clears_accuracy_when_bet_count_returns_to_zero():
+    updates = _evaluation_update_values({
+        "date": date(2026, 6, 3),
+        "eval_window": "day",
+        "ml_predictions": 0,
+        "ml_accuracy": None,
+    })
+
+    assert updates == {"ml_predictions": 0, "ml_accuracy": None}
