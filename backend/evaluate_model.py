@@ -87,14 +87,7 @@ def _write_evaluation_row(eval_date, eval_window, base_row, metric_dict):
         print(f"  [skip] no graded data for {eval_date} ({eval_window}); skipping write")
         return
 
-    # Don't overwrite an existing populated cell with NULL. Partial reruns
-    # (e.g. a refresh path that only computes counts and skips regression /
-    # probabilistic / financial summaries) used to wipe valid metrics. Skip
-    # None values on conflict so an earlier full write always wins.
-    update_cols = {
-        k: v for k, v in row.items()
-        if k not in ("date", "eval_window") and v is not None
-    }
+    update_cols = _evaluation_update_values(row)
 
     with engine.begin() as conn:
         conn.execute(
@@ -105,6 +98,21 @@ def _write_evaluation_row(eval_date, eval_window, base_row, metric_dict):
                 set_=update_cols,
             )
         )
+
+
+def _evaluation_update_values(row):
+    """Return the cells explicitly computed by the current evaluation run.
+
+    An omitted key means a partial rerun did not compute that metric and must
+    preserve the stored value. An explicit ``None`` means the metric was
+    recomputed and is now unavailable, such as accuracy when the bet count is
+    zero, so the old value must be cleared.
+    """
+    return {
+        key: value
+        for key, value in row.items()
+        if key not in ("date", "eval_window")
+    }
 
 
 def _write_calibration(eval_date, cal_bins):
