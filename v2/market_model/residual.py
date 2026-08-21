@@ -34,22 +34,73 @@ def _logit(probabilities: np.ndarray) -> np.ndarray:
 
 def load_games(start: str, end: str) -> pd.DataFrame:
     query = text("""
-        SELECT g.game_pk, g.game_date,
+        WITH paired_candidates AS (
+            SELECT g.game_pk, oh.book,
+                   GREATEST(oh.scraped_at, oa.scraped_at) AS market_quote_at,
+                   ABS(EXTRACT(EPOCH FROM (oh.scraped_at - oa.scraped_at))) AS pair_lag_seconds,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY g.game_pk, oh.book
+                       ORDER BY GREATEST(oh.scraped_at, oa.scraped_at) DESC,
+                                ABS(EXTRACT(EPOCH FROM (oh.scraped_at - oa.scraped_at)))
+                   ) AS pair_rank,
+                   CASE WHEN oh.moneyline < 0
+                        THEN -oh.moneyline::double precision / (-oh.moneyline + 100.0)
+                        ELSE 100.0 / (oh.moneyline + 100.0)
+                   END AS home_implied,
+                   CASE WHEN oa.moneyline < 0
+                        THEN -oa.moneyline::double precision / (-oa.moneyline + 100.0)
+                        ELSE 100.0 / (oa.moneyline + 100.0)
+                   END AS away_implied
+            FROM games g
+            JOIN odds oh
+              ON oh.game_pk = g.game_pk AND oh.team = g.home_team
+            JOIN odds oa
+              ON oa.game_pk = g.game_pk
+             AND oa.team = g.away_team
+             AND oa.book = oh.book
+            WHERE g.game_date BETWEEN :start AND :end
+              AND oh.moneyline IS NOT NULL
+              AND oa.moneyline IS NOT NULL
+              AND oh.scraped_at < g.start_time
+              AND oa.scraped_at < g.start_time
+              AND ABS(EXTRACT(EPOCH FROM (oh.scraped_at - oa.scraped_at))) <= 5
+        ), market_consensus AS (
+            SELECT game_pk,
+                   AVG(home_implied / (home_implied + away_implied)) AS home_market_prob,
+                   COUNT(*) AS paired_books,
+                   MAX(pair_lag_seconds) AS max_pair_lag_seconds,
+                   MAX(market_quote_at) AS market_quote_at
+            FROM paired_candidates
+            WHERE pair_rank = 1
+            GROUP BY game_pk
+        )
+        SELECT g.game_pk, g.game_date, g.start_time,
                h.win_prob AS home_model_prob,
+               h.prediction_updated_at AS home_prediction_at,
+               a.prediction_updated_at AS away_prediction_at,
                h.moneyline AS home_moneyline,
                a.moneyline AS away_moneyline,
+               market.home_market_prob,
+               market.paired_books,
+               market.max_pair_lag_seconds,
+               market.market_quote_at,
                CASE WHEN g.home_score > g.away_score THEN 1 ELSE 0 END AS home_win
         FROM games g
         JOIN model_outputs_season h
           ON h.game_pk = g.game_pk AND h.team = g.home_team
         JOIN model_outputs_season a
           ON a.game_pk = g.game_pk AND a.team = g.away_team
+        JOIN market_consensus market ON market.game_pk = g.game_pk
         WHERE g.game_date BETWEEN :start AND :end
           AND g.status = 'Final'
           AND g.home_score IS NOT NULL
           AND g.away_score IS NOT NULL
           AND h.moneyline IS NOT NULL
           AND a.moneyline IS NOT NULL
+          AND h.date::date = g.game_date
+          AND a.date::date = g.game_date
+          AND h.prediction_updated_at < g.start_time
+          AND a.prediction_updated_at < g.start_time
         ORDER BY g.game_date, g.game_pk
     """)
     with engine.begin() as conn:
@@ -58,10 +109,59 @@ def load_games(start: str, end: str) -> pd.DataFrame:
 
 def load_runline_games(start: str, end: str) -> pd.DataFrame:
     query = text("""
-        SELECT g.game_pk, g.game_date,
+        WITH paired_candidates AS (
+            SELECT g.game_pk, oh.book, oh.spread AS home_spread,
+                   GREATEST(oh.scraped_at, oa.scraped_at) AS market_quote_at,
+                   ABS(EXTRACT(EPOCH FROM (oh.scraped_at - oa.scraped_at))) AS pair_lag_seconds,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY g.game_pk, oh.book, oh.spread
+                       ORDER BY GREATEST(oh.scraped_at, oa.scraped_at) DESC,
+                                ABS(EXTRACT(EPOCH FROM (oh.scraped_at - oa.scraped_at)))
+                   ) AS pair_rank,
+                   CASE WHEN oh.spread_odds < 0
+                        THEN -oh.spread_odds::double precision / (-oh.spread_odds + 100.0)
+                        ELSE 100.0 / (oh.spread_odds + 100.0)
+                   END AS home_implied,
+                   CASE WHEN oa.spread_odds < 0
+                        THEN -oa.spread_odds::double precision / (-oa.spread_odds + 100.0)
+                        ELSE 100.0 / (oa.spread_odds + 100.0)
+                   END AS away_implied
+            FROM games g
+            JOIN odds oh
+              ON oh.game_pk = g.game_pk AND oh.team = g.home_team
+            JOIN odds oa
+              ON oa.game_pk = g.game_pk
+             AND oa.team = g.away_team
+             AND oa.book = oh.book
+            WHERE g.game_date BETWEEN :start AND :end
+              AND oh.spread_odds IS NOT NULL
+              AND oa.spread_odds IS NOT NULL
+              AND ABS(oh.spread) = 1.5
+              AND ABS(oa.spread) = 1.5
+              AND ABS(oh.spread + oa.spread) < 0.001
+              AND oh.scraped_at < g.start_time
+              AND oa.scraped_at < g.start_time
+              AND ABS(EXTRACT(EPOCH FROM (oh.scraped_at - oa.scraped_at))) <= 5
+        ), market_consensus AS (
+            SELECT game_pk, home_spread,
+                   AVG(home_implied / (home_implied + away_implied)) AS home_market_prob,
+                   COUNT(*) AS paired_books,
+                   MAX(pair_lag_seconds) AS max_pair_lag_seconds,
+                   MAX(market_quote_at) AS market_quote_at
+            FROM paired_candidates
+            WHERE pair_rank = 1
+            GROUP BY game_pk, home_spread
+        )
+        SELECT g.game_pk, g.game_date, g.start_time,
                h.p_cover AS home_model_prob,
+               h.prediction_updated_at AS home_prediction_at,
+               a.prediction_updated_at AS away_prediction_at,
                h.spread_odds AS home_moneyline,
                a.spread_odds AS away_moneyline,
+               market.home_market_prob,
+               market.paired_books,
+               market.max_pair_lag_seconds,
+               market.market_quote_at,
                CASE WHEN g.home_score - g.away_score + h.spread > 0
                     THEN 1 ELSE 0 END AS home_win
         FROM games g
@@ -69,6 +169,9 @@ def load_runline_games(start: str, end: str) -> pd.DataFrame:
           ON h.game_pk = g.game_pk AND h.team = g.home_team
         JOIN model_outputs_season a
           ON a.game_pk = g.game_pk AND a.team = g.away_team
+        JOIN market_consensus market
+          ON market.game_pk = g.game_pk
+         AND ABS(market.home_spread - h.spread) < 0.001
         WHERE g.game_date BETWEEN :start AND :end
           AND g.status = 'Final'
           AND g.home_score IS NOT NULL
@@ -79,6 +182,10 @@ def load_runline_games(start: str, end: str) -> pd.DataFrame:
           AND ABS(h.spread) = 1.5
           AND ABS(a.spread) = 1.5
           AND ABS(h.spread + a.spread) < 0.001
+          AND h.date::date = g.game_date
+          AND a.date::date = g.game_date
+          AND h.prediction_updated_at < g.start_time
+          AND a.prediction_updated_at < g.start_time
         ORDER BY g.game_date, g.game_pk
     """)
     with engine.begin() as conn:
@@ -87,9 +194,8 @@ def load_runline_games(start: str, end: str) -> pd.DataFrame:
 
 def prepare_games(games: pd.DataFrame) -> pd.DataFrame:
     frame = games.sort_values(["game_date", "game_pk"]).reset_index(drop=True).copy()
-    home_raw = american_to_prob(frame["home_moneyline"])
-    away_raw = american_to_prob(frame["away_moneyline"])
-    frame["home_market_prob"] = home_raw / (home_raw + away_raw)
+    if "home_market_prob" not in frame:
+        raise ValueError("home_market_prob must come from paired same-book pregame odds")
     frame["model_logit"] = _logit(frame["home_model_prob"].to_numpy())
     frame["market_logit"] = _logit(frame["home_market_prob"].to_numpy())
     return frame

@@ -1,5 +1,9 @@
 import numpy as np
+import pandas as pd
+import pytest
 
+from v2.market_model.features import build_feature_frame
+from v2.market_model.residual import prepare_games
 from v2.markets.writer import _best_moneyline, _best_runline, build_game_rows
 
 
@@ -123,3 +127,23 @@ def test_market_anchor_stops_flagging_big_dogs(monkeypatch):
     solo_home, _ = build_game_rows(**kwargs, home_odds=None, away_odds=None)
     assert solo_home["win_prob"] > 0.60  # +0.09 logit HFA on a 0.60 sim prob
     assert solo_home["ev_flag"] == "No Play"
+
+
+def test_market_research_refuses_independently_shopped_baseline():
+    games = pd.DataFrame([{
+        "game_pk": 1,
+        "game_date": pd.Timestamp("2026-08-01"),
+        "start_time": pd.Timestamp("2026-08-01T19:10:00Z"),
+        "home_model_prob": 0.55,
+        "home_moneyline": -105,
+        "away_moneyline": 120,
+        "home_win": 1,
+    }])
+
+    with pytest.raises(ValueError, match="paired same-book pregame odds"):
+        prepare_games(games)
+    with pytest.raises(ValueError, match="paired same-book pregame odds"):
+        build_feature_frame(games)
+
+    paired = prepare_games(games.assign(home_market_prob=0.61))
+    assert paired.loc[0, "home_market_prob"] == 0.61
