@@ -75,6 +75,9 @@ def test_fallback_lineup_suppresses_market_flags(monkeypatch):
 
     assert live_home["ev_flag"] == "LAD"
     assert live_home["run_line_ev_flag"] == "LAD"
+    assert all(live_home[key] == value for key, value in odds.items())
+    away_odds = {**odds, "moneyline": 130, "spread": 1.5}
+    assert all(fallback_away[key] == value for key, value in away_odds.items())
     for row in (fallback_home, fallback_away):
         assert row["ev_flag"] == "No Play"
         assert row["run_line_ev_flag"] == "No Play"

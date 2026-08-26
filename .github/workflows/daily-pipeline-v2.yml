@@ -29,6 +29,14 @@ jobs:
           restore-keys: |
             statcast-${{ runner.os }}-
 
+      - name: Restore Odds API state
+        uses: actions/cache/restore@v4
+        with:
+          path: cache/odds_api_state.json
+          key: odds-api-state-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            odds-api-state-${{ runner.os }}-
+
       - name: Restore posteriors
         uses: actions/cache@v4
         with:
@@ -52,3 +60,10 @@ jobs:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
           PYTHONPATH: "."
         run: python -m v2.pipeline.daily_run
+
+      - name: Persist Odds API state
+        if: ${{ always() && hashFiles('cache/odds_api_state.json') != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: cache/odds_api_state.json
+          key: odds-api-state-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}

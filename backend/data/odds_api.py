@@ -7,10 +7,14 @@ Fetches betting odds from the-odds-api.com.
 Free tier: 500 requests/month. Each call with multiple markets costs ~3 credits.
 """
 
+import json
 import os
-import requests
-import pandas as pd
+import tempfile
 from datetime import datetime, timezone
+from pathlib import Path
+
+import pandas as pd
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -18,6 +22,8 @@ load_dotenv()
 ODDS_API_BASE = "https://api.the-odds-api.com/v4/sports"
 SPORT = "baseball_mlb"
 DEFAULT_BOOKS = ("draftkings", "fanduel", "betmgm")
+DEFAULT_STATE_PATH = Path("cache/odds_api_state.json")
+MARKETS = ("h2h", "spreads", "totals")
 
 # Map The Odds API team names to our abbreviations
 ODDS_TEAM_MAP = {
@@ -70,10 +76,81 @@ def _normalize_team(name: str) -> str:
     return ODDS_TEAM_MAP.get(name, name)
 
 
-def fetch_odds(books: list[str] | None = None) -> pd.DataFrame:
+def _state_path() -> Path:
+    return Path(os.getenv("ODDS_API_STATE_PATH", str(DEFAULT_STATE_PATH)))
+
+
+def _read_state() -> dict:
+    path = _state_path()
+    try:
+        state = json.loads(path.read_text())
+        return state if isinstance(state, dict) else {}
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
+
+
+def _write_state(state: dict) -> None:
+    """Atomically persist the latest quota headers."""
+    path = _state_path()
+    tmp_name = None
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            delete=False,
+        ) as tmp:
+            json.dump(state, tmp, indent=2, sort_keys=True)
+            tmp.write("\n")
+            tmp_name = tmp.name
+        os.replace(tmp_name, path)
+    except OSError as exc:
+        print(f"WARNING: could not persist Odds API state at {path}: {exc}")
+    finally:
+        if tmp_name:
+            try:
+                Path(tmp_name).unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+def _header_value(headers, name: str) -> int | str | None:
+    value = headers.get(name)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _capture_quota_state(resp: requests.Response, retrieved_at: str) -> dict:
+    quota = {
+        "x-requests-last": _header_value(resp.headers, "x-requests-last"),
+        "x-requests-used": _header_value(resp.headers, "x-requests-used"),
+        "x-requests-remaining": _header_value(resp.headers, "x-requests-remaining"),
+        "retrieved_at": retrieved_at,
+    }
+    _write_state(quota)
+    return quota
+
+
+def latest_quota_state() -> dict | None:
+    """Return the latest persisted normal-response quota headers, if known."""
+    quota = _read_state()
+    return quota or None
+
+
+def fetch_odds(
+    upcoming_game_pks: tuple[int, ...],
+    books: list[str] | None = None,
+) -> pd.DataFrame:
     """Fetch current MLB odds from The Odds API.
 
     Args:
+        upcoming_game_pks: Non-empty upcoming MLB game IDs proven by the schedule DB.
         books: Bookmaker keys. Defaults to DraftKings, FanDuel, and BetMGM.
 
     Returns DataFrame with columns:
@@ -82,20 +159,24 @@ def fetch_odds(books: list[str] | None = None) -> pd.DataFrame:
         total, total_over_odds, total_under_odds, scraped_at
 
     Note: The Odds API game IDs are NOT MLB game_pk values.
-          You must match games by team + date to link to game_pk.
+          You must match games by team + start time to link to game_pk.
     """
+    # Re-validate at the only paid-request boundary. This makes an accidental
+    # direct caller fail closed before requests.get can consume quota.
+    if not upcoming_game_pks:
+        raise ValueError("Refusing Odds API request without upcoming unstarted MLB games")
+
     api_key = _get_api_key()
 
     if books is None:
         books = list(DEFAULT_BOOKS)
 
-    markets = "h2h,spreads,totals"
     bookmakers_str = ",".join(books)
 
     params = {
         "apiKey": api_key,
         "regions": "us",
-        "markets": markets,
+        "markets": ",".join(MARKETS),
         "bookmakers": bookmakers_str,
         "oddsFormat": "american",
     }
@@ -103,10 +184,15 @@ def fetch_odds(books: list[str] | None = None) -> pd.DataFrame:
     resp = requests.get(f"{ODDS_API_BASE}/{SPORT}/odds", params=params, timeout=15)
     resp.raise_for_status()
 
-    # Log remaining API credits
-    remaining = resp.headers.get("x-requests-remaining", "?")
-    used = resp.headers.get("x-requests-used", "?")
-    print(f"Odds API credits - used: {used}, remaining: {remaining}")
+    retrieved_at = datetime.now(timezone.utc).isoformat()
+    quota = _capture_quota_state(resp, retrieved_at)
+    print(
+        "Odds API quota - "
+        f"last: {quota['x-requests-last']}, "
+        f"used: {quota['x-requests-used']}, "
+        f"remaining: {quota['x-requests-remaining']}, "
+        f"retrieved_at: {quota['retrieved_at']}"
+    )
 
     events = resp.json()
     rows = []
@@ -161,7 +247,7 @@ def fetch_odds(books: list[str] | None = None) -> pd.DataFrame:
                     "commence_time": commence,
                     "team": team,
                     **data,
-                    "scraped_at": datetime.now(timezone.utc).isoformat(),
+                    "scraped_at": retrieved_at,
                 })
 
     df = pd.DataFrame(rows)
@@ -170,35 +256,7 @@ def fetch_odds(books: list[str] | None = None) -> pd.DataFrame:
         # Parse commence_time to extract game_date for matching
         df["game_date"] = pd.to_datetime(df["commence_time"]).dt.date
 
+    # DataFrame.attrs exposes the headers to normal callers without adding
+    # provider metadata columns to the stable odds-table contract.
+    df.attrs["quota"] = quota
     return df
-
-
-def check_remaining_credits() -> dict:
-    """Check remaining API credits. Costs one h2h-only call on The Odds API."""
-    api_key = _get_api_key()
-    resp = requests.get(
-        f"{ODDS_API_BASE}/{SPORT}/odds",
-        params={"apiKey": api_key, "regions": "us", "markets": "h2h"},
-        timeout=10,
-    )
-    return {
-        "used": resp.headers.get("x-requests-used", "?"),
-        "remaining": resp.headers.get("x-requests-remaining", "?"),
-    }
-
-
-if __name__ == "__main__":
-    print("=== MLB Odds ===")
-    try:
-        odds = fetch_odds()
-        if not odds.empty:
-            display_cols = ["team", "book", "moneyline", "spread", "spread_odds", "total", "game_date"]
-            available = [c for c in display_cols if c in odds.columns]
-            print(odds[available].head(20).to_string(index=False))
-            print(f"\nTotal rows: {len(odds)}")
-        else:
-            print("No odds data available.")
-    except ValueError as e:
-        print(f"Configuration error: {e}")
-    except requests.RequestException as e:
-        print(f"API error: {e}")
