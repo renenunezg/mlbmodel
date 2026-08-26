@@ -1,9 +1,10 @@
 """MLB model daily pipeline. Usage: python pipeline.py [nightly]"""
 
+import os
 import time
 import traceback
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pandas as pd
 from sqlalchemy import text
@@ -17,7 +18,10 @@ from backend.data.fangraphs import fetch_pitcher_stats, fetch_bullpen_stats, fet
 from backend.data.bullpen_daily import update_bullpen_daily
 from backend.data.weather import update_weather_for_date
 from backend.data.savant import fetch_park_factors
-from backend.data.odds_api import fetch_odds
+from backend.data.odds_api import (
+    fetch_odds,
+    latest_quota_state,
+)
 
 
 def _timed(label, fn):
@@ -204,60 +208,160 @@ def fetch_and_load_park_factors():
     print(f"  {len(df)} park factors loaded")
 
 
-def fetch_and_load_odds():
-    """Fetch odds and match to game_pk via team name + nearest start_time (doubleheader tiebreak)."""
-    odds = fetch_odds()
-    if odds.empty:
-        print("  No odds data from API")
-        return
-
-    today = date.today()
-    tomorrow = today + timedelta(days=1)
-
+def _upcoming_games(target_date: date) -> pd.DataFrame:
     with engine.connect() as conn:
-        games = pd.read_sql(
-            text("SELECT game_pk, game_date, home_team, away_team, start_time FROM games WHERE game_date IN (:d1, :d2)"),
+        return pd.read_sql(
+            text("""
+                SELECT game_pk, game_date, home_team, away_team, start_time
+                FROM games
+                WHERE game_date = :target_date
+                  AND home_score IS NULL
+                  AND start_time IS NOT NULL
+                  AND start_time > NOW()
+                  AND LOWER(COALESCE(status, '')) NOT IN ('final', 'cancelled', 'postponed')
+                ORDER BY game_date, start_time, game_pk
+            """),
             conn,
-            params={"d1": str(today), "d2": str(tomorrow)},
+            params={"target_date": target_date.isoformat()},
         )
 
-    if games.empty:
-        print("  No games in DB to match odds against")
-        return
 
-    # Build team -> [(game_pk, start_time), ...] for time-aware matching
+def _has_recent_stored_odds(game_pks: list[int], cutoff: datetime) -> bool:
+    if not game_pks:
+        return False
+    with engine.connect() as conn:
+        recent_game_count = conn.execute(
+            text("""
+                SELECT COUNT(DISTINCT complete.game_pk)
+                FROM (
+                    SELECT o.game_pk, o.book
+                    FROM odds o
+                    JOIN games g USING (game_pk)
+                    WHERE o.game_pk = ANY(:game_pks)
+                      AND o.scraped_at >= :cutoff
+                      AND o.team IN (g.home_team, g.away_team)
+                    GROUP BY o.game_pk, o.book
+                    HAVING COUNT(DISTINCT o.team) = 2
+                       AND BOOL_AND(o.moneyline IS NOT NULL)
+                       AND BOOL_AND(o.spread IS NOT NULL)
+                       AND BOOL_AND(o.spread_odds IS NOT NULL)
+                       AND BOOL_AND(o.total IS NOT NULL)
+                       AND BOOL_AND(o.total_over_odds IS NOT NULL)
+                       AND BOOL_AND(o.total_under_odds IS NOT NULL)
+                ) complete
+            """),
+            {"game_pks": game_pks, "cutoff": cutoff},
+        ).scalar()
+        return int(recent_game_count or 0) == len(game_pks)
+
+
+def _replace_odds(insert_df: pd.DataFrame) -> None:
+    game_pks = insert_df["game_pk"].unique().tolist()
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM odds WHERE game_pk = ANY(:pks)"), {"pks": game_pks})
+        insert_df.to_sql("odds", conn, if_exists="append", index=False)
+
+
+def _nonnegative_env_int(name: str, default: int) -> int:
+    raw = os.getenv(name, str(default))
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer, got {raw!r}") from exc
+    if value < 0:
+        raise ValueError(f"{name} must be non-negative, got {value}")
+    return value
+
+
+def _reserve_blocks_optional_refresh() -> bool:
+    quota = latest_quota_state()
+    if not quota:
+        print("  No persisted Odds API quota state; allowing fallback refresh")
+        return False
+
+    remaining = quota.get("x-requests-remaining")
+    last_cost = quota.get("x-requests-last")
+    if not isinstance(remaining, int):
+        print("  Persisted Odds API remaining quota is unknown; allowing fallback refresh")
+        return False
+    if not isinstance(last_cost, int) or last_cost <= 0:
+        last_cost = 3
+
+    # This repository-local snapshot cannot coordinate simultaneous CFB or NFL
+    # consumers. Account-wide safety requires a shared durable ledger and lock.
+    reserve = _nonnegative_env_int("ODDS_API_RESERVE_CREDITS", 50)
+    projected = remaining - last_cost
+    if projected < reserve:
+        print(
+            "  Skipping optional Odds API refresh: "
+            f"remaining={remaining}, expected_cost={last_cost}, reserve={reserve}"
+        )
+        return True
+    return False
+
+
+def fetch_and_load_odds(
+    target_date: date | str | None = None,
+    *,
+    optional: bool = False,
+) -> int:
+    """Load odds for one schedule-backed date, skipping safe duplicates."""
+    if target_date is None:
+        target_date = date.today()
+    elif isinstance(target_date, str):
+        target_date = date.fromisoformat(target_date)
+
+    games = _upcoming_games(target_date)
+    now = datetime.now(timezone.utc)
+    if games.empty:
+        print(f"  No upcoming unstarted games on {target_date}; no Odds API request")
+        return 0
+
+    game_pks = sorted({int(pk) for pk in games["game_pk"]})
+    upcoming_game_pks = tuple(game_pks)
+
+    if optional:
+        cutoff = now - timedelta(hours=3)
+        if _has_recent_stored_odds(game_pks, cutoff):
+            print("  Skipping optional Odds API refresh: fresh odds already persisted for this window")
+            return 0
+        if _reserve_blocks_optional_refresh():
+            return 0
+
+    odds = fetch_odds(upcoming_game_pks)
+    if odds.empty:
+        print("  No odds data from API")
+        return 0
+
     team_games = defaultdict(list)
-    for _, g in games.iterrows():
-        entry = (int(g["game_pk"]), g.get("start_time"))
-        team_games[g["home_team"]].append(entry)
-        team_games[g["away_team"]].append(entry)
+    for game in games.itertuples(index=False):
+        entry = (int(game.game_pk), game.start_time)
+        team_games[game.home_team].append(entry)
+        team_games[game.away_team].append(entry)
 
     def _match_game_pk(team, commence_time):
         candidates = team_games.get(team, [])
         if not candidates:
             return None
-        if len(candidates) == 1:
-            return candidates[0][0]
         if pd.notna(commence_time):
-            ct = pd.to_datetime(commence_time)
-            best_pk, best_diff = None, None
-            for pk, st in candidates:
-                if pd.notna(st):
-                    diff = abs((pd.to_datetime(st) - ct).total_seconds())
-                    if best_diff is None or diff < best_diff:
-                        best_pk, best_diff = pk, diff
-            if best_pk is not None:
-                return best_pk
+            commence = pd.to_datetime(commence_time, utc=True)
+            timed = [
+                (abs((pd.to_datetime(start, utc=True) - commence).total_seconds()), game_pk)
+                for game_pk, start in candidates
+                if pd.notna(start)
+            ]
+            if timed:
+                difference, game_pk = min(timed)
+                return game_pk if difference <= 90 * 60 else None
         return candidates[-1][0]
 
     odds["game_pk"] = odds.apply(
         lambda row: _match_game_pk(row["team"], row.get("commence_time")), axis=1
     )
-
     matched = odds.dropna(subset=["game_pk"])
     if matched.empty:
         print("  Could not match any odds to games")
-        return
+        return 0
 
     matched = matched.copy()
     matched["game_pk"] = matched["game_pk"].astype(int)
@@ -272,12 +376,9 @@ def fetch_and_load_odds():
     key_cols = [c for c in ["game_pk", "team", "book"] if c in insert_df.columns]
     insert_df = insert_df.drop_duplicates(subset=key_cols, keep="last")
 
-    game_pks = insert_df["game_pk"].unique().tolist()
-    with engine.begin() as conn:
-        conn.execute(text("DELETE FROM odds WHERE game_pk = ANY(:pks)"), {"pks": game_pks})
-        insert_df.to_sql("odds", conn, if_exists="append", index=False)
-
-    print(f"  {len(insert_df)} odds rows for {len(game_pks)} games")
+    _replace_odds(insert_df)
+    print(f"  {len(insert_df)} odds rows for {insert_df['game_pk'].nunique()} games")
+    return len(insert_df)
 
 
 _model_artifacts = {}
@@ -321,7 +422,6 @@ STEPS = [
 NIGHTLY_STEPS = [
     ("Schedule & scores", update_scores_and_schedule),
     ("Bullpen daily", update_bullpen_daily),
-    ("Odds", fetch_and_load_odds),
     ("Weather", update_weather),
     ("Evaluation", run_evaluation),
 ]

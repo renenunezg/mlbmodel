@@ -7,7 +7,9 @@ write=False so it doesn't touch model_outputs.
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import Mock
 
+import pandas as pd
 import pytest
 
 from v2.bayesian._common import POSTERIORS_DIR
@@ -111,3 +113,124 @@ def test_market_research_inputs_are_paired_and_pregame():
     assert (games["home_prediction_at"] < games["start_time"]).all()
     assert (games["away_prediction_at"] < games["start_time"]).all()
     assert games["home_market_prob"].between(0, 1, inclusive="neither").all()
+
+
+def _odds_response(remaining: int) -> Mock:
+    response = Mock()
+    response.headers = {
+        "x-requests-last": "3",
+        "x-requests-used": "103",
+        "x-requests-remaining": str(remaining),
+    }
+    response.json.return_value = [{
+        "id": "odds-event-1",
+        "home_team": "Los Angeles Dodgers",
+        "away_team": "San Diego Padres",
+        "commence_time": "2026-08-27T02:10:00Z",
+        "bookmakers": [{
+            "key": "draftkings",
+            "markets": [
+                {"key": "h2h", "outcomes": [
+                    {"name": "Los Angeles Dodgers", "price": -145},
+                    {"name": "San Diego Padres", "price": 125},
+                ]},
+                {"key": "spreads", "outcomes": [
+                    {"name": "Los Angeles Dodgers", "price": -105, "point": -1.5},
+                    {"name": "San Diego Padres", "price": -115, "point": 1.5},
+                ]},
+                {"key": "totals", "outcomes": [
+                    {"name": "Over", "price": -110, "point": 8.5},
+                    {"name": "Under", "price": -110, "point": 8.5},
+                ]},
+            ],
+        }],
+    }]
+    return response
+
+
+def test_odds_refresh_routes_and_quota_contract(monkeypatch, tmp_path):
+    import pipeline
+    from backend.data import odds_api
+    from v2.pipeline import daily_run
+
+    slate = pd.DataFrame([{
+        "game_pk": 1001,
+        "game_date": "2026-08-27",
+        "home_team": "LAD",
+        "away_team": "SDP",
+        "start_time": pd.Timestamp("2026-08-27T02:10:00Z"),
+    }])
+    monkeypatch.setenv("ODDS_API_KEY", "test-key")
+    monkeypatch.setenv("ODDS_API_STATE_PATH", str(tmp_path / "odds_api_state.json"))
+    monkeypatch.setattr(pipeline, "_upcoming_games", lambda *_: slate)
+    fresh_odds = Mock(return_value=False)
+    monkeypatch.setattr(pipeline, "_has_recent_stored_odds", fresh_odds)
+    stored = []
+    monkeypatch.setattr(pipeline, "_replace_odds", lambda frame: stored.append(frame.copy()))
+    fetched = []
+    real_fetch_odds = pipeline.fetch_odds
+    monkeypatch.setattr(
+        pipeline,
+        "fetch_odds",
+        lambda game_pks: fetched.append(real_fetch_odds(game_pks)) or fetched[-1],
+    )
+    provider_get = Mock(side_effect=[_odds_response(397), _odds_response(52)])
+    monkeypatch.setattr(odds_api.requests, "get", provider_get)
+
+    monkeypatch.setattr(daily_run, "update_scores_and_schedule", lambda: None)
+    monkeypatch.setattr(daily_run, "update_bullpen_daily", lambda: None)
+    monkeypatch.setattr(daily_run, "update_weather_for_date", lambda *_: None)
+    monkeypatch.setattr(daily_run, "score", lambda *_args, **_kwargs: pd.DataFrame())
+    nightly_names = [name for name, _ in pipeline.NIGHTLY_STEPS]
+    assert "Odds" not in nightly_names
+    monkeypatch.setattr(pipeline, "NIGHTLY_STEPS", [(name, lambda: None) for name in nightly_names])
+
+    def run_daily(*extra_args):
+        monkeypatch.setattr(
+            "sys.argv",
+            ["daily_run", "--date", "2026-08-27", "--n-sims", "1", *extra_args],
+        )
+        with pytest.raises(SystemExit) as exc:
+            daily_run.main()
+        assert exc.value.code == 0
+
+    assert pipeline.nightly() == []
+    run_daily()
+    assert provider_get.call_count == 1
+
+    fresh_odds.return_value = True
+    run_daily("--optional-odds-refresh")
+    assert provider_get.call_count == 1
+
+    run_daily()
+    assert provider_get.call_count == 2
+    assert all(call.kwargs["params"]["markets"] == "h2h,spreads,totals" for call in provider_get.call_args_list)
+
+    fresh_odds.return_value = False
+    monkeypatch.setenv("ODDS_API_RESERVE_CREDITS", "50")
+    run_daily("--optional-odds-refresh")
+    assert provider_get.call_count == 2
+
+    quota = odds_api.latest_quota_state()
+    assert {key: quota[key] for key in (
+        "x-requests-last", "x-requests-used", "x-requests-remaining"
+    )} == {"x-requests-last": 3, "x-requests-used": 103, "x-requests-remaining": 52}
+    assert quota["retrieved_at"].endswith("+00:00")
+    assert fetched[-1].attrs["quota"] == quota
+    assert set(("moneyline", "spread", "spread_odds", "total", "total_over_odds", "total_under_odds")) <= set(stored[0])
+    assert stored[0]["moneyline"].tolist() == [-145, 125]
+    assert stored[0]["total"].tolist() == [8.5, 8.5]
+
+
+def test_no_game_route_makes_no_provider_request(monkeypatch, tmp_path):
+    import pipeline
+    from backend.data import odds_api
+
+    monkeypatch.setenv("ODDS_API_STATE_PATH", str(tmp_path / "odds_api_state.json"))
+    monkeypatch.setattr(pipeline, "_upcoming_games", lambda *_: pd.DataFrame())
+    provider_get = Mock()
+    monkeypatch.setattr(odds_api.requests, "get", provider_get)
+
+    assert pipeline.fetch_and_load_odds("2026-08-27") == 0
+    provider_get.assert_not_called()
+    assert odds_api.latest_quota_state() is None

@@ -8,14 +8,18 @@ on:
     types: [nightly-eval]
   schedule:
     # Backup only: once-daily safety net at 1:37 AM PT (08:37 UTC) in case the
-    # pg_cron dispatch misses. Runs are idempotent and serialized by concurrency,
-    # so a double-run with the dispatch is harmless.
+    # pg_cron dispatch misses. GitHub's workflow history prevents a duplicate
+    # run after the primary dispatch succeeds.
     - cron: "37 8 * * *"
   workflow_dispatch:
 
 concurrency:
   group: nightly-eval
   cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
 
 jobs:
   nightly:
@@ -35,6 +39,14 @@ jobs:
           restore-keys: |
             statcast-${{ runner.os }}-
 
+      - name: Restore Odds API state
+        uses: actions/cache/restore@v4
+        with:
+          path: cache/odds_api_state.json
+          key: odds-api-state-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            odds-api-state-${{ runner.os }}-
+
       - name: Restore posteriors
         uses: actions/cache@v4
         with:
@@ -52,16 +64,44 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt -r v2/requirements.txt && pip install -e .
 
+      - name: Check whether the scheduled fallback is needed
+        id: fallback
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" != "schedule" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          else
+            logical_date="$(date -u +%F)"
+            completed="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/nightly-eval.yml/runs?event=repository_dispatch&status=success&created=${logical_date}&per_page=1" --jq '.total_count')"
+            if [ "$completed" -gt 0 ]; then
+              echo "should_run=false" >> "$GITHUB_OUTPUT"
+              echo "Primary nightly route already completed for ${logical_date}."
+            else
+              echo "should_run=true" >> "$GITHUB_OUTPUT"
+              echo "No successful primary nightly route found; running the fallback."
+            fi
+          fi
+
       - name: Run evaluation on completed games
+        if: steps.fallback.outputs.should_run == 'true'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
           PYTHONPATH: "."
         run: python pipeline.py nightly
 
-      - name: Score tomorrow's games with v2
+      - name: Score the current slate with v2
+        if: steps.fallback.outputs.should_run == 'true'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          ODDS_API_RESERVE_CREDITS: ${{ vars.ODDS_API_RESERVE_CREDITS || '50' }}
           PYTHONPATH: "."
-        run: python -m v2.pipeline.daily_run
+        run: python -m v2.pipeline.daily_run ${{ github.event_name == 'schedule' && '--optional-odds-refresh' || '' }}
+
+      - name: Persist Odds API state
+        if: ${{ always() && hashFiles('cache/odds_api_state.json') != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: cache/odds_api_state.json
+          key: odds-api-state-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}

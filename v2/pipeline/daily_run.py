@@ -1,4 +1,4 @@
-"""Morning orchestrator for v2 daily scoring pipeline.
+"""Daily orchestrator for the v2 scoring pipeline.
 
 Sequence:
   1. Refresh schedule + scores
@@ -17,7 +17,6 @@ import sys
 from datetime import date
 
 from backend.data.bullpen_daily import update_bullpen_daily
-from backend.data.odds_api import fetch_odds
 from backend.data.weather import update_weather_for_date
 from pipeline import fetch_and_load_odds, update_scores_and_schedule
 from v2.pipeline.score_games import score
@@ -28,8 +27,9 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--date", default=str(date.today()))
     ap.add_argument("--n-sims", type=int, default=10000)
+    ap.add_argument("--optional-odds-refresh", action="store_true")
     args = ap.parse_args()
-
+    target_date = date.fromisoformat(args.date)
     print(f"[daily_run] date={args.date}")
 
     print("[daily_run] step 1: schedule + scores")
@@ -39,10 +39,10 @@ def main() -> None:
     update_bullpen_daily()
 
     print("[daily_run] step 3: odds")
-    fetch_and_load_odds()
+    fetch_and_load_odds(target_date, optional=args.optional_odds_refresh)
 
     print("[daily_run] step 3b: weather")
-    update_weather_for_date(date.fromisoformat(args.date))
+    update_weather_for_date(target_date)
 
     print(f"[daily_run] step 4: scoring {args.date}")
     rows = score(args.date, n_sims=args.n_sims, write=True)
