@@ -9,6 +9,7 @@ those get is_dome=True and a zero wind component.
 """
 from __future__ import annotations
 
+import logging
 import re
 import time
 from datetime import date
@@ -17,6 +18,8 @@ import requests
 from sqlalchemy import text
 
 from backend.db import engine
+
+log = logging.getLogger(__name__)
 
 FEED_URL = "https://statsapi.mlb.com/api/v1.1/game/{pk}/feed/live"
 
@@ -119,7 +122,7 @@ def fetch_weather(game_pk: int) -> dict | None:
             return None
         row = _parse_weather(wx)
     except (requests.RequestException, ValueError) as e:
-        print(f"  fetch_weather({game_pk}) failed: {e}")
+        log.warning(f"fetch_weather({game_pk}) failed: {e}")
         return None
     with engine.begin() as conn:
         conn.execute(_UPSERT, {"game_pk": int(game_pk), **row})
@@ -135,7 +138,7 @@ def update_weather_for_date(d: date) -> int:
         engine, params={"d": d},
     )
     n = sum(fetch_weather(int(gp)) is not None for gp in games["game_pk"])
-    print(f"  update_weather_for_date {d}: {n}/{len(games)} games")
+    log.info(f"update_weather_for_date {d}: {n}/{len(games)} games")
     return n
 
 
@@ -152,5 +155,5 @@ def backfill_weather(start: date, end: date, sleep: float = 0.05) -> int:
         if fetch_weather(gp) is not None:
             n += 1
         time.sleep(sleep)
-    print(f"  backfill_weather {start}..{end}: {n}/{len(games)} games populated")
+    log.info(f"backfill_weather {start}..{end}: {n}/{len(games)} games populated")
     return n

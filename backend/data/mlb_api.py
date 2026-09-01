@@ -1,10 +1,16 @@
 """MLB Stats API fetchers: schedule, scores, probable starters, lineups, batting splits."""
 
-import statsapi
+import logging
+from datetime import date, timedelta
+
 import pandas as pd
 import requests
-from datetime import date, timedelta
+import statsapi
+
+from backend.log import setup_logging
 from backend.team_mappings import normalize_team
+
+log = logging.getLogger(__name__)
 
 BASE_URL = "https://statsapi.mlb.com/api/v1"
 
@@ -25,7 +31,7 @@ def _fetch_pitcher_handedness(pitcher_id: int) -> str | None:
             _handedness_cache[pitcher_id] = hand
         return hand
     except Exception as e:
-        print(f"  Handedness fetch failed for pitcher {pitcher_id}: {e}")
+        log.warning(f"Handedness fetch failed for pitcher {pitcher_id}: {e}")
         return None
 
 
@@ -45,7 +51,7 @@ def _batch_fetch_handedness(pitcher_ids: list[int]) -> dict[int, str]:
             if pid and hand:
                 _handedness_cache[pid] = hand
     except Exception as e:
-        print(f"Batch handedness fetch failed: {e}")
+        log.warning(f"Batch handedness fetch failed: {e}")
 
     return _handedness_cache
 
@@ -261,7 +267,7 @@ def fetch_active_pitchers(team_id: int) -> list[int]:
         resp.raise_for_status()
         roster = resp.json().get("roster", [])
     except Exception as e:
-        print(f"  fetch_active_pitchers({team_id}) failed: {e}")
+        log.warning(f"fetch_active_pitchers({team_id}) failed: {e}")
         return []
 
     ids = [
@@ -313,7 +319,7 @@ def fetch_batting_splits(season: int = None, split: str = "vs_rhp") -> pd.DataFr
             },
         )
     except Exception as e:
-        print(f"  statsapi.get failed, falling back to direct request: {e}")
+        log.warning(f"statsapi.get failed, falling back to direct request: {e}")
         resp = requests.get(f"{BASE_URL}/teams/stats", params=params, timeout=15)
         resp.raise_for_status()
         stats_data = resp.json()
@@ -330,10 +336,7 @@ def fetch_batting_splits(season: int = None, split: str = "vs_rhp") -> pd.DataFr
             bb = int(stat.get("baseOnBalls", 0))
             so = int(stat.get("strikeOuts", 0))
             hits = int(stat.get("hits", 0))
-            doubles = int(stat.get("doubles", 0))
-            triples = int(stat.get("triples", 0))
             hr = int(stat.get("homeRuns", 0))
-            singles = hits - doubles - triples - hr
 
             obp = float(stat.get("obp", 0))
             slg = float(stat.get("slg", 0))
@@ -372,6 +375,7 @@ def fetch_batting_splits(season: int = None, split: str = "vs_rhp") -> pd.DataFr
 
 
 if __name__ == "__main__":
+    setup_logging()
     print("=== Today's Schedule ===")
     sched = fetch_schedule()
     if not sched.empty:

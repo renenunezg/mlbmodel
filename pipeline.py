@@ -1,33 +1,33 @@
 """MLB model daily pipeline. Usage: python pipeline.py [nightly]"""
 
+import logging
 import os
 import time
-import traceback
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import pandas as pd
 from sqlalchemy import text
-from dotenv import load_dotenv
 
-load_dotenv()
-
-from backend.db import engine
-from backend.data.mlb_api import fetch_schedule, fetch_probable_starters
-from backend.data.fangraphs import fetch_pitcher_stats, fetch_bullpen_stats, fetch_team_batting
 from backend.data.bullpen_daily import update_bullpen_daily
-from backend.data.weather import update_weather_for_date
-from backend.data.savant import fetch_park_factors
+from backend.data.fangraphs import fetch_bullpen_stats, fetch_pitcher_stats, fetch_team_batting
+from backend.data.mlb_api import fetch_probable_starters, fetch_schedule
 from backend.data.odds_api import (
     fetch_odds,
     latest_quota_state,
 )
+from backend.data.savant import fetch_park_factors
+from backend.data.weather import update_weather_for_date
+from backend.db import engine
+from backend.log import setup_logging
+
+log = logging.getLogger(__name__)
 
 
 def _timed(label, fn):
     t0 = time.time()
     result = fn()
-    print(f"  [{time.time() - t0:.1f}s] {label}")
+    log.info(f"[{time.time() - t0:.1f}s] {label}")
     return result
 
 
@@ -85,7 +85,7 @@ def update_scores_and_schedule():
             schedules[d] = sched
 
     if not schedules:
-        print("  No schedule data returned for any date")
+        log.info("No schedule data returned for any date")
         return
 
     # Upsert all games and update scores in one transaction
@@ -114,16 +114,16 @@ def update_scores_and_schedule():
                     score_updates += result.rowcount
 
     total_games = sum(len(s) for s in schedules.values())
-    print(f"  {total_games} games upserted across {len(schedules)} dates, {score_updates} scores finalized")
+    log.info(f"{total_games} games upserted across {len(schedules)} dates, {score_updates} scores finalized")
 
     # Refresh probable starters
     starters = fetch_probable_starters(days_ahead=2)
     if starters.empty:
-        print("  No probable starters announced")
+        log.info("No probable starters announced")
         return
 
     n = upsert_probable_starters(starters)
-    print(f"  {n} probable starters refreshed" if n else "  No starters matched to games in DB")
+    log.info(f"{n} probable starters refreshed" if n else "No starters matched to games in DB")
 
 
 def upsert_probable_starters(starters: pd.DataFrame) -> int:
@@ -169,23 +169,23 @@ def fetch_statcast_stats():
     pitchers = fetch_pitcher_stats()
     if not pitchers.empty:
         _truncate_and_load("pitcher_stats", pitchers)
-        print(f"  {len(pitchers)} pitcher stats")
+        log.info(f"{len(pitchers)} pitcher stats")
     else:
-        print("  No pitcher stats (Statcast may not have data yet)")
+        log.info("No pitcher stats (Statcast may not have data yet)")
 
     bullpen = fetch_bullpen_stats()
     if not bullpen.empty:
         _truncate_and_load("bullpen_stats", bullpen)
-        print(f"  {len(bullpen)} bullpen team stats")
+        log.info(f"{len(bullpen)} bullpen team stats")
     else:
-        print("  No bullpen stats")
+        log.info("No bullpen stats")
 
     batting = fetch_team_batting()
     if not batting.empty:
         _truncate_and_load("team_batting", batting)
-        print(f"  {len(batting)} team batting rows")
+        log.info(f"{len(batting)} team batting rows")
     else:
-        print("  No batting stats")
+        log.info("No batting stats")
 
 
 def fetch_and_load_park_factors():
@@ -193,19 +193,19 @@ def fetch_and_load_park_factors():
         count = conn.execute(text("SELECT count(*) FROM park_factors")).scalar()
 
     if count >= 28:
-        print(f"  Already loaded ({count} rows)")
+        log.info(f"Already loaded ({count} rows)")
         return
 
     df = fetch_park_factors()
     if df.empty:
-        print("  No park factors available")
+        log.info("No park factors available")
         return
 
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM park_factors"))
         df.to_sql("park_factors", conn, if_exists="append", index=False)
 
-    print(f"  {len(df)} park factors loaded")
+    log.info(f"{len(df)} park factors loaded")
 
 
 def _upcoming_games(target_date: date) -> pd.DataFrame:
@@ -276,13 +276,13 @@ def _nonnegative_env_int(name: str, default: int) -> int:
 def _reserve_blocks_optional_refresh() -> bool:
     quota = latest_quota_state()
     if not quota:
-        print("  No persisted Odds API quota state; allowing fallback refresh")
+        log.info("No persisted Odds API quota state; allowing fallback refresh")
         return False
 
     remaining = quota.get("x-requests-remaining")
     last_cost = quota.get("x-requests-last")
     if not isinstance(remaining, int):
-        print("  Persisted Odds API remaining quota is unknown; allowing fallback refresh")
+        log.info("Persisted Odds API remaining quota is unknown; allowing fallback refresh")
         return False
     if not isinstance(last_cost, int) or last_cost <= 0:
         last_cost = 3
@@ -292,8 +292,8 @@ def _reserve_blocks_optional_refresh() -> bool:
     reserve = _nonnegative_env_int("ODDS_API_RESERVE_CREDITS", 50)
     projected = remaining - last_cost
     if projected < reserve:
-        print(
-            "  Skipping optional Odds API refresh: "
+        log.info(
+            "Skipping optional Odds API refresh: "
             f"remaining={remaining}, expected_cost={last_cost}, reserve={reserve}"
         )
         return True
@@ -312,9 +312,9 @@ def fetch_and_load_odds(
         target_date = date.fromisoformat(target_date)
 
     games = _upcoming_games(target_date)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if games.empty:
-        print(f"  No upcoming unstarted games on {target_date}; no Odds API request")
+        log.info(f"No upcoming unstarted games on {target_date}; no Odds API request")
         return 0
 
     game_pks = sorted({int(pk) for pk in games["game_pk"]})
@@ -323,14 +323,14 @@ def fetch_and_load_odds(
     if optional:
         cutoff = now - timedelta(hours=3)
         if _has_recent_stored_odds(game_pks, cutoff):
-            print("  Skipping optional Odds API refresh: fresh odds already persisted for this window")
+            log.info("Skipping optional Odds API refresh: fresh odds already persisted for this window")
             return 0
         if _reserve_blocks_optional_refresh():
             return 0
 
     odds = fetch_odds(upcoming_game_pks)
     if odds.empty:
-        print("  No odds data from API")
+        log.info("No odds data from API")
         return 0
 
     team_games = defaultdict(list)
@@ -360,7 +360,7 @@ def fetch_and_load_odds(
     )
     matched = odds.dropna(subset=["game_pk"])
     if matched.empty:
-        print("  Could not match any odds to games")
+        log.warning("Could not match any odds to games")
         return 0
 
     matched = matched.copy()
@@ -377,26 +377,13 @@ def fetch_and_load_odds(
     insert_df = insert_df.drop_duplicates(subset=key_cols, keep="last")
 
     _replace_odds(insert_df)
-    print(f"  {len(insert_df)} odds rows for {insert_df['game_pk'].nunique()} games")
+    log.info(f"{len(insert_df)} odds rows for {insert_df['game_pk'].nunique()} games")
     return len(insert_df)
-
-
-_model_artifacts = {}
-
-def run_model():
-    from backend.model import main as model_main
-    result = model_main()
-    if result:
-        _model_artifacts.update(result)
 
 
 def run_evaluation():
     from backend.evaluate_model import main as eval_main
-    eval_main(
-        model=_model_artifacts.get("model"),
-        cv_metrics=_model_artifacts.get("cv_metrics"),
-        best_params=_model_artifacts.get("best_params"),
-    )
+    eval_main()
 
 
 def update_weather():
@@ -413,7 +400,6 @@ STEPS = [
     ("Park factors", fetch_and_load_park_factors),
     ("Odds", fetch_and_load_odds),
     ("Weather", update_weather),
-    ("Model", run_model),
     ("Evaluation", run_evaluation),
 ]
 
@@ -431,37 +417,34 @@ def _run_steps(steps):
     t0 = time.time()
     failed = []
     for name, fn in steps:
-        print(f"\n>> {name}")
+        log.info(f"step: {name}")
         try:
             step_t0 = time.time()
             fn()
-            print(f"   done ({time.time() - step_t0:.1f}s)")
-        except Exception as e:
-            print(f"   FAILED: {e}")
-            traceback.print_exc()
+            log.info(f"{name} done in {time.time() - step_t0:.1f}s")
+        except Exception:
+            log.exception(f"{name} failed")
             failed.append(name)
     elapsed = time.time() - t0
-    print(f"\n{'=' * 50}")
     if failed:
-        print(f"Pipeline finished in {elapsed:.0f}s with {len(failed)} error(s): {', '.join(failed)}")
+        log.warning(f"Pipeline finished in {elapsed:.0f}s with {len(failed)} error(s): {', '.join(failed)}")
     else:
-        print(f"Pipeline finished in {elapsed:.0f}s - all steps OK")
+        log.info(f"Pipeline finished in {elapsed:.0f}s - all steps OK")
     return failed
 
 
 def main():
-    print(f"MLB Pipeline - {date.today()}")
-    print("=" * 50)
+    log.info(f"MLB pipeline - {date.today()}")
     return _run_steps(STEPS)
 
 
 def nightly():
-    print(f"MLB Nightly - {date.today()}")
-    print("=" * 50)
+    log.info(f"MLB nightly - {date.today()}")
     return _run_steps(NIGHTLY_STEPS)
 
 
 if __name__ == "__main__":
+    setup_logging()
     import sys
     mode = sys.argv[1] if len(sys.argv) > 1 else "full"
     if mode == "nightly":

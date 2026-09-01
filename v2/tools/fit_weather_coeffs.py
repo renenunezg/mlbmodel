@@ -101,7 +101,7 @@ def main():
               f"| {coef['is_dome']:+.3f} ({pval['is_dome']:.3f}) "
               f"| {100*y.mean():.2f}")
 
-    print("\n# paste into v2/simulator/weather_effects.py (after rene checkpoint):")
+    print("\n# paste into v2/simulator/weather_effects.py :")
     print("WEATHER_COEF = {")
     for tgt, c in out.items():
         print(f'    "{tgt}": {{"wind_signal": {c["wind_signal"]:+.6f}, '

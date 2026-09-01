@@ -1,10 +1,8 @@
 """Sample-based market probabilities and percentile bands.
 
-Phase 5 derives ML / RL / totals probabilities directly from the simulator's
-(home_runs, away_runs) sample arrays rather than refitting an analytic NB. The
-empirical approach uses the simulator's actual variance structure (which Phase 4
-already calibrated to within 5% of MLB norms) and naturally produces the
-percentile columns p10/p50/p90 in the v2 schema.
+ML / RL / totals probabilities come straight from the simulator's
+(home_runs, away_runs) sample arrays rather than an analytic fit, so they carry
+the simulator's own variance structure and yield the p10/p50/p90 columns directly.
 
 Pushes (home_runs - away_runs == -spread, or total == line) only happen at
 integer spreads/lines, which are rare in MLB. When they occur the push mass is

@@ -2,7 +2,7 @@
 
 Reuses backend.kelly + backend.simulation.american_to_prob + backend.strategy.EV_THRESHOLDS.
 Behavior intentionally mirrors v1's text-flag conventions ("No Play", "Over",
-"Under", or team code) so the existing frontend renders v2 rows without changes.
+"Under", or team code) so the site renders v2 rows without changes.
 """
 from __future__ import annotations
 
@@ -17,7 +17,6 @@ from backend.strategy import (
     RUNLINE_ENABLED,
     TOTALS_ENABLED,
 )
-
 
 HIGH_VARIANCE_RUNS_STDEV = 4.0
 

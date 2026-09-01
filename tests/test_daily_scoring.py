@@ -1,4 +1,4 @@
-"""Smoke test: end-to-end Phase 5 scoring on a real date.
+"""Smoke test: end-to-end scoring on a real date.
 
 Uses the live Supabase (read-only against games + probable_starters + odds) and
 the 2026 statcast cache. Skips if posteriors aren't built. Always runs with
@@ -90,6 +90,7 @@ def test_score_games_end_to_end():
 def test_is_started_freeze_predicate():
     """The freeze lock: a started game is frozen, a future one isn't, TBD isn't."""
     import pandas as pd
+
     from v2.pipeline.score_games import is_started
 
     now = pd.Timestamp("2026-06-05 12:00:00", tz="UTC")

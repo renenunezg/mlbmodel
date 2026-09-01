@@ -13,13 +13,17 @@ Run as part of: build_advancement_table.py (called there), or standalone:
 from __future__ import annotations
 
 import argparse
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+from backend.log import setup_logging
 from v2.data.pa_dataset import NON_PA_EVENTS
+
+log = logging.getLogger(__name__)
 
 CACHE_DIR = Path(__file__).resolve().parents[2] / "cache"
 TABLES_DIR = Path(__file__).resolve().parent / "tables"
@@ -100,9 +104,10 @@ def main():
     for role, name in (("B", "batters"), ("P", "pitchers")):
         sub = df[df.role == role]
         dist = sub["gb_q"].value_counts().sort_index().to_dict()
-        print(f"  {name}: {len(sub):,}  quartile counts {dist}")
-    print(f"Wrote {TABLES_DIR}/gb_quartiles.parquet")
+        log.info(f"{name}: {len(sub):,}  quartile counts {dist}")
+    log.info(f"Wrote {TABLES_DIR}/gb_quartiles.parquet")
 
 
 if __name__ == "__main__":
+    setup_logging()
     main()

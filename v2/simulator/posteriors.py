@@ -1,4 +1,4 @@
-"""Load Phase 2 NetCDF traces and assemble per-actor offsets for the PA sim.
+"""Load the skill-model NetCDF traces and assemble per-actor offsets for the PA sim.
 
 Reads `batter_skill.nc`, `pitcher_skill.nc`, `park_effects.nc`, takes posterior
 means over (chain, draw), and returns a `PosteriorMeans` dataclass with arrays

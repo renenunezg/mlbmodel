@@ -1,4 +1,3 @@
-from v2.markets.probs import market_probs, runs_percentiles
 from v2.markets.ev import (
     flag_ml,
     flag_runline,
@@ -10,6 +9,7 @@ from v2.markets.ev import (
     our_odds_from_prob,
     rl_confidence,
 )
+from v2.markets.probs import market_probs, runs_percentiles
 from v2.markets.writer import (
     append_season,
     build_game_rows,

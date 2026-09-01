@@ -1,14 +1,16 @@
 """Per-game boxscore → per-team reliever/starter outs into bullpen_daily."""
 from __future__ import annotations
 
+import logging
 import time
 
-import numpy as np
 import pandas as pd
 import requests
 from sqlalchemy import text
 
 from backend.db import engine
+
+log = logging.getLogger(__name__)
 
 BASE_URL = "https://statsapi.mlb.com/api/v1"
 
@@ -51,7 +53,7 @@ def _fetch_boxscore(game_pk: int) -> dict | None:
         resp.raise_for_status()
         data = resp.json()
     except Exception as e:
-        print(f"  game_pk={game_pk}: {e}")
+        log.info(f"game_pk={game_pk}: {e}")
         return None
 
     team_rows = []
@@ -117,10 +119,10 @@ def update_bullpen_daily(sleep: float = 0.05) -> int:
     ]
 
     if todo.empty:
-        print(f"  bullpen_daily already current ({len(games)} games covered)")
+        log.info(f"bullpen_daily already current ({len(games)} games covered)")
         return 0
 
-    print(f"  Fetching boxscores for {len(todo)} games...")
+    log.info(f"Fetching boxscores for {len(todo)} games...")
     team_new = []
     pitcher_new = []
     for i, g in enumerate(todo.itertuples(index=False), 1):
@@ -145,7 +147,7 @@ def update_bullpen_daily(sleep: float = 0.05) -> int:
                     "role": p["role"],
                 })
         if i % 25 == 0:
-            print(f"    {i}/{len(todo)}")
+            log.info(f"{i}/{len(todo)}")
         time.sleep(sleep)
 
     if not team_new:
@@ -205,5 +207,5 @@ def update_bullpen_daily(sleep: float = 0.05) -> int:
                     "role": r["role"],
                 })
 
-    print(f"  Upserted {len(daily)} (date, team) bullpen rows + {len(pitcher_new)} pitcher rows")
+    log.info(f"Upserted {len(daily)} (date, team) bullpen rows + {len(pitcher_new)} pitcher rows")
     return len(daily)

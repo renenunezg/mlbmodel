@@ -16,18 +16,22 @@ Known biases (documented for the gate-failure debug order):
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+from backend.log import setup_logging
 from v2.data.pa_dataset import (
-    EVENT_TO_OUTCOME,
     EVENT_TO_OUT_SUBTYPE,
+    EVENT_TO_OUTCOME,
     NON_PA_EVENTS,
     OUTCOMES,
 )
 from v2.simulator.gb_quartiles import MEDIAN_Q, build_gb_quartiles
+
+log = logging.getLogger(__name__)
 
 CACHE_DIR = Path(__file__).resolve().parents[2] / "cache"
 TABLES_DIR = Path(__file__).resolve().parent / "tables"
@@ -261,14 +265,14 @@ def main():
     ap.add_argument("--years", nargs="+", type=int, default=[2024, 2025])
     args = ap.parse_args()
 
-    print(f"Loading PA rows from years {args.years} ...")
+    log.info(f"Loading PA rows from years {args.years} ...")
     df = _load_pa_rows(args.years)
-    print(f"  {len(df):,} PAs after filtering")
+    log.info(f"{len(df):,} PAs after filtering")
 
     runs_per_pa = df["runs"].mean()
-    print(f"  sanity: runs per PA = {runs_per_pa:.4f}  (MLB norm ~0.12)")
+    log.info(f"sanity: runs per PA = {runs_per_pa:.4f}  (MLB norm ~0.12)")
 
-    print("Building GB quartiles ...")
+    log.info("Building GB quartiles ...")
     gbq = build_gb_quartiles(args.years)
     TABLES_DIR.mkdir(parents=True, exist_ok=True)
     gbq.to_parquet(TABLES_DIR / "gb_quartiles.parquet", index=False)
@@ -279,21 +283,22 @@ def main():
     # mean-conservation sanity: runs/PA by pitcher GB quartile (should rise as
     # GB% drops; the stratification must not crush runs in the high-GB bin).
     rp = df.groupby("p_q")["runs"].mean().round(4).to_dict()
-    print(f"  runs/PA by pitcher GB quartile (0=low GB .. 3=high GB): {rp}")
+    log.info(f"runs/PA by pitcher GB quartile (0=low GB .. 3=high GB): {rp}")
 
-    print("Building advancement table ...")
+    log.info("Building advancement table ...")
     adv = build_advancement(df)
-    print(f"  {len(adv):,} rows")
+    log.info(f"{len(adv):,} rows")
 
-    print("Building out-subtype table ...")
+    log.info("Building out-subtype table ...")
     subt = build_out_subtype(df)
-    print(f"  {len(subt):,} rows")
+    log.info(f"{len(subt):,} rows")
 
     TABLES_DIR.mkdir(parents=True, exist_ok=True)
     adv.to_parquet(TABLES_DIR / "advancement.parquet", index=False)
     subt.to_parquet(TABLES_DIR / "out_subtype.parquet", index=False)
-    print(f"Wrote {TABLES_DIR}/advancement.parquet and out_subtype.parquet")
+    log.info(f"Wrote {TABLES_DIR}/advancement.parquet and out_subtype.parquet")
 
 
 if __name__ == "__main__":
+    setup_logging()
     main()

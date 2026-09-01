@@ -9,6 +9,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -16,6 +17,9 @@ import pandas as pd
 from sqlalchemy import text
 
 from backend.db import engine
+from backend.log import setup_logging
+
+log = logging.getLogger(__name__)
 
 CACHE_DIR = Path(__file__).resolve().parents[2] / "cache"
 STARTER_MIN_OUTS = 9
@@ -72,9 +76,9 @@ def main() -> None:
 
     frames = []
     for y in args.years:
-        print(f"Loading {y}...", flush=True)
+        log.info(f"Loading {y}...")
         d = _load_year(y)
-        print(f"  loaded {len(d)} PAs", flush=True)
+        log.info(f"loaded {len(d)} PAs")
         d = _compute_outs_added(d)
         d["team"] = _team_for_pitcher(d)
         per_pg = d.groupby(["game_date", "game_pk", "team", "pitcher"]).agg(
@@ -83,7 +87,7 @@ def main() -> None:
         ).reset_index()
         per_pg = _classify_roles(per_pg)
         frames.append(per_pg)
-        print(f"  {len(per_pg)} pitcher-game rows", flush=True)
+        log.info(f"{len(per_pg)} pitcher-game rows")
 
     all_rows = pd.concat(frames, ignore_index=True)
 
@@ -95,7 +99,7 @@ def main() -> None:
         outs=("outs", "sum"),
         role=("role", "first"),
     ).reset_index()
-    print(f"Aggregated to {len(daily)} (date, pitcher) rows")
+    log.info(f"Aggregated to {len(daily)} (date, pitcher) rows")
 
     upsert_sql = text("""
         INSERT INTO pitcher_workload (game_date, pitcher_id, team, outs, role, updated_at)
@@ -122,10 +126,11 @@ def main() -> None:
     for i in range(0, len(payload), BATCH):
         with engine.begin() as conn:
             conn.execute(upsert_sql, payload[i:i + BATCH])
-        print(f"  {min(i + BATCH, len(payload))}/{len(payload)}", flush=True)
+        log.info(f"{min(i + BATCH, len(payload))}/{len(payload)}")
 
-    print(f"Upserted {len(daily)} rows into pitcher_workload", flush=True)
+    log.info(f"Upserted {len(daily)} rows into pitcher_workload")
 
 
 if __name__ == "__main__":
+    setup_logging()
     main()

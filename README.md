@@ -8,9 +8,11 @@ application: sharp participants push lines toward true probabilities quickly,
 which makes them a higher-quality signal than most independently constructed
 models.
 
-The site is at [renenunez.dev](https://renenunez.dev). The methodology page
-describes the model in detail; this README covers what's in the repository and
-how to run it.
+The site is at [renenunez.dev](https://renenunez.dev) and lives in its own
+repository, [momentumweb](https://github.com/renenunezg/momentumweb). Supabase
+is the only interface between the two: this pipeline writes tables, the site
+reads them. The methodology page describes the model in detail; this README
+covers what's in this repository and how to run it.
 
 ## What's in the model
 
@@ -57,11 +59,13 @@ pipeline.py             Shared schedule and nightly evaluation orchestrator.
 backend/
   data/                 Fetchers: MLB Stats API, Statcast (pybaseball), Savant,
                         The Odds API, per-pitcher workload from boxscores.
-  db.py                 SQLAlchemy engine pointed at Supabase via DATABASE_URL.
+  db.py                 SQLAlchemy engine pointed at Supabase via DATABASE_URL;
+                        blocks writes outside CI unless MLBMODEL_DB_WRITES=1.
+  log.py                Logging setup for the CLI entry points.
   team_mappings.py      3-letter codes + MLB team-id lookup table.
   kelly.py, simulation.py, metrics.py, strategy.py
-                        Shared math: Kelly, american/implied/odds conversions,
-                        Brier and log-loss, EV thresholds.
+                        Kelly sizing, odds conversions, Brier and log-loss,
+                        EV thresholds and market anchoring constants.
 v2/
   bayesian/             Three D-M models + fit_all orchestrator. Posteriors
                         saved to v2/bayesian/posteriors/*.nc (gitignored).
@@ -73,23 +77,8 @@ v2/
   pipeline/             daily_run, train, score_games, refresh_lineups,
                         verify, write_posterior_summaries.
   data/                 Multi-year Statcast cache builder + per-PA dataset.
-frontend/               Next.js 16 app (App Router, TypeScript, Tailwind, shadcn/ui).
-  src/app/
-    page.tsx                Methodology page (long-form model documentation).
-    games/page.tsx          Today's games with +EV flags and live scores.
-    history/page.tsx        Per-game prediction log with filters.
-    performance/page.tsx    Accuracy charts, calibration, KPIs, posterior
-                            leaderboard, variance decomposition.
-    about/page.tsx          Contact, blog posts.
-    api/live-scores/        Cached MLB Stats API proxy for in-game scores.
-    api/eval-game/          Per-game evaluation endpoint, called by the games
-                            page when a game finalizes.
-  src/components/         Game cards, charts, filters, V2 badge, theme toggle.
-  src/lib/
-    supabase.ts             Browser client (anon key).
-    eval.ts                 TypeScript port of the per-game eval math.
-    constants.ts            V2_CUTOVER_DATE (used by chart reference lines).
-    types.ts                Database row types.
+  tools/                One-off calibration scripts (form sigma, weather coefficients).
+tests/                  Production-critical suite; see below.
 ```
 
 ## Running locally
@@ -118,14 +107,9 @@ python -m v2.market_model.features --start 2026-03-26 --end 2026-07-21
 
 # Lean production-critical suite
 pytest tests/
-```
 
-```
-# Frontend
-cd frontend
-npm install
-npm run dev                  # http://localhost:3000
-npm run build && npm start
+# Lint
+ruff check .
 ```
 
 Sampler pins are load-bearing: `numpyro==0.20.1` + `jax==0.7.2` +
@@ -138,30 +122,23 @@ across CI runs via `actions/cache`.
 
 ## Environment
 
-Backend, root `.env`:
+Root `.env`:
 ```
 DATABASE_URL=postgresql://...   # Supabase session pooler URL.
 ODDS_API_KEY=...                # the-odds-api.com key.
 ```
 
-Frontend, `frontend/.env.local`:
-```
-NEXT_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key>
-SUPABASE_SERVICE_ROLE_KEY=<service role key>   # server-only; /api/eval-game.
-```
-
-The service-role key bypasses RLS, so it must never be exposed in any
-`NEXT_PUBLIC_*` variable or imported outside `src/app/api/eval-game/`. In Vercel
-it should be set as a regular (non-public) environment variable.
-
-The Supabase project for this repo is `zgirspbdvzikzaeqytvf`. Schema changes
-are managed through the Supabase MCP tools, not loose migration files.
+`DATABASE_URL` points at the live production database, so `backend/db.py`
+refuses write statements unless `GITHUB_ACTIONS=true` (set by CI) or
+`MLBMODEL_DB_WRITES=1` is set explicitly. Read-only local runs need neither.
+Schema changes are applied directly in Supabase, not through migration files
+in this repo.
 
 ## Database
 
-All tables key off `game_pk`, the integer ID from the MLB Stats API. Joins
-stay clean even when the underlying data sources disagree on team naming.
+All tables live in the `mlb` schema and key off `game_pk`, the integer ID
+from the MLB Stats API, so joins stay clean even when data sources disagree on
+team naming.
 
 | Table | Holds |
 |---|---|
@@ -176,43 +153,31 @@ stay clean even when the underlying data sources disagree on team naming.
 | `model_outputs_v1_archive`, `model_outputs_season_v1_archive` | Frozen v1 history pre-cutover. |
 | `model_evaluation`, `model_calibration`, `model_edge_buckets` | Running accuracy across the full season (v1 + v2 stitched). |
 | `posterior_skills`, `posterior_sigmas` | Top-N xwOBA leaderboard and per-outcome σ rows, written after each refit. |
-| `experiment_runs` | Hyperparameters and CV scores per training run (legacy v1). |
 
-RLS is on for every public table with one policy, `public_read`, granting
-SELECT to `anon` and `authenticated`. The browser only sees what that policy
-allows. Writes use `DATABASE_URL` as `postgres` (Python pipeline, bypasses
-RLS) or the service-role key from server-only Next.js routes like
-`/api/eval-game`.
+Row-level security is on for every table with one policy, `public_read`,
+granting SELECT to `anon` and `authenticated`. The site reads through that
+policy; this pipeline writes through `DATABASE_URL` as `postgres`.
 
-## Live per-game evaluation
+## Evaluation
 
-`model_evaluation` holds running tallies keyed on `(date, eval_window)`.
-Two paths write to it:
-
-1. The morning `daily-pipeline-v2.yml` and midnight `nightly-eval.yml` crons
-   run the full Python evaluator and upsert all rows.
-2. While the games page is open, `frontend/src/components/games-live.tsx`
-   polls MLB Stats API every 60s. The first time a game flips to `Final`, the
-   page POSTs to `/api/eval-game`, which writes the score back to `games`,
-   recomputes today's window rows, and upserts. History fills in
-   automatically since the W/L badges read from `games.status` and the score
-   columns in JSX.
-
-The live path updates the dashboard within a minute of a game ending. The
-cron paths are the source of truth for reconciliation. Eval math lives in two
-places (`backend/evaluate_model.py` and `frontend/src/lib/eval.ts`); a
-fixture-based test guards against drift between them.
+`model_evaluation` holds running tallies keyed on `(date, eval_window)`. The
+morning `daily-pipeline-v2.yml` and midnight `nightly-eval.yml` runs execute
+`backend/evaluate_model.py` and upsert every window. The site also grades a
+game the moment it goes final so the dashboard updates within a minute; the
+nightly run is the source of truth and reconciles anything the live path
+missed.
 
 ## Schedule
 
 | Workflow | Cron (UTC) | Purpose |
 |---|---|---|
-| `train-v2.yml` | `0 11 * * *` (~4 AM PT) | Nightly NUTS refit of all three Bayesian models, then `write_posterior_summaries` populates the diagnostics tables. |
+| `train-v2.yml` | `7 11 * * *` (~4 AM PT) | Nightly NUTS refit of all three Bayesian models, then `write_posterior_summaries` populates the diagnostics tables. |
 | `daily-pipeline-v2.yml` | `workflow_run` on train-v2 success | Schedule → bullpen → odds → score → verify. Chained off train to guarantee fresh posteriors. |
-| `refresh-lineups-v2.yml` | `0/30 14-23 * * *` (every 30 min, 7 AM-4 PM PT) | Re-scores games whose posted lineup hash changed. |
-| `nightly-eval.yml` | `0 7 * * *` (midnight PT) | Eval yesterday + write tomorrow's predictions. |
-GitHub-hosted runners typically add 30-60 min of queue delay to scheduled
-workflows, so real start times drift around the nominal cron.
+| `refresh-lineups-v2.yml` | `repository_dispatch` from Supabase pg_cron, every 20 min ~5 AM-7:40 PM PT | Re-scores games whose posted lineup hash changed. |
+| `nightly-eval.yml` | `repository_dispatch` at 12:01 AM PT, `37 8 * * *` fallback | Eval yesterday + write tomorrow's predictions. |
+GitHub's scheduler drops or delays cron fires often enough that the two
+intraday workflows are dispatched from Supabase pg_cron instead; the GitHub
+cron on `nightly-eval.yml` is only a fallback.
 
 ## Known limits
 
@@ -223,15 +188,15 @@ workflows, so real start times drift around the nominal cron.
   directly from Statcast pitch data because FanGraphs blocks automated
   requests at the Cloudflare layer.
 - **Variance underdispersion.** v2's simulated runs/team-game variance lands
-  about 6% low vs actual, even with a calibrated form-noise term. Closing
-  that gap is a v2.1 item (out-subtype conditioning on batter/pitcher GB%).
+  about 6% low vs actual, even with a calibrated form-noise term and
+  ground-ball-stratified out subtypes.
 - **Cold-start cost.** First Statcast fetch is ~30 minutes for a prior
   season. After that the cache makes runs cheap.
 - **No pipeline failure alerts yet.** A failing GitHub Action surfaces only
   as a red badge in the Actions tab. Email or Slack notification on failure
   is the next operational item.
-- **No weather, umpire, travel, or batter-pitcher interaction terms yet.**
-  All deferred to v2.1+.
+- **No umpire, travel, or batter-pitcher interaction terms.** Weather enters
+  as wind and temperature shifts on the outcome logits; nothing else does.
 
 ## Tests
 

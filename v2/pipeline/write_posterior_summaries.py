@@ -19,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import logging
 import time
 from datetime import date, timedelta
 from pathlib import Path
@@ -30,10 +31,13 @@ import statsapi
 from sqlalchemy import text
 
 from backend.db import engine
+from backend.log import setup_logging
 from v2.bayesian._common import POSTERIORS_DIR, WOBA_WEIGHTS, encode_outcomes
 from v2.bayesian.pitcher_skill import classify_roles
 from v2.data.pa_dataset import EVENT_TO_OUTCOME, NON_PA_EVENTS, OUTCOMES
 from v2.simulator.posteriors import PosteriorMeans, load_posteriors
+
+log = logging.getLogger(__name__)
 
 TOP_N = 10
 SIGMA_NAMES = ["sigma_batter", "sigma_platoon", "sigma_pitcher", "sigma_park"]
@@ -155,7 +159,7 @@ def _fetch_names(ids: list[int], chunk: int = 100) -> dict[int, str]:
             for p in resp.get("people", []):
                 out[int(p["id"])] = p.get("fullName") or ""
         except Exception as e:
-            print(f"  [warn] name lookup batch {i // chunk} failed: {e}")
+            log.warning(f"name lookup batch {i // chunk} failed: {e}")
         time.sleep(0.1)
     return out
 
@@ -236,11 +240,11 @@ def main():
     min_bf_sp = max(1, int(round(MIN_BF_SP_PER_DAY * window_days)))
     min_bf_rp = max(1, int(round(MIN_BF_RP_PER_DAY * window_days)))
 
-    print(f"[posterior_summaries] refit_date={refit_date}  window={window_start}..{window_end}")
-    print(f"[posterior_summaries] min PA: vs_rhp={min_pa_vs_rhp}  vs_lhp={min_pa_vs_lhp}  sp={min_bf_sp}  rp={min_bf_rp}")
+    log.info(f"refit_date={refit_date}  window={window_start}..{window_end}")
+    log.info(f"min PA: vs_rhp={min_pa_vs_rhp}  vs_lhp={min_pa_vs_lhp}  sp={min_bf_sp}  rp={min_bf_rp}")
 
     pa = _load_window_pa(window_start, window_end)
-    print(f"[posterior_summaries] {len(pa):,} PAs in window  (prior-strength={strength})")
+    log.info(f"{len(pa):,} PAs in window  (prior-strength={strength})")
 
     pm = load_posteriors()
 
@@ -250,7 +254,7 @@ def main():
     for split_label, hand, min_pa in (("vs_rhp", "R", min_pa_vs_rhp), ("vs_lhp", "L", min_pa_vs_lhp)):
         sub = pa[pa["p_throws"] == hand]
         ids, skill = _eb_leaderboard(sub, "batter", split_label, pm, min_pa, strength)
-        print(f"  batter {split_label}: {len(ids)} qualifying")
+        log.info(f"batter {split_label}: {len(ids)} qualifying")
         if len(ids) == 0:
             continue
         batter_rows.append((split_label, ids, skill))
@@ -264,7 +268,7 @@ def main():
         sub = pa[pa["pitcher"].isin(eligible_ids)]
         min_bf = min_bf_sp if role == "SP" else min_bf_rp
         ids, skill = _eb_leaderboard(sub, "pitcher", split_label, pm, min_bf, strength)
-        print(f"  pitcher {split_label}: {len(ids)} qualifying (of {len(eligible_ids)} {role}-classified)")
+        log.info(f"pitcher {split_label}: {len(ids)} qualifying (of {len(eligible_ids)} {role}-classified)")
         if len(ids) == 0:
             continue
         pitcher_rows.append((split_label, ids, skill))
@@ -275,7 +279,7 @@ def main():
         order = np.argsort(skill)
         all_ids.update(int(ids[i]) for i in order[:TOP_N])
         all_ids.update(int(ids[i]) for i in order[-TOP_N:])
-    print(f"[posterior_summaries] fetching {len(all_ids)} names from MLB Stats API")
+    log.info(f"fetching {len(all_ids)} names from MLB Stats API")
     names = _fetch_names(sorted(all_ids))
 
     skill_rows: list[dict] = []
@@ -303,7 +307,7 @@ def main():
         "p90": None,
     })
 
-    print(f"[posterior_summaries] writing {len(skill_rows)} skill rows + {len(sigma_rows)} sigma rows")
+    log.info(f"writing {len(skill_rows)} skill rows + {len(sigma_rows)} sigma rows")
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM posterior_skills WHERE refit_date = :d"), {"d": refit_date})
         if skill_rows:
@@ -312,8 +316,9 @@ def main():
         if sigma_rows:
             pd.DataFrame(sigma_rows).to_sql("posterior_sigmas", con=conn, if_exists="append", index=False)
 
-    print("[posterior_summaries] done")
+    log.info("done")
 
 
 if __name__ == "__main__":
+    setup_logging()
     main()

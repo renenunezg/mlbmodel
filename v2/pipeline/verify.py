@@ -8,6 +8,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from datetime import date
 
@@ -15,6 +16,9 @@ import pandas as pd
 from sqlalchemy import text
 
 from backend.db import engine
+from backend.log import setup_logging
+
+log = logging.getLogger(__name__)
 
 EXPECTED_RUNS_MIN = 0.5
 EXPECTED_RUNS_MAX = 15.0
@@ -41,7 +45,7 @@ def run_checks(date_str: str) -> bool:
         df = pd.read_sql(q, conn, params={"d": date_str})
 
     if df.empty:
-        print(f"[verify] FAIL: no rows in model_outputs for {date_str}")
+        log.error(f"no rows in model_outputs for {date_str}")
         return False
 
     failures = []
@@ -105,14 +109,14 @@ def run_checks(date_str: str) -> bool:
     if "lineup_source" in df.columns:
         live_pct = df["lineup_source"].str.contains("lineup_live").mean()
         if live_pct < MIN_LIVE_LINEUP_PCT:
-            print(f"[verify] WARN: only {live_pct:.0%} of rows have live lineups (expected ≥{MIN_LIVE_LINEUP_PCT:.0%} post-posting)")
+            log.warning(f"only {live_pct:.0%} of rows have live lineups (expected ≥{MIN_LIVE_LINEUP_PCT:.0%} post-posting)")
 
     if failures:
         for f in failures:
-            print(f"[verify] FAIL: {f}")
+            log.error(f"{f}")
         return False
 
-    print(f"[verify] all checks passed for {date_str} ({len(df)} rows, {len(df) // 2} games)")
+    log.info(f"all checks passed for {date_str} ({len(df)} rows, {len(df) // 2} games)")
     return True
 
 
@@ -125,4 +129,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    setup_logging()
     main()

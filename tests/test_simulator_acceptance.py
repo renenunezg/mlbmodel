@@ -1,8 +1,8 @@
 """Acceptance gates for the v2 plate-appearance and game simulators."""
 from __future__ import annotations
 
-from pathlib import Path
 import time
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -167,16 +167,11 @@ def test_league_pa_replay_within_1pp():
 
 @skip_if_missing
 def test_runs_per_game_within_5pct():
-    """Phase 4/5 acceptance gate.
+    """Runs-per-game acceptance gate.
 
     Stratified-sample 200 games across 2025; K=30 posterior draws × 33 sims/draw =
-    990 sims/game. Compare simulated mean & variance of runs/team-game to actual 2025.
-
-    Mean threshold: 5%. Variance threshold: 7% (relaxed from 5% in Phase 5).
-    FORM_SIGMA=0.13 is the calibrated sweet spot at K=30: mean clears 5%,
-    variance misses 5% by ~1pp. (K=60 tried to widen the var tail; it tightens
-    variance instead and was reverted. Out-subtype-by-GB stratification is live but a
-    weak variance lever; see CLAUDE.md ACTIVE WORK.)
+    990 sims/game. Compare simulated mean and variance of runs/team-game to
+    actual 2025. Mean threshold 5%, variance threshold 7%.
     """
     from v2.simulator import load_posterior_draws
     from v2.simulator.baserunner import load_advancement_table, load_out_subtype_table
@@ -192,12 +187,6 @@ def test_runs_per_game_within_5pct():
     draws = load_posterior_draws(rng, K=30)
     adv = load_advancement_table()
     sub_table = load_out_subtype_table()
-
-    # actual 2025 runs/team-game from cache: aggregate by (game_pk, side)
-    actuals = []
-    for gp, grp in pa.groupby("game_pk"):
-        # we need actual runs scored. Reload with bat_score.
-        pass  # computed below in one shot
 
     df_runs = pd.read_parquet(CACHE_2025, columns=["game_pk", "inning_topbot", "bat_score", "post_bat_score", "events"])
     df_runs = df_runs[df_runs["events"].notna() & ~df_runs["events"].isin(NON_PA_EVENTS)]

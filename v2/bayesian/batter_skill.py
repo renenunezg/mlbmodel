@@ -8,23 +8,27 @@ pooled across batters.
 from __future__ import annotations
 
 import argparse
+import logging
 import time
 from pathlib import Path
 
+import arviz as az
 import numpy as np
 import pandas as pd
 import pymc as pm
-import arviz as az
 
-from v2.data.pa_dataset import OUTCOMES, load_pa_dataset
+from backend.log import setup_logging
 from v2.bayesian._common import (
-    ActorIndex,
     POSTERIORS_DIR,
+    ActorIndex,
     encode_outcomes,
     evaluate_gate,
     league_log_p,
     write_diagnostics,
 )
+from v2.data.pa_dataset import OUTCOMES, load_pa_dataset
+
+log = logging.getLogger(__name__)
 
 REF_IDX = OUTCOMES.index("OUT")
 NON_REF_IDX = [i for i in range(len(OUTCOMES)) if i != REF_IDX]
@@ -169,16 +173,16 @@ def main() -> int:
     parser.add_argument("--subsample", type=int, default=None)
     args = parser.parse_args()
 
-    print(f"[batter_skill] loading PAs {args.start_year}-{args.end_year}...")
+    log.info(f"loading PAs {args.start_year}-{args.end_year}...")
     t_load = time.time()
     pa_df = load_pa_dataset(args.start_year, args.end_year)
-    print(f"  loaded {len(pa_df):,} PAs in {time.time()-t_load:.1f}s")
+    log.info(f"loaded {len(pa_df):,} PAs in {time.time()-t_load:.1f}s")
 
     if args.subsample:
         pa_df = pa_df.sample(args.subsample, random_state=args.seed).reset_index(drop=True)
-        print(f"  subsampled to {len(pa_df):,} PAs")
+        log.info(f"subsampled to {len(pa_df):,} PAs")
 
-    print(f"[batter_skill] fitting (chains={args.chains}, draws={args.draws}, tune={args.tune})...")
+    log.info(f"fitting (chains={args.chains}, draws={args.draws}, tune={args.tune})...")
     idata, meta, elapsed = fit(
         pa_df,
         draws=args.draws,
@@ -187,14 +191,14 @@ def main() -> int:
         target_accept=args.target_accept,
         random_seed=args.seed,
     )
-    print(f"  fit complete in {elapsed:.1f}s ({elapsed/60:.2f} min)")
+    log.info(f"fit complete in {elapsed:.1f}s ({elapsed/60:.2f} min)")
 
     diag = summarize(idata)
     n_div = int(idata.sample_stats["diverging"].sum().item()) if "diverging" in idata.sample_stats else 0
-    print(f"  max_rhat={diag['max_rhat']:.4f}  min_ess_bulk={diag['min_ess_bulk']:.0f}  n_divergent={n_div}")
+    log.info(f"max_rhat={diag['max_rhat']:.4f}  min_ess_bulk={diag['min_ess_bulk']:.0f}  n_divergent={n_div}")
 
     gate_passed = evaluate_gate(diag["max_rhat"], diag["min_ess_bulk"])
-    print(f"  gate_passed={gate_passed}")
+    log.info(f"gate_passed={gate_passed}")
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     report = {
@@ -210,15 +214,16 @@ def main() -> int:
         "gate_passed": gate_passed,
     }
     write_diagnostics(args.output_dir / "batter_skill.json", report)
-    print(f"  wrote {args.output_dir / 'batter_skill.json'}")
+    log.info(f"wrote {args.output_dir / 'batter_skill.json'}")
 
     if args.save_trace:
         trace_path = args.output_dir / "batter_skill.nc"
         idata.to_netcdf(trace_path)
-        print(f"  wrote {trace_path}")
+        log.info(f"wrote {trace_path}")
 
     return 0 if gate_passed else 1
 
 
 if __name__ == "__main__":
+    setup_logging()
     raise SystemExit(main())

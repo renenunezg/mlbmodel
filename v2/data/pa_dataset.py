@@ -8,9 +8,12 @@ events, and emits one row per plate appearance with two outcome columns:
 """
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pandas as pd
+
+log = logging.getLogger(__name__)
 
 CACHE_DIR = Path(__file__).resolve().parents[2] / "cache"
 
@@ -102,9 +105,9 @@ def transform_pitch_frame(pitch_df: pd.DataFrame) -> pd.DataFrame:
 
     unmapped = pa[pa["outcome"].isna()]["events"].value_counts()
     if not unmapped.empty:
-        print(f"  pa_dataset: dropping {int(unmapped.sum())} rows with unmapped events:")
+        log.info(f"pa_dataset: dropping {int(unmapped.sum())} rows with unmapped events:")
         for evt, n in unmapped.items():
-            print(f"    {evt}: {n}")
+            log.info(f"{evt}: {n}")
         pa = pa[pa["outcome"].notna()]
 
     pa = pa[PA_FRAME_COLS].reset_index(drop=True)

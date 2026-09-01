@@ -1,11 +1,17 @@
 """Pitcher and team batting stats computed from Statcast pitch data via pybaseball."""
 
-import pandas as pd
-import numpy as np
+import logging
+import warnings
 from datetime import date, timedelta
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from backend.log import setup_logging
 from backend.team_mappings import normalize_team
-import warnings
+
+log = logging.getLogger(__name__)
 warnings.filterwarnings("ignore")
 
 # FIP constant - league-wide reconciliation factor (~3.10-3.20 historically).
@@ -28,7 +34,7 @@ def _get_statcast_range(start_date: date = None) -> pd.DataFrame:
 
     if cache_key in _statcast_cache:
         df = _statcast_cache[cache_key]
-        print(f"  Using cached Statcast data: {len(df)} pitches")
+        log.info(f"Using cached Statcast data: {len(df)} pitches")
         return df
 
     # Disk cache only used for the default season range; explicit start_date skips it.
@@ -45,25 +51,25 @@ def _get_statcast_range(start_date: date = None) -> pd.DataFrame:
                 max_cached = pd.to_datetime(cached_df["game_date"]).max().date()
                 # Overlap by one day in case the most recent day was partial
                 fetch_from = max(start_dt, max_cached)
-                print(f"  Loaded {len(cached_df)} cached pitches through {max_cached}")
+                log.info(f"Loaded {len(cached_df)} cached pitches through {max_cached}")
             else:
                 cached_df = pd.DataFrame()
         except Exception as e:
-            print(f"  Cache read failed ({e}); refetching from scratch")
+            log.warning(f"Cache read failed ({e}); refetching from scratch")
             cached_df = pd.DataFrame()
 
     if fetch_from > end_dt:
-        print(f"  Cache up to date through {end_dt}; no fetch needed")
+        log.info(f"Cache up to date through {end_dt}; no fetch needed")
         df = cached_df
     else:
-        print(f"  Fetching Statcast data: {fetch_from} to {end_dt}...")
+        log.info(f"Fetching Statcast data: {fetch_from} to {end_dt}...")
         new_df = statcast(start_dt=str(fetch_from), end_dt=str(end_dt))
 
         if not new_df.empty and "game_type" in new_df.columns:
             pre_filter = len(new_df)
             new_df = new_df[new_df["game_type"] == "R"]
             if len(new_df) < pre_filter:
-                print(f"  Filtered to regular season: dropped {pre_filter - len(new_df)} non-R pitches")
+                log.info(f"Filtered to regular season: dropped {pre_filter - len(new_df)} non-R pitches")
 
         if not cached_df.empty and not new_df.empty:
             df = pd.concat([cached_df, new_df], ignore_index=True)
@@ -72,24 +78,24 @@ def _get_statcast_range(start_date: date = None) -> pd.DataFrame:
                 pre = len(df)
                 df = df.drop_duplicates(subset=dedupe_cols, keep="last")
                 if len(df) < pre:
-                    print(f"  Deduped overlap: removed {pre - len(df)} duplicate pitches")
+                    log.info(f"Deduped overlap: removed {pre - len(df)} duplicate pitches")
         elif not new_df.empty:
             df = new_df
         else:
             df = cached_df
 
         if df.empty:
-            print("  Warning: no Statcast data available.")
+            log.warning("no Statcast data available.")
         else:
-            print(f"  Total: {len(df)} pitches across {df['game_pk'].nunique()} games")
+            log.info(f"Total: {len(df)} pitches across {df['game_pk'].nunique()} games")
 
         if use_disk_cache and not df.empty:
             try:
                 CACHE_DIR.mkdir(parents=True, exist_ok=True)
                 df.to_parquet(cache_path, index=False)
-                print(f"  Saved cache to {cache_path}")
+                log.info(f"Saved cache to {cache_path}")
             except Exception as e:
-                print(f"  Cache save failed ({e}); continuing without persisting")
+                log.warning(f"Cache save failed ({e}); continuing without persisting")
 
     _statcast_cache[cache_key] = df
     return df
@@ -218,10 +224,10 @@ def _get_prior_season_pitcher_stats() -> pd.DataFrame:
 
     if cache_path.exists():
         df = pd.read_parquet(cache_path)
-        print(f"  Using cached {prior_year} pitcher stats: {len(df)} pitchers")
+        log.info(f"Using cached {prior_year} pitcher stats: {len(df)} pitchers")
         return df
 
-    print(f"  Fetching {prior_year} Statcast data for pitcher fallback (one-time)...")
+    log.info(f"Fetching {prior_year} Statcast data for pitcher fallback (one-time)...")
     from pybaseball import statcast
 
     # Fetch full prior season in monthly chunks to avoid timeouts
@@ -236,12 +242,12 @@ def _get_prior_season_pitcher_stats() -> pd.DataFrame:
             chunk = statcast(start_dt=str(start), end_dt=str(end))
             if not chunk.empty:
                 all_chunks.append(chunk)
-                print(f"    {start.strftime('%b')}: {len(chunk)} pitches")
+                log.info(f"{start.strftime('%b')}: {len(chunk)} pitches")
         except Exception as e:
-            print(f"    {start.strftime('%b')}: failed ({e})")
+            log.warning(f"{start.strftime('%b')}: failed ({e})")
 
     if not all_chunks:
-        print(f"  No {prior_year} Statcast data available")
+        log.info(f"No {prior_year} Statcast data available")
         return pd.DataFrame()
 
     pitch_df = pd.concat(all_chunks, ignore_index=True)
@@ -255,7 +261,7 @@ def _get_prior_season_pitcher_stats() -> pd.DataFrame:
 
     df["season"] = prior_year
     df.to_parquet(cache_path, index=False)
-    print(f"  Cached {len(df)} pitcher stats to {cache_path}")
+    log.info(f"Cached {len(df)} pitcher stats to {cache_path}")
     return df
 
 
@@ -269,7 +275,7 @@ def fetch_pitcher_stats(season: int = None) -> pd.DataFrame:
     current_stats = pd.DataFrame()
     if not pitch_df.empty:
         starter_ids = _identify_starters(pitch_df)
-        print(f"  Identified {len(starter_ids)} starting pitchers")
+        log.info(f"Identified {len(starter_ids)} starting pitchers")
         current_stats = _compute_pitcher_stats(
             pitch_df, pitcher_ids=starter_ids, starter_ids=starter_ids,
         )
@@ -278,12 +284,12 @@ def fetch_pitcher_stats(season: int = None) -> pd.DataFrame:
     prior_stats = _get_prior_season_pitcher_stats()
 
     if current_stats.empty and prior_stats.empty:
-        print("  No pitcher stats from current or prior season.")
+        log.info("No pitcher stats from current or prior season.")
         return pd.DataFrame(columns=["pitcher_name", "team", "xfip", "whip", "k_9", "season", "role"])
 
     if current_stats.empty:
         # All fallback
-        print(f"  Using {len(prior_stats)} prior-season pitcher stats as fallback")
+        log.info(f"Using {len(prior_stats)} prior-season pitcher stats as fallback")
         prior_stats["season"] = season
         prior_stats["role"] = "starter"
         prior_stats = prior_stats.drop(columns=["p_throws"], errors="ignore")
@@ -307,7 +313,7 @@ def fetch_pitcher_stats(season: int = None) -> pd.DataFrame:
         prior_fallback["season"] = season
         prior_fallback["role"] = "starter"
         prior_fallback = prior_fallback.drop(columns=["p_throws"], errors="ignore")
-        print(f"  Added {len(prior_fallback)} prior-season pitcher stats as fallback")
+        log.info(f"Added {len(prior_fallback)} prior-season pitcher stats as fallback")
         return pd.concat([current_stats, prior_fallback], ignore_index=True)
 
     return current_stats
@@ -320,12 +326,12 @@ def fetch_bullpen_stats(season: int = None) -> pd.DataFrame:
 
     pitch_df = _get_statcast_range()
     if pitch_df.empty:
-        print("No Statcast data - cannot compute bullpen stats.")
+        log.warning("No Statcast data - cannot compute bullpen stats.")
         return pd.DataFrame(columns=["team", "xfip", "k_9", "season"])
 
     starter_ids = _identify_starters(pitch_df)
     reliever_ids = set(pitch_df["pitcher"].unique()) - starter_ids
-    print(f"  Identified {len(reliever_ids)} relievers")
+    log.info(f"Identified {len(reliever_ids)} relievers")
 
     df = _compute_pitcher_stats(pitch_df, pitcher_ids=reliever_ids)
     if df.empty:
@@ -375,7 +381,7 @@ def fetch_team_batting(season: int = None) -> pd.DataFrame:
 
     pitch_df = _get_statcast_range()
     if pitch_df.empty:
-        print("No Statcast data - cannot compute team batting.")
+        log.warning("No Statcast data - cannot compute team batting.")
         return pd.DataFrame(columns=["team", "split", "wrc_plus", "iso", "k_pct", "ops", "obp", "season"])
 
     pa_df = pitch_df[pitch_df["events"].notna()].copy()
@@ -383,7 +389,7 @@ def fetch_team_batting(season: int = None) -> pd.DataFrame:
     # Determine pitcher handedness for each pitch
     # p_throws is available in Statcast
     if "p_throws" not in pa_df.columns:
-        print("  Warning: p_throws not in Statcast data, cannot compute splits.")
+        log.warning("p_throws not in Statcast data, cannot compute splits.")
         return pd.DataFrame()
 
     rows = []
@@ -478,6 +484,7 @@ def fetch_team_batting(season: int = None) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
+    setup_logging()
     season = date.today().year
 
     print(f"=== Starting Pitcher Stats ({season}) ===")
