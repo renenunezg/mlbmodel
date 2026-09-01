@@ -1,11 +1,15 @@
 """+EV flagging and Kelly sizing."""
+import logging
 import os
 from datetime import date
 
-import pandas as pd
 import numpy as np
+import pandas as pd
+
+from backend.kelly import american_to_decimal, compute_kelly_row, kelly_fraction
 from backend.simulation import american_to_prob
-from backend.kelly import american_to_decimal, kelly_fraction, compute_kelly_row
+
+log = logging.getLogger(__name__)
 
 
 # Totals bar is higher; total-runs markets are noisier than sides.
@@ -21,32 +25,20 @@ MONEYLINE_ENABLED = True
 # Run-line recommendation switch.
 RUNLINE_ENABLED = True
 
-# Totals kill-switch. v2's per-PA sim is structurally miscalibrated on the
-# total-runs distribution: on the full 2026-03-26..05-09 backtest every totals
-# edge bucket lost money and model edge had no relationship to outcome.
-# Out-subtype stratification, weather, K=60, and threshold tuning all failed
-# to fix it. Totals stays OFF until the scoped
-# totals-recalibration rework lands (see CLAUDE.md). Flip to True to reactivate
-# in one place once the rework is verified.
+# Totals are off: every totals edge bucket lost money on the 2026 backtest and
+# model edge had no relationship to outcome.
 TOTALS_ENABLED = False
 
 # Set to 0 for weather-off control runs.
 WEATHER_ENABLED = os.getenv("MLBMODEL_WEATHER_ENABLED", "1") == "1"
 
-# Market anchoring of the published win probability (2026-08-16 diagnosis).
-# The sim's moneyline prob is honest but carries less information than the
-# market: on 1,778 finished 2026 games a joint logistic fit gave the model
-# +0.04 vs the market's +0.75, and hard market dogs (<33%) the sim priced at
-# 37% won 29% of the time. Publishing the raw sim prob therefore flags big
-# dogs +EV systematically. Blending on the logit scale at w_model≈0.2 was the
-# out-of-sample log-loss optimum (flat 0.15-0.25). Games with no paired
-# moneyline publish the un-anchored (HFA-shifted) sim prob.
+# Weight of the sim in the logit-scale blend with the de-vigged market
+# consensus. 0.2 was the out-of-sample log-loss optimum on 2026 games; the
+# raw sim prob flags big underdogs +EV systematically.
 MARKET_ANCHOR_W_MODEL = 0.2
 
-# The sim has no home-field advantage: mean p(home)=0.4986 across 2026 vs an
-# actual home win rate of 0.5214. Batting last + walkoff logic nets ~zero.
-# Applied to the sim's home logit BEFORE market anchoring so each component
-# carries its own HFA exactly once.
+# Home-field shift on the sim's home logit, applied before market anchoring.
+# The sim itself has none: batting last and walkoff logic net to ~zero.
 HOME_FIELD_LOGIT = 0.09
 
 # v1 → v2 model cutover. Eval / calibration / feature-importance writes are
@@ -54,7 +46,7 @@ HOME_FIELD_LOGIT = 0.09
 V1_CUTOVER_DATE = date(2026, 5, 12)
 
 
-# Dedupe warnings so a systematic issue doesn't spam stdout once per row.
+# Warn once per distinct error rather than once per row.
 _flag_warnings_seen: set[tuple[str, str]] = set()
 
 
@@ -62,7 +54,7 @@ def _warn_flag_error(fn_name: str, exc: Exception) -> None:
     key = (fn_name, f"{type(exc).__name__}: {exc}")
     if key not in _flag_warnings_seen:
         _flag_warnings_seen.add(key)
-        print(f"  WARNING: {fn_name} raised {type(exc).__name__}: {exc} - returning 'No Play'")
+        log.warning(f"{fn_name} raised {type(exc).__name__}: {exc} - returning 'No Play'")
 
 
 def flag_ev(row, threshold=EV_THRESHOLDS["ml"]):

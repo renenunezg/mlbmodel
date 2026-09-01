@@ -8,15 +8,16 @@ data, not the prior, drives the posterior when there's signal.
 from __future__ import annotations
 
 import argparse
+import logging
 import time
 from pathlib import Path
 
+import arviz as az
 import numpy as np
 import pandas as pd
 import pymc as pm
-import arviz as az
 
-from v2.data.pa_dataset import OUTCOMES, load_pa_dataset
+from backend.log import setup_logging
 from v2.bayesian._common import (
     POSTERIORS_DIR,
     WOBA_WEIGHTS,
@@ -24,6 +25,9 @@ from v2.bayesian._common import (
     evaluate_gate,
     write_diagnostics,
 )
+from v2.data.pa_dataset import OUTCOMES, load_pa_dataset
+
+log = logging.getLogger(__name__)
 
 REF_IDX = OUTCOMES.index("OUT")
 NON_REF_IDX = [i for i in range(len(OUTCOMES)) if i != REF_IDX]
@@ -214,19 +218,19 @@ def main() -> int:
     parser.add_argument("--save-trace", action="store_true")
     args = parser.parse_args()
 
-    print(f"[park_effects] loading PAs {args.start_year}-{args.end_year}...")
+    log.info(f"loading PAs {args.start_year}-{args.end_year}...")
     pa_df = load_pa_dataset(args.start_year, args.end_year)
 
-    print(f"[park_effects] loading batter/pitcher traces...")
+    log.info("loading batter/pitcher traces...")
     bat_idata = az.from_netcdf(args.batter_trace)
     pit_idata = az.from_netcdf(args.pitcher_trace)
 
-    print(f"[park_effects] computing per-PA wOBA predictions...")
+    log.info("computing per-PA wOBA predictions...")
     woba_pred, pa_df = predict_woba_per_pa(pa_df, bat_idata, pit_idata)
-    print(f"  predicted on {len(pa_df):,} PAs")
+    log.info(f"predicted on {len(pa_df):,} PAs")
 
     venue_df = venue_residuals(pa_df, woba_pred)
-    print(f"  {len(venue_df)} venues, total PAs {int(venue_df['n'].sum()):,}")
+    log.info(f"{len(venue_df)} venues, total PAs {int(venue_df['n'].sum()):,}")
 
     idata, meta, elapsed = fit(
         venue_df,
@@ -235,11 +239,11 @@ def main() -> int:
         chains=args.chains,
         random_seed=args.seed,
     )
-    print(f"  fit complete in {elapsed:.1f}s")
+    log.info(f"fit complete in {elapsed:.1f}s")
 
     diag = summarize(idata)
     n_div = int(idata.sample_stats["diverging"].sum().item()) if "diverging" in idata.sample_stats else 0
-    print(f"  max_rhat={diag['max_rhat']:.4f}  min_ess_bulk={diag['min_ess_bulk']:.0f}  n_divergent={n_div}")
+    log.info(f"max_rhat={diag['max_rhat']:.4f}  min_ess_bulk={diag['min_ess_bulk']:.0f}  n_divergent={n_div}")
 
     gate_passed = evaluate_gate(diag["max_rhat"], diag["min_ess_bulk"])
 
@@ -256,15 +260,16 @@ def main() -> int:
         "gate_passed": gate_passed,
     }
     write_diagnostics(args.output_dir / "park_effects.json", report)
-    print(f"  wrote {args.output_dir / 'park_effects.json'}")
+    log.info(f"wrote {args.output_dir / 'park_effects.json'}")
 
     if args.save_trace:
         trace_path = args.output_dir / "park_effects.nc"
         idata.to_netcdf(trace_path)
-        print(f"  wrote {trace_path}")
+        log.info(f"wrote {trace_path}")
 
     return 0 if gate_passed else 1
 
 
 if __name__ == "__main__":
+    setup_logging()
     raise SystemExit(main())

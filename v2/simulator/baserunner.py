@@ -6,7 +6,7 @@ Two parquet tables (built by `build_advancement_table.py`):
 
 Both lookups are vectorized: take (N,) arrays of the lookup key, return (N,) arrays of samples.
 
-Known approximation (Phase 4): out_subtype is conditioned only on (state, outs), not on
+Known approximation: out_subtype is conditioned only on (state, outs), not on
 batter or pitcher tendencies. League-mean GIDP/sac_fly rates per state.
 """
 from __future__ import annotations

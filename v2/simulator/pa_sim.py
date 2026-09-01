@@ -19,13 +19,12 @@ from __future__ import annotations
 
 import numpy as np
 
+from v2.data.pa_dataset import OUTCOMES
 from v2.simulator.posteriors import (
-    K_FREE,
-    PosteriorMeans,
     REF_IDX,
     WOBA_VEC_FREE,
+    PosteriorMeans,
 )
-from v2.data.pa_dataset import OUTCOMES
 
 # Indices into the K_FREE-vector for outcomes that need standalone slicing.
 NON_REF_LABELS = [OUTCOMES[i] for i in range(len(OUTCOMES)) if i != REF_IDX]

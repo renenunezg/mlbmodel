@@ -16,7 +16,6 @@ from backend.db import engine
 from backend.strategy import EV_THRESHOLDS
 from v2.market_model.residual import american_to_prob
 
-
 TEAM_WINDOW = 20
 TEAM_PRIOR_GAMES = 10
 MIN_EDGE_BETS = 50

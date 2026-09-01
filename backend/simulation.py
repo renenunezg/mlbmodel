@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 from scipy.stats import nbinom
 
-
 # r=6 calibrated to MLB historical run distributions. Variance = lambda + lambda^2 / r.
 NBINOM_R = 6.0
 

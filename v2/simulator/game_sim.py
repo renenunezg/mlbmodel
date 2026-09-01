@@ -9,11 +9,9 @@ Termination & extras:
   or when home goes ahead at any PA in bottom of 9th+ (walkoff).
 - extras: half-innings ≥ 10 start with state=0b010 (ghost runner on 2B).
 
-Phase 4 known approximations (see CLAUDE.md / build_advancement_table.py docstrings):
-- out_subtype is sampled from P(subtype | state, outs); ignores batter/pitcher tendencies
-- mid-PA stolen bases / wild pitches not modeled
-- bullpen queue uses actual-game RPs (backtest); not rest-aware
-- relievers stay until they cross 9-outs OR 3-runs-allowed thresholds
+Known approximations:
+- mid-PA stolen bases and wild pitches are not modeled
+- relievers stay in until they cross the 9-outs or 3-runs-allowed threshold
 """
 from __future__ import annotations
 
@@ -26,9 +24,9 @@ from v2.simulator.baserunner import (
     OutSubtypeTable,
     sample_subtypes_for_outs,
 )
-from v2.simulator.bullpen import BullpenQueue, should_pull_starter
+from v2.simulator.bullpen import BullpenQueue
 from v2.simulator.gb_quartiles import GBQuartiles, load_gb_quartiles
-from v2.simulator.pa_sim import _build_full_logits, _sample_categorical, _softmax, pa_logits_batch
+from v2.simulator.pa_sim import _sample_categorical, _softmax, pa_logits_batch
 from v2.simulator.posteriors import K_FREE, PosteriorMeans
 from v2.simulator.weather_effects import weather_shift_vector
 
@@ -47,11 +45,8 @@ GHOST_RUNNER_STATE = 2  # runner on 2B only
 RELIEVER_PULL_OUTS = 9
 RELIEVER_PULL_RUNS = 3
 
-# Per-game form noise on logits, zero-sum across the 8-outcome vector. Captures
-# day-to-day form variance on top of the K-draw posterior parameter uncertainty.
-# Recalibrated 0.13 -> 0.18 for the pitcher-anchored baseline: that lower run
-# environment compresses run variance, so it needs more form noise to clear the
-# variance gate (see v2/tools/calibrate_form_sigma.py).
+# Per-game form noise on logits, zero-sum across the 8-outcome vector, on top
+# of posterior parameter uncertainty. Calibrated by v2/tools/calibrate_form_sigma.py.
 FORM_SIGMA = 0.18
 
 

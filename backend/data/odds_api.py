@@ -1,21 +1,20 @@
-"""
-The Odds API data fetcher.
+"""Betting odds from the-odds-api.com.
 
-Replaces: scrape_odds.py
-
-Fetches betting odds from the-odds-api.com.
 Free tier: 500 requests/month. Each call with multiple markets costs ~3 credits.
 """
 
 import json
+import logging
 import os
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
 import requests
 from dotenv import load_dotenv
+
+log = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -107,7 +106,7 @@ def _write_state(state: dict) -> None:
             tmp_name = tmp.name
         os.replace(tmp_name, path)
     except OSError as exc:
-        print(f"WARNING: could not persist Odds API state at {path}: {exc}")
+        log.warning(f"could not persist Odds API state at {path}: {exc}")
     finally:
         if tmp_name:
             try:
@@ -184,9 +183,9 @@ def fetch_odds(
     resp = requests.get(f"{ODDS_API_BASE}/{SPORT}/odds", params=params, timeout=15)
     resp.raise_for_status()
 
-    retrieved_at = datetime.now(timezone.utc).isoformat()
+    retrieved_at = datetime.now(UTC).isoformat()
     quota = _capture_quota_state(resp, retrieved_at)
-    print(
+    log.info(
         "Odds API quota - "
         f"last: {quota['x-requests-last']}, "
         f"used: {quota['x-requests-used']}, "

@@ -2,9 +2,9 @@
 Evaluate model predictions against actual game results.
 
 Computes accuracy metrics for moneyline, run line, and totals picks,
-plus comprehensive regression, probabilistic, and financial metrics.
+plus regression, probabilistic, and financial metrics.
 Writes results to model_evaluation (with eval_window), model_calibration,
-model_feature_importance, and model_edge_buckets tables.
+and model_edge_buckets.
 
 Usage:
     from backend.evaluate_model import main
@@ -12,33 +12,34 @@ Usage:
 """
 
 import datetime
-import json
-import subprocess
-import pandas as pd
+import logging
+
 import numpy as np
+import pandas as pd
 from sqlalchemy import MetaData, text
 from sqlalchemy.dialects.postgresql import insert
 
-from backend.strategy import V1_CUTOVER_DATE
 from backend.db import engine
+from backend.log import setup_logging
 from backend.metrics import (
-    regression_summary,
-    probabilistic_summary,
     calibration_curve,
-    financial_summary,
-    segment_summary,
     equity_curve_from_ledger,
+    financial_summary,
     hit_rate_by_edge_bucket,
+    probabilistic_summary,
+    regression_summary,
+    segment_summary,
 )
-from backend.model import FEATURE_COLS
+from backend.strategy import V1_CUTOVER_DATE
+
+log = logging.getLogger(__name__)
 
 
 def _build_bet_ledger(eval_df=None):
     """Bet ledger from the canonical SQL view `bet_ledger_v`.
 
-    The view is the single source of truth shared with the frontend
-    (History records widget and Performance betting KPIs both query it),
-    so Python and TS cannot drift on filter / grading logic.
+    The site queries the same view, so the two sides cannot drift on
+    filter or grading logic.
 
     `eval_df` is accepted for backwards compatibility with callers but
     ignored - the view computes its own join against `model_outputs_season`
@@ -67,7 +68,7 @@ def _build_bet_ledger(eval_df=None):
 def _write_evaluation_row(eval_date, eval_window, base_row, metric_dict):
     """Upsert one row into model_evaluation."""
     if eval_date < V1_CUTOVER_DATE:
-        print(f"  [freeze] skip model_evaluation write for {eval_date} ({eval_window}); pre-cutover")
+        log.info(f"skip model_evaluation write for {eval_date} ({eval_window}); pre-cutover")
         return
     metadata = MetaData()
     metadata.reflect(bind=engine)
@@ -82,9 +83,9 @@ def _write_evaluation_row(eval_date, eval_window, base_row, metric_dict):
     # Skip the write entirely if the headline metrics are all NULL. This
     # happens when nightly-eval fires before any of the target date's games
     # have graded - inserting a placeholder row would leak NULLs into the
-    # frontend's "latest" lookup.
+    # site's "latest" lookup.
     if all(row.get(k) is None for k in ("brier_score", "mae", "log_loss")):
-        print(f"  [skip] no graded data for {eval_date} ({eval_window}); skipping write")
+        log.info(f"no graded data for {eval_date} ({eval_window}); skipping write")
         return
 
     update_cols = _evaluation_update_values(row)
@@ -118,7 +119,7 @@ def _evaluation_update_values(row):
 def _write_calibration(eval_date, cal_bins):
     """Upsert calibration curve bins for a date."""
     if eval_date < V1_CUTOVER_DATE:
-        print(f"  [freeze] skip model_calibration write for {eval_date}; pre-cutover")
+        log.info(f"skip model_calibration write for {eval_date}; pre-cutover")
         return
     if not cal_bins:
         return
@@ -134,26 +135,11 @@ def _write_calibration(eval_date, cal_bins):
             """), {"date": eval_date, **b})
 
 
-def _write_feature_importance(eval_date, importance_dict):
-    """Upsert feature importance for a date."""
-    if eval_date < V1_CUTOVER_DATE:
-        print(f"  [freeze] skip model_feature_importance write for {eval_date}; pre-cutover")
-        return
-    if not importance_dict:
-        return
-    with engine.begin() as conn:
-        for feature, imp in importance_dict.items():
-            conn.execute(text("""
-                INSERT INTO model_feature_importance (date, feature, importance)
-                VALUES (:date, :feature, :importance)
-                ON CONFLICT (date, feature) DO UPDATE SET importance = EXCLUDED.importance
-            """), {"date": eval_date, "feature": feature, "importance": float(imp)})
-
 
 def _write_edge_buckets(eval_date, eval_window, buckets):
     """Upsert edge bucket stats."""
     if eval_date < V1_CUTOVER_DATE:
-        print(f"  [freeze] skip model_edge_buckets write for {eval_date} ({eval_window}); pre-cutover")
+        log.info(f"skip model_edge_buckets write for {eval_date} ({eval_window}); pre-cutover")
         return
     if not buckets:
         return
@@ -169,28 +155,6 @@ def _write_edge_buckets(eval_date, eval_window, buckets):
             """), {"date": eval_date, "eval_window": eval_window, **b})
 
 
-def _write_experiment_run(cv_metrics, best_params):
-    """Log the training run to experiment_runs."""
-    try:
-        git_sha = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL
-        ).decode().strip()
-    except Exception:
-        git_sha = None
-
-    best_cv_mae = np.mean([m["mae"] for m in cv_metrics]) if cv_metrics else None
-
-    with engine.begin() as conn:
-        conn.execute(text("""
-            INSERT INTO experiment_runs (git_sha, hyperparameters, best_cv_mae, feature_list)
-            VALUES (:git_sha, :params, :mae, :features)
-        """), {
-            "git_sha": git_sha,
-            "params": json.dumps(best_params) if best_params else None,
-            "mae": float(best_cv_mae) if best_cv_mae else None,
-            "features": FEATURE_COLS,
-        })
-
 
 def _compute_base_row(window_df, window_ledger):
     """Accuracy counts for a window. Bet-level counts come from the ledger
@@ -200,7 +164,7 @@ def _compute_base_row(window_df, window_ledger):
     # double-count, and a row-level `pred_win == actual_win` mislabels the
     # loser row as correct on degenerate v1 days where both teams sit at exactly
     # 0.500 (no favorite). Excluding those non-picks keeps it order-independent
-    # and consistent with the frontend. MAE / mean win_prob stay per-team-row.
+    # and consistent with the site. MAE / mean win_prob stay per-team-row.
     picks = window_df.sort_values("win_prob").drop_duplicates("game_pk", keep="last")
     picks = picks[picks["win_prob"] > 0.5]
     total_correct = int((picks["actual_win"] == 1).sum())
@@ -215,9 +179,12 @@ def _compute_base_row(window_df, window_ledger):
         empty = pd.DataFrame(columns=["won"])
         ml_bets = rl_bets = totals_bets = empty
 
-    ml_total = len(ml_bets); ml_correct = int(ml_bets["won"].sum()) if ml_total else 0
-    rl_total = len(rl_bets); rl_correct = int(rl_bets["won"].sum()) if rl_total else 0
-    totals_total = len(totals_bets); totals_correct = int(totals_bets["won"].sum()) if totals_total else 0
+    ml_total = len(ml_bets)
+    ml_correct = int(ml_bets["won"].sum()) if ml_total else 0
+    rl_total = len(rl_bets)
+    rl_correct = int(rl_bets["won"].sum()) if rl_total else 0
+    totals_total = len(totals_bets)
+    totals_correct = int(totals_bets["won"].sum()) if totals_total else 0
 
     ml_accuracy = ml_correct / ml_total if ml_total > 0 else np.nan
     rl_accuracy = rl_correct / rl_total if rl_total > 0 else np.nan
@@ -264,26 +231,14 @@ def _merge_predictions_with_results(model_df, all_results):
     )
 
 
-def main(model=None, cv_metrics=None, best_params=None, as_of: datetime.date | None = None):
+def main(as_of: datetime.date | None = None):
     """Run full evaluation and write results to DB.
 
     Args:
-        model: trained XGBoost model (for feature importance). None = skip.
-        cv_metrics: list of per-fold metric dicts from train_model_cv. None = skip.
-        best_params: dict of best hyperparameters. None = skip.
         as_of: pretend "today" is this date. eval_date = as_of - 1. Used by
             the historical backfill script to replay eval rows for past days.
     """
     today = as_of if as_of is not None else datetime.date.today()
-
-    # --- Feature importance (depends only on trained model, not completed games) ---
-    if model is not None:
-        importance = dict(zip(FEATURE_COLS, model.feature_importances_))
-        _write_feature_importance(today, importance)
-
-    # --- Experiment tracking (depends only on CV metrics, not completed games) ---
-    if cv_metrics:
-        _write_experiment_run(cv_metrics, best_params)
 
     # Continuous v1+v2 track record. The unified view routes pre-cutover
     # dates to the frozen v1 archive (real v1 live picks) and post-cutover
@@ -299,7 +254,7 @@ def main(model=None, cv_metrics=None, best_params=None, as_of: datetime.date | N
     games_df["game_date"] = pd.to_datetime(games_df["game_date"])
     games_df = games_df[games_df["game_date"] < pd.Timestamp(today)]
     if games_df.empty:
-        print("  No completed games to evaluate against.")
+        log.info("No completed games to evaluate against.")
         return
 
     games_df["winning_team"] = np.where(
@@ -331,7 +286,7 @@ def main(model=None, cv_metrics=None, best_params=None, as_of: datetime.date | N
     )
 
     if eval_df.empty:
-        print("  No predictions matched to completed games yet.")
+        log.info("No predictions matched to completed games yet.")
         return
 
     # Win prediction accuracy
@@ -340,7 +295,7 @@ def main(model=None, cv_metrics=None, best_params=None, as_of: datetime.date | N
 
     accuracy = (eval_df["pred_win"] == eval_df["actual_win"]).mean()
     runs_mae = abs(eval_df["expected_runs"] - eval_df["actual_runs"]).mean()
-    print(f"  Win accuracy: {accuracy:.2%} | Runs MAE: {runs_mae:.3f} | {len(eval_df)} predictions evaluated")
+    log.info(f"Win accuracy: {accuracy:.2%} | Runs MAE: {runs_mae:.3f} | {len(eval_df)} predictions evaluated")
 
     # --- Build bet ledger ---
     ledger = _build_bet_ledger(eval_df)
@@ -416,8 +371,9 @@ def main(model=None, cv_metrics=None, best_params=None, as_of: datetime.date | N
     )
     _write_calibration(eval_date, cal_bins)
 
-    print(f"  Evaluation written for {eval_date} (4 windows + calibration)")
+    log.info(f"Evaluation written for {eval_date} (4 windows + calibration)")
 
 
 if __name__ == "__main__":
+    setup_logging()
     main()

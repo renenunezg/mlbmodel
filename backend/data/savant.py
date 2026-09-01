@@ -1,11 +1,17 @@
 """Park factors from Baseball Savant. CSV endpoint first, HTML scrape fallback."""
 
+import logging
+from datetime import date
+from io import StringIO
+
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
-from io import StringIO
-from datetime import date
+
+from backend.log import setup_logging
 from backend.team_mappings import TEAM_NAME_MAP
+
+log = logging.getLogger(__name__)
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
@@ -37,7 +43,7 @@ def fetch_park_factors(season: int = None) -> pd.DataFrame:
             df = pd.read_csv(StringIO(resp.text))
             return _process_park_factors(df, season)
     except Exception as e:
-        print(f"CSV endpoint failed, trying HTML: {e}")
+        log.warning(f"CSV endpoint failed, trying HTML: {e}")
 
     # Fallback: HTML scraping (no Selenium)
     html_url = (
@@ -64,10 +70,10 @@ def fetch_park_factors(season: int = None) -> pd.DataFrame:
             return _process_park_factors(df, season)
 
     except Exception as e:
-        print(f"HTML scraping failed: {e}")
+        log.warning(f"HTML scraping failed: {e}")
 
-    print("Could not fetch park factors. Baseball Savant may require JavaScript rendering.")
-    print("Consider using cached/static park factors as fallback.")
+    log.warning("Could not fetch park factors. Baseball Savant may require JavaScript rendering.")
+    log.info("Consider using cached/static park factors as fallback.")
     return _static_park_factors(season)
 
 
@@ -82,7 +88,7 @@ def _process_park_factors(df: pd.DataFrame, season: int) -> pd.DataFrame:
     pf_col = next((c for c in df.columns if c in ("park_factor", "pf", "index_woba", "woba")), None)
 
     if team_col is None:
-        print(f"Warning: no team column found in columns: {df.columns.tolist()}")
+        log.warning(f"no team column found in columns: {df.columns.tolist()}")
         return pd.DataFrame()
 
     result = pd.DataFrame()
@@ -144,6 +150,7 @@ def _static_park_factors(season: int) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
+    setup_logging()
     print("=== Park Factors ===")
     pf = fetch_park_factors()
     if not pf.empty:

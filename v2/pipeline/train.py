@@ -9,11 +9,16 @@ refitting so the prior trace can be restored if something goes wrong.
 from __future__ import annotations
 
 import argparse
+import logging
 import shutil
 import subprocess
 import sys
 from datetime import date
 from pathlib import Path
+
+from backend.log import setup_logging
+
+log = logging.getLogger(__name__)
 
 POSTERIORS_DIR = Path(__file__).resolve().parents[1] / "bayesian" / "posteriors"
 ARCHIVE_DIR = POSTERIORS_DIR / "archive"
@@ -28,7 +33,7 @@ def _archive_posteriors() -> None:
     diag = POSTERIORS_DIR / "diagnostics.json"
     if diag.exists():
         shutil.copy2(diag, dest / diag.name)
-    print(f"[train] archived posteriors to {dest}")
+    log.info(f"archived posteriors to {dest}")
 
 
 def main() -> None:
@@ -51,10 +56,11 @@ def main() -> None:
         "--end-year", str(args.end_year),
         "--save-traces",
     ]
-    print(f"[train] running: {' '.join(cmd)}")
+    log.info(f"running: {' '.join(cmd)}")
     result = subprocess.run(cmd)
     sys.exit(result.returncode)
 
 
 if __name__ == "__main__":
+    setup_logging()
     main()

@@ -1,4 +1,4 @@
-"""Shared utilities for the Phase 2 Bayesian skill layer."""
+"""Shared utilities for the Bayesian skill layer."""
 from __future__ import annotations
 
 import json
@@ -34,7 +34,7 @@ class ActorIndex:
         return np.searchsorted(self.ids, raw)
 
     @classmethod
-    def from_series(cls, s: pd.Series) -> "ActorIndex":
+    def from_series(cls, s: pd.Series) -> ActorIndex:
         ids = np.sort(s.unique())
         return cls(ids=ids, n=len(ids))
 

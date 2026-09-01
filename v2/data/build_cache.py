@@ -12,12 +12,17 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import logging
+import time
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
-import time
-from typing import Callable
 
 import pandas as pd
+
+from backend.log import setup_logging
+
+log = logging.getLogger(__name__)
 
 CACHE_DIR = Path(__file__).resolve().parents[2] / "cache"
 DEDUPE_COLS = ["game_pk", "at_bat_number", "pitch_number"]
@@ -39,7 +44,7 @@ def _fetch_statcast(
             if attempt == STATCAST_FETCH_ATTEMPTS:
                 raise
             delay = STATCAST_RETRY_SECONDS * attempt
-            print(
+            log.warning(
                 f"Statcast fetch failed ({exc}); retrying in {delay}s "
                 f"({attempt}/{STATCAST_FETCH_ATTEMPTS})"
             )
@@ -63,13 +68,13 @@ def fetch_year(year: int, force: bool = False) -> pd.DataFrame:
         cached = pd.read_parquet(cache_path)
         max_cached = pd.to_datetime(cached["game_date"]).max().date()
         fetch_from = max(season_start, max_cached)
-        print(f"[{year}] cached through {max_cached} ({len(cached):,} pitches)")
+        log.info(f"[{year}] cached through {max_cached} ({len(cached):,} pitches)")
 
     if fetch_from >= season_end and not cached.empty:
-        print(f"[{year}] cache up to date through {season_end}; skipping fetch")
+        log.info(f"[{year}] cache up to date through {season_end}; skipping fetch")
         return cached
 
-    print(f"[{year}] fetching {fetch_from} → {season_end}")
+    log.info(f"[{year}] fetching {fetch_from} → {season_end}")
     new_df = _fetch_statcast(statcast, str(fetch_from), str(season_end))
     new_df = new_df[new_df["game_type"] == "R"]
 
@@ -82,7 +87,7 @@ def fetch_year(year: int, force: bool = False) -> pd.DataFrame:
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     df.to_parquet(cache_path, index=False)
-    print(f"[{year}] saved {len(df):,} pitches across {df['game_pk'].nunique():,} games → {cache_path}")
+    log.info(f"[{year}] saved {len(df):,} pitches across {df['game_pk'].nunique():,} games → {cache_path}")
     return df
 
 
@@ -97,4 +102,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    setup_logging()
     main()

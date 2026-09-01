@@ -10,7 +10,7 @@ that would only capture MC noise and mislead consumers.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
@@ -194,7 +194,7 @@ def build_game_rows(
     total_arr = h + a
     t_p10, t_p50, t_p90 = runs_percentiles(total_arr)
 
-    # Empirical run-distribution histograms (21 bins, 0..20 runs) for the frontend.
+    # Empirical run-distribution histograms (21 bins, 0..20 runs) for the site.
     # The capped-bin trick: runs > 20 land in bin 20. Tail mass past 20 is tiny.
     h_clipped = np.minimum(h, 20)
     a_clipped = np.minimum(a, 20)
@@ -215,7 +215,7 @@ def build_game_rows(
     home_total_diff = round(our_total - float(total_line), 4) if pd.notna(total_line) else None
     away_total_diff = home_total_diff
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     base = {
         "game_pk": int(game_pk),
         "date": pd.Timestamp(game_date).to_pydatetime().replace(tzinfo=None),
@@ -390,7 +390,7 @@ def append_season(rows: list[dict]) -> None:
 
 def posterior_age_days(now: datetime | None = None, posteriors_dir: Path = POSTERIORS_DIR) -> int:
     """Days since the most recent NetCDF trace mtime."""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     files = list(posteriors_dir.glob("*.nc"))
     if not files:
         return -1

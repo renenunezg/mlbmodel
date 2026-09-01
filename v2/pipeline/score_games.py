@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import logging
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -25,6 +25,7 @@ from sqlalchemy import text
 from backend.data.mlb_api import fetch_lineup
 from backend.data.odds_api import DEFAULT_BOOKS
 from backend.db import engine
+from backend.log import setup_logging
 from backend.strategy import WEATHER_ENABLED
 from v2.markets.writer import (
     append_season,
@@ -33,10 +34,8 @@ from v2.markets.writer import (
     write_daily,
 )
 from v2.simulator import (
-    AdvancementTable,
     BullpenQueue,
     GameInputs,
-    PosteriorMeans,
     build_queues_from_cache,
     load_advancement_table,
     load_out_subtype_table,
@@ -45,10 +44,11 @@ from v2.simulator import (
 )
 from v2.simulator.bullpen import LiveQueueContext, build_queues_live
 
+log = logging.getLogger(__name__)
 
-# K posterior draws per game. ~30 gives stable p10/p90 win-prob bands without
-# per-game cost ballooning (~30 × 50ms PosteriorMeans assembly = 1.5s overhead).
-# (K=60 was tried for wider totals tails; it tightens variance, not widens, so reverted.)
+
+# Posterior draws per game. 30 gives stable p10/p90 win-prob bands at ~1.5s
+# of PosteriorMeans assembly per game.
 N_DRAWS = 30
 
 CACHE_DIR = Path(__file__).resolve().parents[2] / "cache"
@@ -214,7 +214,7 @@ def fetch_lineups_for_games(game_pks: list[int]) -> dict[int, dict[str, list[int
         try:
             out[gp] = fetch_lineup(gp)
         except Exception as e:
-            print(f"  [fetch_lineup] {gp} failed, falling back: {e}")
+            log.warning(f"{gp} failed, falling back: {e}")
             out[gp] = {"home": [], "away": []}
     return out
 
@@ -365,7 +365,7 @@ def score(
             pick is frozen at the last pre-first-pitch score. Backtest replay
             passes False to (re)populate finished historical dates on purpose.
     """
-    print(f"[score_games] loading {N_DRAWS} posterior draws + tables...")
+    log.info(f"loading {N_DRAWS} posterior draws + tables...")
     rng = np.random.default_rng(seed)
     draws = load_posterior_draws(rng, K=N_DRAWS)
     adv = load_advancement_table()
@@ -374,24 +374,24 @@ def score(
 
     contexts = build_contexts(date)
     if not contexts:
-        print(f"[score_games] no games on {date}")
+        log.info(f"no games on {date}")
         return pd.DataFrame()
     if game_pks is not None:
         wanted = set(int(p) for p in game_pks)
         contexts = [c for c in contexts if int(c.game_pk) in wanted]
         if not contexts:
-            print(f"[score_games] none of the requested game_pks scheduled on {date}")
+            log.info(f"none of the requested game_pks scheduled on {date}")
             return pd.DataFrame()
     if freeze_started:
         now = pd.Timestamp.now(tz="UTC")
         started = {c.game_pk for c in contexts if is_started(c.start_time, now)}
         if started:
-            print(f"[score_games] freezing {len(started)} already-started games (not re-scored): {sorted(started)}")
+            log.info(f"freezing {len(started)} already-started games (not re-scored): {sorted(started)}")
             contexts = [c for c in contexts if c.game_pk not in started]
         if not contexts:
-            print(f"[score_games] all games on {date} already started; nothing to score")
+            log.info(f"all games on {date} already started; nothing to score")
             return pd.DataFrame()
-    print(f"[score_games] {len(contexts)} games on {date}")
+    log.info(f"{len(contexts)} games on {date}")
 
     year = pd.Timestamp(date).year
     cache = load_cache_for_year(year)
@@ -409,7 +409,7 @@ def score(
     try:
         live_queues = build_queues_live(pd.Timestamp(date).date(), live_q_contexts)
     except Exception as e:
-        print(f"[score_games] build_queues_live failed ({e}); falling back to cache")
+        log.warning(f"build_queues_live failed ({e}); falling back to cache")
         live_queues = {}
 
     live_lineups = fetch_lineups_for_games([c.game_pk for c in contexts])
@@ -425,7 +425,7 @@ def score(
     n_per_draw = max(1, n_sims // N_DRAWS)
     actual_n_sims = n_per_draw * N_DRAWS
     if actual_n_sims != n_sims:
-        print(f"[score_games] rounding n_sims {n_sims} -> {actual_n_sims} ({N_DRAWS} draws × {n_per_draw} sims)")
+        log.info(f"rounding n_sims {n_sims} -> {actual_n_sims} ({N_DRAWS} draws × {n_per_draw} sims)")
 
     all_rows: list[dict] = []
     flagged = 0
@@ -477,8 +477,8 @@ def score(
         for r in rows:
             if r["ev_flag"] != "No Play" or r["run_line_ev_flag"] != "No Play" or r["total_play"] != "No Play":
                 flagged += 1
-        print(
-            f"  game {ctx.game_pk} {ctx.away_team}@{ctx.home_team}: "
+        log.info(
+            f"game {ctx.game_pk} {ctx.away_team}@{ctx.home_team}: "
             f"xR {rows[1]['expected_runs']:.2f} / {rows[0]['expected_runs']:.2f}, "
             f"home_wp {rows[0]['win_prob']:.3f} [{home_wp_p10:.3f}-{home_wp_p90:.3f}]"
         )
@@ -487,11 +487,11 @@ def score(
         write_daily(pd.Timestamp(date), all_rows)
         if update_season:
             append_season(all_rows)
-            print(f"[score_games] wrote {len(all_rows)} rows to model_outputs + season")
+            log.info(f"wrote {len(all_rows)} rows to model_outputs + season")
         else:
-            print(f"[score_games] wrote {len(all_rows)} rows to model_outputs (season skipped)")
+            log.info(f"wrote {len(all_rows)} rows to model_outputs (season skipped)")
 
-    print(f"[score_games] {flagged} +EV flags across {len(all_rows)} rows; posterior_age_days={age}")
+    log.info(f"{flagged} +EV flags across {len(all_rows)} rows; posterior_age_days={age}")
     return pd.DataFrame(all_rows)
 
 
@@ -506,4 +506,5 @@ def main():
 
 
 if __name__ == "__main__":
+    setup_logging()
     main()

@@ -14,7 +14,6 @@ from sqlalchemy import text
 from backend.db import engine
 from backend.strategy import EV_THRESHOLDS
 
-
 MIN_EDGE_BETS = 50
 
 

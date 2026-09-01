@@ -6,7 +6,7 @@ swap; the queue decides WHO.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -16,11 +16,11 @@ from sqlalchemy import text
 
 CACHE_DIR = Path(__file__).resolve().parents[2] / "cache"
 
-# Rest-eligibility rules. Mirror v1's reliever-availability heuristic.
+# Rest eligibility: outs thrown over the last one and two days.
 ELIG_OUTS_1D = 6
 ELIG_OUTS_2D = 9
 
-# Starter pull thresholds. Match CLAUDE.md §"Bullpen rules".
+# Starter pull thresholds.
 PULL_OUTS_HARD = 18         # 6 IP completed → automatic pull
 PULL_OUTS_RUNS = 12         # 4 IP + 4+ runs → pull
 PULL_RUNS_HARD = 6          # 6+ runs → pull regardless of IP

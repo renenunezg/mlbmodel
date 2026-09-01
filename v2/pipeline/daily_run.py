@@ -13,14 +13,18 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from datetime import date
 
 from backend.data.bullpen_daily import update_bullpen_daily
 from backend.data.weather import update_weather_for_date
+from backend.log import setup_logging
 from pipeline import fetch_and_load_odds, update_scores_and_schedule
 from v2.pipeline.score_games import score
 from v2.pipeline.verify import run_checks
+
+log = logging.getLogger(__name__)
 
 
 def main() -> None:
@@ -30,30 +34,31 @@ def main() -> None:
     ap.add_argument("--optional-odds-refresh", action="store_true")
     args = ap.parse_args()
     target_date = date.fromisoformat(args.date)
-    print(f"[daily_run] date={args.date}")
+    log.info(f"date={args.date}")
 
-    print("[daily_run] step 1: schedule + scores")
+    log.info("step 1: schedule + scores")
     update_scores_and_schedule()
 
-    print("[daily_run] step 2: bullpen_daily + pitcher_workload")
+    log.info("step 2: bullpen_daily + pitcher_workload")
     update_bullpen_daily()
 
-    print("[daily_run] step 3: odds")
+    log.info("step 3: odds")
     fetch_and_load_odds(target_date, optional=args.optional_odds_refresh)
 
-    print("[daily_run] step 3b: weather")
+    log.info("step 3b: weather")
     update_weather_for_date(target_date)
 
-    print(f"[daily_run] step 4: scoring {args.date}")
+    log.info(f"step 4: scoring {args.date}")
     rows = score(args.date, n_sims=args.n_sims, write=True)
     if rows.empty:
-        print(f"[daily_run] no games on {args.date}, exiting")
+        log.info(f"no games on {args.date}, exiting")
         sys.exit(0)
 
-    print("[daily_run] step 5: verify")
+    log.info("step 5: verify")
     ok = run_checks(args.date)
     sys.exit(0 if ok else 1)
 
 
 if __name__ == "__main__":
+    setup_logging()
     main()

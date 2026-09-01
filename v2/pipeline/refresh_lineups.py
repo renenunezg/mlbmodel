@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import logging
 from datetime import date
 
 import pandas as pd
@@ -21,8 +22,11 @@ from sqlalchemy import text
 
 from backend.data.mlb_api import fetch_lineup, fetch_probable_starters
 from backend.db import engine
+from backend.log import setup_logging
 from pipeline import upsert_probable_starters
 from v2.pipeline.score_games import score
+
+log = logging.getLogger(__name__)
 
 
 def _lineup_hash(lineup: dict[str, list[int]]) -> str:
@@ -78,7 +82,7 @@ def main() -> None:
 
     games = _fetch_scheduled_games(args.date)
     if games.empty:
-        print(f"[refresh_lineups] no unstarted games on {args.date}")
+        log.info(f"no unstarted games on {args.date}")
         return
 
     before = _starter_map(args.date)
@@ -99,11 +103,11 @@ def main() -> None:
             changed.add(gp)
 
     if not changed:
-        print(f"[refresh_lineups] no starter or lineup changes on {args.date}")
+        log.info(f"no starter or lineup changes on {args.date}")
         return
 
     changed = sorted(changed)
-    print(f"[refresh_lineups] {len(changed)} games changed (starter/lineup): {changed}")
+    log.info(f"{len(changed)} games changed (starter/lineup): {changed}")
     # Weather updates as first pitch approaches; refresh it for the re-scored games.
     from backend.data.weather import fetch_weather
     for gp in changed:
@@ -121,4 +125,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    setup_logging()
     main()

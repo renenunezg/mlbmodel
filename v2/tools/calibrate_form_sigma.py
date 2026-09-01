@@ -1,11 +1,7 @@
-"""Sweep FORM_SIGMA values against the Phase 4 variance gate, with K-draw posteriors.
+"""Sweep FORM_SIGMA values against the runs-per-game acceptance gate.
 
-Phase 5 introduced per-game posterior draws in score_games (load_posterior_draws,
-N_DRAWS=30 batches). The original FORM_SIGMA=0.18 was calibrated against
-point-estimate posteriors. With real posterior parameter uncertainty now in the
-loop, we expect to need a smaller sigma, possibly zero. This script reruns the
-Phase 4 acceptance gate (200 stratified 2025 games, runs/team-game mean and var
-within 5% of actual) at multiple sigma values and reports.
+Reruns the gate (200 stratified 2025 games, runs/team-game mean and variance
+within 5% of actual) at several sigma values with K-draw posteriors and reports.
 
 Usage:
     env/bin/python -m v2.tools.calibrate_form_sigma
@@ -18,22 +14,19 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from v2.data.pa_dataset import EVENT_TO_OUTCOME, NON_PA_EVENTS
+from tests.test_simulator_acceptance import (
+    _build_game_inputs,
+    _build_pa_frame,
+    _classify_roles_2025,
+)
+from v2.data.pa_dataset import NON_PA_EVENTS
 from v2.simulator import (
-    BullpenQueue,
-    GameInputs,
     build_queues_from_cache,
     load_advancement_table,
     load_out_subtype_table,
     load_posterior_draws,
     simulate_game,
 )
-from v2.tests.test_game_sim import (  # reuse helpers
-    _build_game_inputs,
-    _build_pa_frame,
-    _classify_roles_2025,
-)
-
 
 SIGMAS = [0.0, 0.05, 0.10, 0.13, 0.15, 0.18]
 N_DRAWS = 30

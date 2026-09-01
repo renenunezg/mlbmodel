@@ -1,0 +1,13 @@
+env/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.DS_Store
+.vscode/
+.env
+cache/
+models/
+v2/bayesian/posteriors/*
+!v2/bayesian/posteriors/.gitkeep

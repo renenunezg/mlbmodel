@@ -9,12 +9,16 @@ coefficient fit joins against. Idempotent (fetch_weather upserts).
 from __future__ import annotations
 
 import argparse
+import logging
 import time
 from pathlib import Path
 
 import pandas as pd
 
 from backend.data.weather import fetch_weather
+from backend.log import setup_logging
+
+log = logging.getLogger(__name__)
 
 CACHE_DIR = Path(__file__).resolve().parents[2] / "cache"
 
@@ -29,23 +33,24 @@ def main():
     for y in args.years:
         path = CACHE_DIR / f"statcast_{y}.parquet"
         if not path.exists():
-            print(f"  skip {y}: {path} missing")
+            log.info(f"skip {y}: {path} missing")
             continue
         gp = pd.read_parquet(path, columns=["game_pk"])["game_pk"].astype(int).unique()
         pks.update(gp.tolist())
-        print(f"  {y}: {len(gp)} games")
+        log.info(f"{y}: {len(gp)} games")
 
     pks = sorted(pks)
-    print(f"total distinct games: {len(pks)}")
+    log.info(f"total distinct games: {len(pks)}")
     n = 0
     for i, gp in enumerate(pks, 1):
         if fetch_weather(gp) is not None:
             n += 1
         if i % 250 == 0:
-            print(f"  {i}/{len(pks)} ({n} populated)")
+            log.info(f"{i}/{len(pks)} ({n} populated)")
         time.sleep(args.sleep)
-    print(f"backfill_weather: {n}/{len(pks)} games populated")
+    log.info(f"backfill_weather: {n}/{len(pks)} games populated")
 
 
 if __name__ == "__main__":
+    setup_logging()
     main()
