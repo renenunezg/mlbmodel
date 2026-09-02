@@ -1,9 +1,10 @@
-"""Hierarchical Dirichlet-Multinomial batter outcome model with platoon split.
+"""Hierarchical multinomial-logit batter outcome model with platoon split.
 
 Per (batter, vs_lhp) cell, Multinomial likelihood over the 8 OUTCOMES with
 non-centered additive logit offsets vs OUT (reference). Each batter has a main
 effect and a platoon delta that activates against LHP; both are partially
-pooled across batters.
+pooled across batters. The Normal hierarchy sits on the logits, so a batter's
+outcome-probability vector is logistic-normal; there is no Dirichlet prior.
 """
 from __future__ import annotations
 
