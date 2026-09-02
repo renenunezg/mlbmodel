@@ -1,4 +1,4 @@
-"""Hierarchical D-M pitcher outcome model with role-conditional shrinkage.
+"""Hierarchical multinomial-logit pitcher outcome model with role-conditional shrinkage.
 
 Per pitcher Multinomial likelihood over OUTCOMES. Hierarchy widths split by
 role (SP vs RP) so starters and relievers shrink toward separate population

@@ -1,7 +1,7 @@
 [project]
 name = "mlbmodel"
 version = "0.1.0"
-description = "MLB expected-runs model with +EV betting analysis."
+description = "Hierarchical Bayesian MLB run-distribution model, benchmarked daily against market prices."
 requires-python = ">=3.11"
 
 [build-system]

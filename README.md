@@ -18,14 +18,20 @@ covers what's in this repository and how to run it.
 
 The current model (v2, live since 2026-05-12) is a two-layer system:
 
-1. **Hierarchical Bayesian skill layer.** Three Dirichlet-Multinomial models
-   (batter, pitcher, park) over the eight plate-appearance outcomes (K, BB,
-   HBP, 1B, 2B, 3B, HR, OUT), fit with NUTS via numpyro/JAX. Batters split by
-   platoon (`vs_LHP`), pitchers split by role (`SP`/`RP`), park applies as a
-   per-venue log-PF on residual wOBA. Non-centered parameterization, aggregated
-   Multinomial likelihood, 4 chains × 2000 draws. R-hat 1.00 and min ESS > 400
-   on all three fits. Trained on 401,826 PAs across 2024 + 2025 + 2026-YTD,
-   refit nightly (~12 min on M-series, ~30 min on a GitHub Actions runner).
+1. **Hierarchical Bayesian skill layer.** Batter and pitcher skill are
+   hierarchical multinomial-logit models over the eight plate-appearance
+   outcomes (K, BB, HBP, 1B, 2B, 3B, HR, OUT): each actor carries a vector of
+   seven additive log-odds offsets against OUT as the reference category,
+   partially pooled through a non-centered Normal hierarchy, so an actor's
+   outcome probabilities are logistic-normal rather than Dirichlet. Batters
+   split by platoon (`vs_LHP`); pitchers shrink toward role-specific spreads
+   (`SP`/`RP`). Park is a separate Gaussian model of a per-venue log park
+   factor fit to residual wOBA after batter and pitcher effects. All three are
+   fit with NUTS via numpyro/JAX on aggregated per-actor outcome counts
+   (Multinomial likelihood), 4 chains × 2000 draws. R-hat 1.00 and min ESS >
+   400 on all three fits. Trained on 401,826 PAs across 2024 + 2025 +
+   2026-YTD, refit nightly (~12 min on M-series, ~30 min on a GitHub Actions
+   runner).
 2. **Per-PA Monte Carlo simulator.** K=30 random posterior draws × N
    inning-level simulations per draw. N is configurable via `--n-sims`; the
    production scoring default is 10,000 total sims (~333 per draw) and the
@@ -67,8 +73,9 @@ backend/
                         Kelly sizing, odds conversions, Brier and log-loss,
                         EV thresholds and market anchoring constants.
 v2/
-  bayesian/             Three D-M models + fit_all orchestrator. Posteriors
-                        saved to v2/bayesian/posteriors/*.nc (gitignored).
+  bayesian/             Batter, pitcher, and park models + fit_all
+                        orchestrator. Posteriors saved to
+                        v2/bayesian/posteriors/*.nc (gitignored).
   simulator/            posteriors loader, vectorized PA sampler, empirical
                         baserunner table, rest-aware bullpen, game loop.
   markets/              Empirical market probs, EV flags, Kelly, writer to
