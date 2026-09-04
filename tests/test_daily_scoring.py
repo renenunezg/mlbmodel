@@ -27,12 +27,22 @@ N_SIMS = 1000
 
 @pytest.mark.skipif(not POSTERIORS_PRESENT, reason="posteriors not built")
 @pytest.mark.skipif(not CACHE_2026.exists(), reason="2026 statcast cache missing")
-def test_score_games_end_to_end():
-    from v2.pipeline.score_games import score
+def test_score_games_end_to_end(monkeypatch):
+    from v2.pipeline import score_games
+
+    simulate_game = score_games.simulate_game
+
+    def simulate_with_trained_park(rng, pm, adv, sub_table, inputs, **kwargs):
+        # Live MLB team aliases must resolve to the trained Statcast park, not
+        # the neutral fallback. Check the actual daily scoring inputs.
+        assert inputs.venue in pm.venue_codes, f"unrecognized park: {inputs.venue}"
+        return simulate_game(rng, pm, adv, sub_table, inputs, **kwargs)
+
+    monkeypatch.setattr(score_games, "simulate_game", simulate_with_trained_park)
 
     # SMOKE_DATE is in the past, so freeze_started would drop every game; opt
     # out to exercise the full scoring path (this is the backtest-replay case).
-    df = score(SMOKE_DATE, n_sims=N_SIMS, write=False, seed=0, freeze_started=False)
+    df = score_games.score(SMOKE_DATE, n_sims=N_SIMS, write=False, seed=0, freeze_started=False)
     if df.empty:
         pytest.skip("no games for SMOKE_DATE; pick a different date")
 

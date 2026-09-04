@@ -53,6 +53,13 @@ N_DRAWS = 30
 
 CACHE_DIR = Path(__file__).resolve().parents[2] / "cache"
 
+# Park posteriors are trained on Statcast abbreviations, while live games use
+# MLB API abbreviations. Unknown venues otherwise silently get a zero offset.
+STATCAST_VENUE_CODES = {
+    "ARI": "AZ", "CHW": "CWS", "KCR": "KC", "SDP": "SD",
+    "SFG": "SF", "TBR": "TB", "WSN": "WSH",
+}
+
 
 @dataclass
 class GameContext:
@@ -328,7 +335,7 @@ def build_inputs(
         away_lineup=np.array(away_lineup, dtype=np.int64),
         home_queue=home_queue,
         away_queue=away_queue,
-        venue=ctx.home_team,
+        venue=STATCAST_VENUE_CODES.get(ctx.home_team, ctx.home_team),
         home_p_throws_lookup=home_throws,
         away_p_throws_lookup=away_throws,
         wind_signal=wind_signal,

@@ -111,10 +111,11 @@ def _ml_by_book(odds: dict | None) -> dict:
     offers = odds.get("offers") or [odds]
     out = {}
     for offer in offers:
+        book = offer.get("book")
         ml = offer.get("moneyline")
-        if ml is None or _isnan(ml):
+        if not book or ml is None or not np.isfinite(float(ml)) or abs(float(ml)) < 100:
             continue
-        out[offer.get("book")] = float(ml)
+        out[book] = float(ml)
     return out
 
 
