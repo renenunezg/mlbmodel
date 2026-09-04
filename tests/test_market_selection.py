@@ -43,6 +43,7 @@ def test_runline_uses_best_price_at_one_and_a_half():
 
 def test_fallback_lineup_suppresses_market_flags(monkeypatch):
     odds = {
+        "book": "draftkings",
         "moneyline": -150,
         "spread": -1.5,
         "spread_odds": 120,
@@ -75,9 +76,9 @@ def test_fallback_lineup_suppresses_market_flags(monkeypatch):
 
     assert live_home["ev_flag"] == "LAD"
     assert live_home["run_line_ev_flag"] == "LAD"
-    assert all(live_home[key] == value for key, value in odds.items())
+    assert all(live_home[key] == value for key, value in odds.items() if key != "book")
     away_odds = {**odds, "moneyline": 130, "spread": 1.5}
-    assert all(fallback_away[key] == value for key, value in away_odds.items())
+    assert all(fallback_away[key] == value for key, value in away_odds.items() if key != "book")
     for row in (fallback_home, fallback_away):
         assert row["ev_flag"] == "No Play"
         assert row["run_line_ev_flag"] == "No Play"
@@ -130,6 +131,22 @@ def test_market_anchor_stops_flagging_big_dogs(monkeypatch):
     solo_home, _ = build_game_rows(**kwargs, home_odds=None, away_odds=None)
     assert solo_home["win_prob"] > 0.60  # +0.09 logit HFA on a 0.60 sim prob
     assert solo_home["ev_flag"] == "No Play"
+
+    # A one-sided or unpaired price must not turn the unanchored fallback into
+    # a +EV recommendation or a positive stake for this same +250 underdog.
+    for home_odds, away_odds in (
+        (None, {"book": "draftkings", "moneyline": 250}),
+        ({"book": "fanduel", "moneyline": -300}, {"book": "draftkings", "moneyline": 250}),
+        ({"moneyline": -300}, {"moneyline": 250}),
+        ({"book": "draftkings", "moneyline": float("inf")}, {"book": "draftkings", "moneyline": 250}),
+    ):
+        unpaired = build_game_rows(**kwargs, home_odds=home_odds, away_odds=away_odds)
+        assert unpaired[1]["win_prob"] > 0.35
+        for row in unpaired:
+            assert row["ev_flag"] == "No Play"
+            assert pd.isna(row["ml_confidence"])
+            assert row["kelly_full_ml"] == row["kelly_quarter_ml"] == 0
+            assert row["expected_runs"] > 0
 
 
 def test_market_research_refuses_independently_shopped_baseline():

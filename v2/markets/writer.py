@@ -147,6 +147,9 @@ def build_game_rows(
     != "live"). That fallback can swing a game 10+ points and flip the favorite
     (it still bats traded/resting stars and omits recent regulars), so any flag
     it produces is unreliable. Suppress both rows; xR/win-prob still write.
+
+    Moneyline recommendations require a paired same-book market anchor.
+    Without one, the fallback simulator estimate is display-only for moneyline.
     """
     h = np.asarray(home_runs)
     a = np.asarray(away_runs)
@@ -299,6 +302,13 @@ def build_game_rows(
     }
     away_row.update(_kelly_block(away_row, p_away_win, p_away_cover, p_over, p_under,
                                  away_ml, away_spread_odds, away_total_over, away_total_under))
+
+    if p_market_home is None:
+        for row in (home_row, away_row):
+            row["ev_flag"] = "No Play"
+            row["ml_confidence"] = float("nan")
+            row["kelly_full_ml"] = 0.0
+            row["kelly_quarter_ml"] = 0.0
 
     if not starters_known or not lineups_live:
         _suppress_bet(home_row)
