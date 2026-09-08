@@ -36,6 +36,9 @@ NON_REF_LABELS = [OUTCOMES[i] for i in NON_REF_IDX]
 K_FREE = len(NON_REF_IDX)
 ROLES = ("SP", "RP")
 POSITION_PLAYER_PA_THRESHOLD = 50
+# Explicit MLB player IDs for established two-way pitchers. Batting volume is
+# evidence of a position player only after these pitching-role overrides.
+TWO_WAY_PITCHER_IDS = frozenset({660271})  # Shohei Ohtani
 
 
 def classify_roles(pa_df: pd.DataFrame) -> pd.Series:
@@ -56,10 +59,12 @@ def classify_roles(pa_df: pd.DataFrame) -> pd.Series:
     return pd.Series(role, index=games_count.index, name="role")
 
 
-def filter_position_player_pitching(pa_df: pd.DataFrame) -> pd.DataFrame:
+def filter_position_player_pitching(
+    pa_df: pd.DataFrame, two_way_pitcher_ids: frozenset[int] = TWO_WAY_PITCHER_IDS,
+) -> tuple[pd.DataFrame, set[int]]:
     batter_pa = pa_df.groupby("batter").size()
     real_batters = set(batter_pa[batter_pa >= POSITION_PLAYER_PA_THRESHOLD].index)
-    pitchers_to_drop = set(pa_df["pitcher"].unique()) & real_batters
+    pitchers_to_drop = (set(pa_df["pitcher"].unique()) & real_batters) - set(two_way_pitcher_ids)
     if pitchers_to_drop:
         pa_df = pa_df[~pa_df["pitcher"].isin(pitchers_to_drop)].reset_index(drop=True)
     return pa_df, pitchers_to_drop
@@ -91,6 +96,7 @@ def build_model(pa_df: pd.DataFrame, frozen_intercept: np.ndarray | None = None)
     }
 
     with pm.Model(coords=coords) as model:
+        pm.Data("pitcher_role", role_idx_for_sigma, dims="pitcher")
         if frozen_intercept is None:
             intercept = pm.Normal("intercept", mu=intercept_prior, sigma=0.5, dims="outcome_free")
         else:

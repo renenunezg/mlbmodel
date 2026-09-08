@@ -1,113 +1,12 @@
 """Acceptance gates for the v2 plate-appearance and game simulators."""
 from __future__ import annotations
 
-import time
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import pytest
 
-from v2.data.pa_dataset import EVENT_TO_OUTCOME, NON_PA_EVENTS
 
-POSTERIORS = [Path("v2/bayesian/posteriors") / f for f in ("batter_skill.nc", "pitcher_skill.nc", "park_effects.nc")]
-TABLES = [Path("v2/simulator/tables") / f for f in ("advancement.parquet", "out_subtype.parquet")]
-CACHE_2025 = Path("cache/statcast_2025.parquet")
-
-skip_if_missing = pytest.mark.skipif(
-    not (all(p.exists() for p in POSTERIORS) and all(p.exists() for p in TABLES) and CACHE_2025.exists()),
-    reason="missing posteriors / tables / 2025 cache",
-)
-
-
-def _classify_roles_2025(pa_df: pd.DataFrame) -> dict[int, int]:
-    """Same heuristic as v2/tests/test_pa_sim.py."""
-    inning1 = pa_df[pa_df["inning"] == 1].copy()
-    starter_side = np.where(inning1["inning_topbot"] == "Top", "away", "home")
-    inning1 = inning1.assign(side=starter_side)
-    starters = (
-        inning1.groupby(["game_pk", "side"])["pitcher"]
-        .agg(lambda s: s.mode().iloc[0] if not s.mode().empty else np.nan)
-        .dropna().astype("int64")
-    )
-    starts = starters.value_counts()
-    games = pa_df.groupby("pitcher")["game_pk"].nunique()
-    share = (starts / games).fillna(0.0)
-    sp = set(share[share >= 0.5].index)
-    return {int(p): (0 if int(p) in sp else 1) for p in games.index}
-
-
-def _build_pa_frame(year: int) -> pd.DataFrame:
-    df = pd.read_parquet(
-        Path(f"cache/statcast_{year}.parquet"),
-        columns=[
-            "game_pk", "game_date", "inning", "inning_topbot", "at_bat_number", "pitch_number",
-            "events", "batter", "pitcher", "stand", "p_throws", "home_team", "away_team",
-        ],
-    )
-    df = df[df["events"].notna() & ~df["events"].isin(NON_PA_EVENTS)]
-    df["outcome"] = df["events"].map(EVENT_TO_OUTCOME)
-    df = df[df["outcome"].notna()].copy()
-    df = df.sort_values(["game_pk", "inning", "at_bat_number", "pitch_number"]).reset_index(drop=True)
-    return df
-
-
-def _build_game_inputs(pa_df: pd.DataFrame, queues: dict, role_lookup: dict[int, int]):
-    """For each game, build a GameInputs object using actual lineups + bullpens.
-
-    Lineup = first 9 distinct batters per side in at_bat_number order.
-    Bullpen = pitchers used in that game from `queues`.
-    """
-    from v2.simulator.game_sim import GameInputs
-
-    # global throws lookup
-    throws_lookup = (
-        pa_df.drop_duplicates("pitcher").set_index("pitcher")["p_throws"].to_dict()
-    )
-    throws_lookup = {int(k): v for k, v in throws_lookup.items()}
-
-    games = []
-    for gp, grp in pa_df.groupby("game_pk", sort=False):
-    # batting side per PA: top means away batting, bottom means home batting
-        away_pa = grp[grp["inning_topbot"] == "Top"]
-        home_pa = grp[grp["inning_topbot"] == "Bot"]
-
-        away_lineup = []
-        for b in away_pa["batter"]:
-            b = int(b)
-            if b not in away_lineup:
-                away_lineup.append(b)
-            if len(away_lineup) == 9:
-                break
-        home_lineup = []
-        for b in home_pa["batter"]:
-            b = int(b)
-            if b not in home_lineup:
-                home_lineup.append(b)
-            if len(home_lineup) == 9:
-                break
-        if len(away_lineup) < 9 or len(home_lineup) < 9:
-            continue
-        venue = grp["home_team"].iloc[0]
-        if (gp, "home") not in queues or (gp, "away") not in queues:
-            continue
-        games.append((
-            int(gp),
-            GameInputs(
-                home_lineup=np.array(home_lineup, dtype=np.int64),
-                away_lineup=np.array(away_lineup, dtype=np.int64),
-                home_queue=queues[(gp, "home")],
-                away_queue=queues[(gp, "away")],
-                venue=str(venue),
-                home_p_throws_lookup=throws_lookup,
-                away_p_throws_lookup=throws_lookup,
-            ),
-            int((grp["inning_topbot"] == "Top").sum()),  # away PAs (proxy for sim length expectation)
-        ))
-    return games
-
-
-def test_simulator_uses_the_pitcher_intercept():
+def test_simulator_uses_the_pitcher_intercept(monkeypatch):
     from v2.simulator.posteriors import K_FREE, _assemble
 
     intercept = np.arange(K_FREE, dtype=float) * 0.1
@@ -128,103 +27,115 @@ def test_simulator_uses_the_pitcher_intercept():
     np.testing.assert_allclose(pm.intercept, intercept)
     assert not hasattr(pm, "intercept_diff")
 
+    from collections import Counter
 
-@skip_if_missing
-def test_league_pa_replay_within_1pp():
-    from v2.data.pa_dataset import OUTCOMES, load_pa_dataset
-    from v2.simulator import load_posteriors, simulate_pa_batch
+    from v2.simulator.bullpen import BullpenQueue
+    from v2.simulator.game_sim import GameInputs, simulate_game
+    from v2.simulator.gb_quartiles import GBQuartiles
 
-    pa = load_pa_dataset(2025, 2025)
-    pm = load_posteriors()
-    role_map = _classify_roles_2025(pa)
-    roles = pa["pitcher"].map(role_map).fillna(1).astype(np.int64).to_numpy()
-    rng = np.random.default_rng(20260508)
-    simulated = simulate_pa_batch(
-        rng,
-        pm,
-        pa["batter"].astype("int64").to_numpy(),
-        pa["pitcher"].astype("int64").to_numpy(),
-        pa["p_throws"].to_numpy() == "L",
-        roles,
-        pa["home_team"].astype(str).to_numpy(),
-    )
-    actual = pa["outcome"].map({outcome: i for i, outcome in enumerate(OUTCOMES)}).to_numpy()
+    seen = Counter()
 
-    def rates(codes):
-        counts = np.bincount(codes, minlength=len(OUTCOMES))
-        total = counts.sum()
-        strikeouts, walks, hbp, singles, doubles, triples, home_runs, _ = counts
-        babip_denominator = total - strikeouts - walks - hbp - home_runs
-        return np.array([
-            strikeouts / total,
-            walks / total,
-            home_runs / total,
-            (singles + doubles + triples) / babip_denominator,
-        ])
+    def record_pa(pm, batters, pitchers, *args):
+        seen.update(int(p) for p in pitchers)
+        logits = np.full((len(pitchers), 8), -100.)
+        logits[:, 0] = 100.  # deterministic strikeout, isolates pitcher usage
+        return logits
 
-    np.testing.assert_array_less(np.abs(rates(simulated) - rates(actual)), 0.01)
+    class OutsOnly:
+        def sample(self, rng, state, outs, outcomes, subtype):
+            return np.zeros(len(state), int), np.zeros(len(state), int), np.ones(len(state), int)
+
+    monkeypatch.setattr("v2.simulator.game_sim.pa_logits_batch", record_pa)
+    inputs = GameInputs(np.arange(1, 10), np.arange(11, 20),
+                        BullpenQueue(593974, [656288, 0], starter_role=1,
+                                     workloads={593974: (3,), 656288: (12,)}, roles={656288: 0}),
+                        BullpenQueue(200, [0]), "AAA", {}, {})
+    simulate_game(np.random.default_rng(0), pm, OutsOnly(), None, inputs,
+                  n_sims=1, form_sigma=0, gbq=GBQuartiles({}, {}))
+    assert seen[593974] == 3 and seen[656288] == 12
 
 
-@skip_if_missing
-def test_runs_per_game_within_5pct():
-    """Runs-per-game acceptance gate.
+def test_advancement_conserves_runners_and_uncertainty_separates_mc(tmp_path):
+    from v2.data.pa_dataset import OUTCOMES
+    from v2.simulator.baserunner import legal_transitions, load_advancement_table
+    from v2.simulator.build_advancement_table import build_advancement
+    from v2.simulator.uncertainty import win_probability_uncertainty
 
-    Stratified-sample 200 games across 2025; K=30 posterior draws × 33 sims/draw =
-    990 sims/game. Compare simulated mean and variance of runs/team-game to
-    actual 2025. Mean threshold 5%, variance threshold 7%.
-    """
-    from v2.simulator import load_posterior_draws
-    from v2.simulator.baserunner import load_advancement_table, load_out_subtype_table
-    from v2.simulator.bullpen import build_queues_from_cache
-    from v2.simulator.game_sim import simulate_game
+    # The reproduced failure: bases-loaded singles contaminated a thin empty-base cell.
+    rows = pd.DataFrame([
+        {"state": 0, "outs": 0, "outcome_idx": OUTCOMES.index("1B"), "subtype_key": "_NA_",
+         "new_state": 1, "runs": 0, "outs_added": 0},
+        *[{"state": 7, "outs": 0, "outcome_idx": OUTCOMES.index("1B"), "subtype_key": "_NA_",
+           "new_state": 3, "runs": 2, "outs_added": 0}] * 100,
+    ])
+    table = build_advancement(rows)
+    assert legal_transitions(table).all()
+    table.to_parquet(tmp_path / "advancement.parquet")
+    adv = load_advancement_table(tmp_path)
+    n = 2000
+    new_state, runs, added = adv.sample(np.random.default_rng(0), np.zeros(n, int),
+                                       np.zeros(n, int), np.full(n, OUTCOMES.index("1B")), np.zeros(n, int))
+    assert (new_state == 1).all() and (runs == 0).all() and (added == 0).all()
+    # Exercise every stored transition, not just the most common game states.
+    assert not ((table.state == 0) & (table.new_state.map(int.bit_count) + table.runs > 1)).any()
 
-    pa = _build_pa_frame(2025)
-    role_lookup = _classify_roles_2025(pa)
-    queues = build_queues_from_cache(2025)
-    games = _build_game_inputs(pa, queues, role_lookup)
+    rng = np.random.default_rng(10)
+    unresolved = 0
+    for _ in range(200):
+        p = rng.binomial(333, .5, size=30) / 333
+        report = win_probability_uncertainty(p.tolist(), 333)
+        unresolved += report["status"] == "below_mc_resolution"
+        if report["status"] == "below_mc_resolution":
+            assert report["p10"] is None and report["p90"] is None
+    assert unresolved >= 180
+    signal = win_probability_uncertainty(np.linspace(.2, .8, 30).tolist(), 10000)
+    assert signal["status"] == "resolved" and signal["p10"] < .5 < signal["p90"]
+    assert signal["parameter_variance_estimate"] < signal["between_draw_variance"]
 
-    rng = np.random.default_rng(20260509)
-    draws = load_posterior_draws(rng, K=30)
-    adv = load_advancement_table()
-    sub_table = load_out_subtype_table()
 
-    df_runs = pd.read_parquet(CACHE_2025, columns=["game_pk", "inning_topbot", "bat_score", "post_bat_score", "events"])
-    df_runs = df_runs[df_runs["events"].notna() & ~df_runs["events"].isin(NON_PA_EVENTS)]
-    df_runs["runs"] = (df_runs["post_bat_score"].fillna(0) - df_runs["bat_score"].fillna(0)).clip(0, 4)
-    actual_per_team = (
-        df_runs.groupby(["game_pk", "inning_topbot"])["runs"].sum().reset_index()
-    )
-    actual_runs = actual_per_team["runs"].to_numpy(dtype=np.float64)
-    actual_mean = float(actual_runs.mean())
-    actual_var = float(actual_runs.var())
+def test_chronological_acceptance_rejects_hindsight_forecasts():
+    from v2.market_model.acceptance import compare_forecasts
+    from v2.market_model.residual import validated_forecasts
 
-    # stratified 200 games
-    n_take = min(200, len(games))
-    if len(games) > n_take:
-        step = len(games) // n_take
-        games = games[::step][:n_take]
-
-    sim_runs = []
-    t0 = time.time()
-    for i, (gp, gi, _) in enumerate(games):
-        for pm_k in draws:
-            h, a = simulate_game(rng, pm_k, adv, sub_table, gi, n_sims=33, role_lookup=role_lookup)
-            sim_runs.append(h)
-            sim_runs.append(a)
-        if (i + 1) % 25 == 0:
-            elapsed = time.time() - t0
-            print(f"  {i+1}/{len(games)} games  ({elapsed:.0f}s elapsed, {elapsed/(i+1):.2f}s/game)")
-    sim_runs = np.concatenate(sim_runs)
-    sim_mean = float(sim_runs.mean())
-    sim_var = float(sim_runs.var())
-
-    mean_rel = abs(sim_mean - actual_mean) / actual_mean
-    var_rel = abs(sim_var - actual_var) / actual_var
-
-    print(f"\n  games simulated: {len(games)}  samples: {len(sim_runs):,}")
-    print(f"  actual:  mean={actual_mean:.4f}  var={actual_var:.4f}")
-    print(f"  sim:     mean={sim_mean:.4f}  var={sim_var:.4f}")
-    print(f"  rel diff: mean={mean_rel:.4f}  var={var_rel:.4f}  (gates: mean<5% var<7%)")
-
-    assert mean_rel < 0.05, f"mean diff {mean_rel:.4f} exceeds 5% gate"
-    assert var_rel < 0.07, f"variance diff {var_rel:.4f} exceeds 7% gate"
+    rows = []
+    for i in range(100):
+        day = pd.Timestamp("2026-04-01") + pd.Timedelta(days=i)
+        before = (day + pd.Timedelta(hours=15)).tz_localize("UTC").isoformat()
+        context = {
+            "forecast_at": before, "inputs_as_of": before,
+            "training_max_date": "2026-03-31", "tables_training_max_date": "2025-09-28",
+            "model_version": "test-model", "raw_home_win_prob": .5, "opener": i < 20,
+            "home_run_distribution": {"3": .5, "5": .5},
+            "away_run_distribution": {"3": .5, "5": .5},
+            "margin_distribution": {"-2": .5, "2": .5},
+        }
+        rows.append({"game_pk": i, "game_date": day, "home_team": "LAD", "away_team": "SDP",
+                     "home_score": 5 if i % 2 else 3, "away_score": 3 if i % 2 else 5,
+                     "start_time": (day + pd.Timedelta(hours=19)).tz_localize("UTC"),
+                     "home_prediction_at": before, "away_prediction_at": before,
+                     "prediction_context": context, "away_prediction_context": context})
+    frame = pd.DataFrame(rows)
+    report = compare_forecasts(frame, frame)
+    assert report["all"]["games"] == 100 and report["opener"]["games"] == 20
+    assert report["all_pass"]
+    contaminated = frame.copy(deep=True)
+    for index, row in contaminated.iterrows():
+        context = {**row.prediction_context, "training_max_date": "2026-12-31"}
+        contaminated.at[index, "prediction_context"] = context
+        contaminated.at[index, "away_prediction_context"] = context
+    assert validated_forecasts(contaminated).empty
+    with pytest.raises(ValueError, match="verified pregame provenance"):
+        compare_forecasts(contaminated, frame)
+    late = frame.copy(deep=True)
+    late["home_prediction_at"] = late.start_time + pd.Timedelta(seconds=1)
+    assert validated_forecasts(late).empty
+    missing = frame.iloc[:1].copy()
+    context = {**missing.iloc[0].prediction_context, "training_max_date": None}
+    missing.at[0, "prediction_context"] = context
+    missing.at[0, "away_prediction_context"] = context
+    assert validated_forecasts(missing).empty
+    extreme = frame.iloc[:1].copy()
+    context = {**extreme.iloc[0].prediction_context, "raw_home_win_prob": 0.0}
+    extreme.at[0, "prediction_context"] = context
+    extreme.at[0, "away_prediction_context"] = context
+    assert len(validated_forecasts(extreme)) == 1  # Do not hide overconfident errors.

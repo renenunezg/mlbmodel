@@ -11,7 +11,7 @@ Termination & extras:
 
 Known approximations:
 - mid-PA stolen bases and wild pitches are not modeled
-- relievers stay in until they cross the 9-outs or 3-runs-allowed threshold
+- appearance workloads are sampled from pregame role evidence or explicit plans
 """
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ def _get_gbq() -> GBQuartiles:
 GHOST_RUNNER_STATE = 2  # runner on 2B only
 
 # reliever swap thresholds (after a reliever is in)
-RELIEVER_PULL_OUTS = 9
+RELIEVER_PULL_OUTS = 3
 RELIEVER_PULL_RUNS = 3
 
 # Per-game form noise on logits, zero-sum across the 8-outcome vector, on top
@@ -72,7 +72,7 @@ def _queue_arrays(q: BullpenQueue, throws: dict[int, str], roles: dict[int, int]
     arr_lhp = np.array([1 if throws.get(int(p), "R") == "L" else 0 for p in ids], dtype=np.int64)
     # default: starter gets role=0, all subsequent role=1
     arr_role = np.array(
-        [roles.get(int(p), 0 if i == 0 else 1) for i, p in enumerate(ids)],
+        [q.roles.get(int(p), roles.get(int(p), q.starter_role if i == 0 else 1)) for i, p in enumerate(ids)],
         dtype=np.int64,
     )
     return arr_ids, arr_lhp, arr_role
@@ -98,6 +98,13 @@ def simulate_game(
     away_pids, away_lhp, away_role = _queue_arrays(inputs.away_queue, inputs.away_p_throws_lookup, role_lookup)
     home_max_idx = len(home_pids) - 1
     away_max_idx = len(away_pids) - 1
+
+    # Draw an appearance workload per simulation, separately from player skill.
+    home_limits = np.stack([rng.choice(inputs.home_queue.outs_samples(int(pid), i), n_sims)
+                            for i, pid in enumerate(home_pids)], axis=1)
+    away_limits = np.stack([rng.choice(inputs.away_queue.outs_samples(int(pid), i), n_sims)
+                            for i, pid in enumerate(away_pids)], axis=1)
+    sim_indices = np.arange(n_sims)
 
     home_arr = np.asarray(inputs.home_lineup, dtype=np.int64)
     away_arr = np.asarray(inputs.away_lineup, dtype=np.int64)
@@ -219,22 +226,22 @@ def simulate_game(
             done = done | game_over
 
         # ---- pitcher swap (vectorized rule check on per-pitcher counters) ----
-        # starter pull: starter is in iff p_idx == 0
+        # pull thresholds depend on the pitching role, including a confirmed bulk arm
         # vectorized version of should_pull_starter
-        def pull_mask(p_idx, p_outs, p_runs, p_pa):
-            starter_in = p_idx == 0
+        def pull_mask(p_idx, p_outs, p_runs, p_pa, limits, pitcher_roles):
+            starter_in = pitcher_roles[p_idx] == 0
             starter_pull = starter_in & (
-                (p_outs >= 18)
+                (p_outs >= limits[sim_indices, p_idx])
                 | (p_runs >= 6)
                 | ((p_outs >= 12) & (p_runs >= 4))
                 | (p_pa >= 24)
             )
-            reliever_in = p_idx > 0
-            reliever_pull = reliever_in & ((p_outs >= RELIEVER_PULL_OUTS) | (p_runs >= RELIEVER_PULL_RUNS))
+            reliever_in = ~starter_in
+            reliever_pull = reliever_in & ((p_outs >= limits[sim_indices, p_idx]) | (p_runs >= RELIEVER_PULL_RUNS))
             return starter_pull | reliever_pull
 
-        swap_h = active & pull_mask(p_idx_home, p_outs_h, p_runs_h, p_pa_h) & (p_idx_home < home_max_idx)
-        swap_a = active & pull_mask(p_idx_away, p_outs_a, p_runs_a, p_pa_a) & (p_idx_away < away_max_idx)
+        swap_h = active & pull_mask(p_idx_home, p_outs_h, p_runs_h, p_pa_h, home_limits, home_role) & (p_idx_home < home_max_idx)
+        swap_a = active & pull_mask(p_idx_away, p_outs_a, p_runs_a, p_pa_a, away_limits, away_role) & (p_idx_away < away_max_idx)
 
         if swap_h.any():
             p_idx_home = np.where(swap_h, p_idx_home + 1, p_idx_home)

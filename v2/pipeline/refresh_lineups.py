@@ -13,7 +13,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import logging
 from datetime import date
 
@@ -24,14 +23,13 @@ from backend.data.mlb_api import fetch_lineup, fetch_probable_starters
 from backend.db import engine
 from backend.log import setup_logging
 from pipeline import upsert_probable_starters
-from v2.pipeline.score_games import score
+from v2.pipeline.score_games import lineup_hash, score
 
 log = logging.getLogger(__name__)
 
 
 def _lineup_hash(lineup: dict[str, list[int]]) -> str:
-    combined = sorted(lineup.get("home", [])) + sorted(lineup.get("away", []))
-    return hashlib.sha1(str(combined).encode()).hexdigest()[:16]
+    return lineup_hash(lineup)
 
 
 def _fetch_scheduled_games(date_str: str) -> pd.DataFrame:

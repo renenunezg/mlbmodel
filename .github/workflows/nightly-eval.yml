@@ -30,6 +30,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        # Keep live scoring and training on the same release until the
+        # prediction_context migration and sim-v3 artifacts are ready.
+        with:
+          ref: 3301cffd9b720b5c6d588488b0227fcc61ad1475
 
       - name: Restore Statcast cache
         uses: actions/cache@v4

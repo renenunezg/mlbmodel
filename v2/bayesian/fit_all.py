@@ -47,6 +47,7 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=20260504)
     parser.add_argument("--output-dir", type=Path, default=POSTERIORS_DIR)
     parser.add_argument("--save-traces", action="store_true")
+    parser.add_argument("--before", help="Exclusive training cutoff YYYY-MM-DD for chronological evaluation")
     parser.add_argument("--subsample", type=int, default=None,
                         help="Optional PA subsample for smoke runs.")
     args = parser.parse_args()
@@ -56,6 +57,10 @@ def main() -> int:
     t0 = time.time()
     pa_df = load_pa_dataset(args.start_year, args.end_year)
     log.info(f"loaded {len(pa_df):,} PAs in {time.time()-t0:.1f}s")
+    if args.before:
+        pa_df = pa_df[pa_df["game_date"].astype(str) < args.before].copy()
+    if pa_df.empty:
+        raise ValueError("No training PAs before the requested cutoff")
     if args.subsample:
         pa_df = pa_df.sample(args.subsample, random_state=args.seed).reset_index(drop=True)
         log.info(f"subsampled to {len(pa_df):,} PAs")
@@ -81,7 +86,7 @@ def main() -> int:
           f"div={bat_diag['n_divergent']}  gate={bat_diag['gate_passed']}  anchored=True  ({bat_elapsed/60:.1f} min)")
 
     log.info("=== park ===")
-    woba_pred, pa_for_park = park_effects.predict_woba_per_pa(pa_df, bat_idata, pit_idata)
+    woba_pred, pa_for_park = park_effects.predict_probs_per_pa(pa_df, bat_idata, pit_idata)
     venue_df = park_effects.venue_residuals(pa_for_park, woba_pred)
     park_idata, park_meta, park_elapsed = park_effects.fit(
         venue_df, draws=args.park_draws, tune=args.tune, chains=args.chains, random_seed=args.seed
@@ -89,6 +94,10 @@ def main() -> int:
     park_diag = _diag_block(park_idata, park_effects.summarize, park_elapsed)
     log.info(f"rhat={park_diag['max_rhat']:.4f}  ess={park_diag['min_ess_bulk']:.0f}  "
           f"div={park_diag['n_divergent']}  gate={park_diag['gate_passed']}  ({park_elapsed/60:.1f} min)")
+
+    for trace in (bat_idata, pit_idata, park_idata):
+        trace.posterior.attrs["training_max_date"] = str(max(pa_df["game_date"]))
+        trace.posterior.attrs["model_version"] = "sim-v3"
 
     if args.save_traces:
         bat_idata.to_netcdf(args.output_dir / "batter_skill.nc")
@@ -103,6 +112,7 @@ def main() -> int:
             "start_year": args.start_year,
             "end_year": args.end_year,
             "n_pa": int(len(pa_df)),
+            "max_date": str(max(pa_df["game_date"])),
         },
         "sampler": {"chains": args.chains, "draws": args.draws, "tune": args.tune},
         "batter": {**bat_diag, "n_batters": bat_meta["n_batters"],

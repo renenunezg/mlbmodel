@@ -165,5 +165,7 @@ def test_market_research_refuses_independently_shopped_baseline():
     with pytest.raises(ValueError, match="paired same-book pregame odds"):
         build_feature_frame(games)
 
-    paired = prepare_games(games.assign(home_market_prob=0.61))
+    paired = prepare_games(games.assign(home_market_prob=0.61, probability_source="raw_simulator", model_version="test"))
     assert paired.loc[0, "home_market_prob"] == 0.61
+    with pytest.raises(ValueError, match="raw simulator"):
+        prepare_games(games.assign(home_market_prob=.61))

@@ -1,12 +1,12 @@
 """Score games for a date and write to model_outputs.
 
 Usage:
-    python -m v2.pipeline.score_games --date 2025-09-15 --n-sims 10000
+    python -m v2.pipeline.score_games --date 2026-09-09 --n-sims 10000
 
 Steps per game:
   1. Read probable_starters and odds from Supabase.
   2. Fetch posted lineups via MLB Stats API; fall back to top-9 by season PA per team.
-  3. Build bullpen queues (from statcast cache if game already played; else fallback).
+  3. Build pregame bullpen queues from active rosters and prior role/rest evidence.
   4. Run simulate_game for n_sims.
   5. Compute market probs + EV + Kelly + percentiles, write rows.
 """
@@ -14,8 +14,9 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import logging
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import numpy as np
@@ -27,6 +28,9 @@ from backend.data.odds_api import DEFAULT_BOOKS
 from backend.db import engine
 from backend.log import setup_logging
 from backend.strategy import WEATHER_ENABLED
+from backend.team_mappings import normalize_team
+from v2.bayesian._common import POSTERIORS_DIR
+from v2.markets.probs import paired_market_quotes
 from v2.markets.writer import (
     append_season,
     build_game_rows,
@@ -36,19 +40,19 @@ from v2.markets.writer import (
 from v2.simulator import (
     BullpenQueue,
     GameInputs,
-    build_queues_from_cache,
     load_advancement_table,
     load_out_subtype_table,
     load_posterior_draws,
     simulate_game,
 )
-from v2.simulator.bullpen import LiveQueueContext, build_queues_live
+from v2.simulator.bullpen import LiveQueueContext, PitchingPlan, apply_pitching_plan, build_queues_live
+from v2.simulator.posteriors import posterior_provenance
+from v2.simulator.uncertainty import win_probability_uncertainty
 
 log = logging.getLogger(__name__)
 
 
-# Posterior draws per game. 30 gives stable p10/p90 win-prob bands at ~1.5s
-# of PosteriorMeans assembly per game.
+# Posterior realizations; parameter bands are published only above MC resolution.
 N_DRAWS = 30
 
 CACHE_DIR = Path(__file__).resolve().parents[2] / "cache"
@@ -80,6 +84,12 @@ class GameContext:
     wind_out_component: float | None = None
     temp_f: float | None = None
     is_dome: bool = False
+
+
+def lineup_hash(lineup: dict[str, list[int]]) -> str:
+    """Hash each side and its batting order, including incomplete posted lineups."""
+    ordered = (tuple(lineup.get("home", [])), tuple(lineup.get("away", [])))
+    return hashlib.sha256(repr(ordered).encode()).hexdigest()[:16]
 
 
 def is_started(start_time, now: pd.Timestamp) -> bool:
@@ -117,8 +127,8 @@ def fetch_odds(
         return pd.DataFrame()
     q = text(
         "SELECT game_pk, team, book, moneyline, spread, spread_odds, total, "
-        "total_over_odds, total_under_odds "
-        "FROM odds WHERE game_pk = ANY(:ids) AND book = ANY(:books)"
+        "total_over_odds, total_under_odds, scraped_at "
+        "FROM odds WHERE game_pk = ANY(:ids) AND book = ANY(:books) ORDER BY scraped_at DESC"
     )
     with engine.begin() as conn:
         df = pd.read_sql(q, conn, params={"ids": game_pks, "books": list(books)})
@@ -189,19 +199,19 @@ def build_contexts(date: str) -> list[GameContext]:
 
 
 def load_cache_for_year(year: int) -> pd.DataFrame:
-    """Load minimal columns from the statcast cache for lineup + queue derivation."""
+    """Load cached batting appearances and pitcher handedness."""
     path = CACHE_DIR / f"statcast_{year}.parquet"
     return pd.read_parquet(path, columns=[
         "game_pk", "batter", "pitcher", "inning", "inning_topbot",
         "at_bat_number", "pitch_number", "events", "home_team", "away_team",
-        "p_throws",
+        "p_throws", "game_date",
     ])
 
 
 def top9_batters_by_team(cache: pd.DataFrame) -> dict[str, list[int]]:
     """Per team, top 9 batters by total PAs in the cache (PA-source = terminating pitches)."""
     pa = cache[cache["events"].notna()].copy()
-    pa["bat_team"] = np.where(pa["inning_topbot"] == "Top", pa["away_team"], pa["home_team"])
+    pa["bat_team"] = pd.Series(np.where(pa["inning_topbot"] == "Top", pa["away_team"], pa["home_team"]), index=pa.index).map(normalize_team)
     counts = pa.groupby(["bat_team", "batter"]).size().reset_index(name="n")
     out: dict[str, list[int]] = {}
     for team, grp in counts.groupby("bat_team"):
@@ -226,22 +236,6 @@ def fetch_lineups_for_games(game_pks: list[int]) -> dict[int, dict[str, list[int
     return out
 
 
-def reliever_queue_for_team(cache: pd.DataFrame, team: str, max_n: int = 6) -> list[int]:
-    """Pitchers who appeared in relief (not the inning-1 starter) for `team`, ranked by appearances."""
-    pa = cache[cache["events"].notna()].copy()
-    pa["pitch_team"] = np.where(pa["inning_topbot"] == "Top", pa["home_team"], pa["away_team"])
-    pa = pa[pa["pitch_team"] == team]
-    if pa.empty:
-        return []
-    inn1 = pa[pa["inning"] == 1]
-    starter_ids = set(inn1["pitcher"].astype(np.int64).unique().tolist())
-    relievers = pa[~pa["pitcher"].isin(starter_ids)]
-    if relievers.empty:
-        return []
-    counts = relievers.groupby("pitcher").size().sort_values(ascending=False)
-    return counts.head(max_n).index.astype(np.int64).tolist()
-
-
 def p_throws_for_pitchers(cache: pd.DataFrame, pitcher_ids: list[int]) -> dict[int, str]:
     """Read p_throws from the cache for a set of pitcher_ids."""
     if not pitcher_ids:
@@ -255,27 +249,16 @@ def _resolve_lineup(
     fallback: list[int],
 ) -> tuple[list[int], str]:
     """Use live posted lineup if it's a complete 9 of non-zero ids; else fallback."""
-    if len(live) == 9 and all(int(b) > 0 for b in live):
+    if len(live) == 9 and len(set(live)) == 9 and all(int(b) > 0 for b in live):
         return [int(b) for b in live], "live"
     padded = (list(fallback) + [0] * 9)[:9]
     return padded, "top9"
 
 
-def _resolve_queue(
-    game_pk: int,
-    side: str,
-    live: dict[tuple[int, str], BullpenQueue],
-    cache: dict[tuple[int, str], BullpenQueue],
-    stub_starter: int,
-    stub_relievers: list[int],
-) -> tuple[BullpenQueue, str]:
-    """Pick queue for one side. Returns (queue, source) where source ∈ live|cache|stub."""
-    key = (game_pk, side)
-    if key in live:
-        return live[key], "live"
-    if key in cache:
-        return cache[key], "cache"
-    return BullpenQueue(starter=stub_starter, relievers=stub_relievers[:5]), "stub"
+def _resolve_queue(game_pk: int, side: str, live: dict, starter: int) -> tuple[BullpenQueue, str]:
+    if (game_pk, side) in live:
+        return live[(game_pk, side)], "live"
+    return BullpenQueue(starter=starter, relievers=[0], starter_role=1), "neutral"
 
 
 def weather_scalars(ctx: GameContext) -> tuple[float, float]:
@@ -298,8 +281,6 @@ def build_inputs(
     live_away: list[int],
     fallback_lineups_by_team: dict[str, list[int]],
     live_queues: dict[tuple[int, str], BullpenQueue],
-    cache_queues: dict[tuple[int, str], BullpenQueue],
-    relievers_by_team: dict[str, list[int]],
     throws_lookup: dict[int, str],
 ) -> tuple[GameInputs, str, str]:
     """Build GameInputs + lineup_tag + queue_source.
@@ -307,17 +288,15 @@ def build_inputs(
     lineup_tag ∈ {live, top9, mixed}. queue_source aggregates the two sides:
     if both match, that value; otherwise 'mixed'.
     """
-    home_lineup, home_tag = _resolve_lineup(live_home, fallback_lineups_by_team.get(ctx.home_team, []))
-    away_lineup, away_tag = _resolve_lineup(live_away, fallback_lineups_by_team.get(ctx.away_team, []))
+    home_lineup, home_tag = _resolve_lineup(live_home, fallback_lineups_by_team.get(normalize_team(ctx.home_team), []))
+    away_lineup, away_tag = _resolve_lineup(live_away, fallback_lineups_by_team.get(normalize_team(ctx.away_team), []))
     lineup_tag = home_tag if home_tag == away_tag else "mixed"
 
     home_queue, home_qsrc = _resolve_queue(
-        ctx.game_pk, "home", live_queues, cache_queues,
-        ctx.home_starter_id or 0, relievers_by_team.get(ctx.home_team, []),
+        ctx.game_pk, "home", live_queues, ctx.home_starter_id or 0,
     )
     away_queue, away_qsrc = _resolve_queue(
-        ctx.game_pk, "away", live_queues, cache_queues,
-        ctx.away_starter_id or 0, relievers_by_team.get(ctx.away_team, []),
+        ctx.game_pk, "away", live_queues, ctx.away_starter_id or 0,
     )
     queue_source = home_qsrc if home_qsrc == away_qsrc else "mixed"
 
@@ -352,6 +331,8 @@ def score(
     game_pks: list[int] | None = None,
     update_season: bool = True,
     freeze_started: bool = True,
+    posteriors_dir: Path = POSTERIORS_DIR,
+    pitching_plans: list[PitchingPlan] | None = None,
 ) -> pd.DataFrame:
     """Score games for a date.
 
@@ -363,21 +344,29 @@ def score(
         game_pks: if set, only score these game_pks (others on the date are
             untouched in model_outputs). Used by the hourly lineup refresh
             so a single posted lineup doesn't rewrite the whole slate.
-        update_season: if False, skip the model_outputs_season upsert. The
-            historical record should only be written by the morning daily_run;
-            in-day refreshes must not mutate it.
+        update_season: mirror pregame forecasts to model_outputs_season.
+            Production refreshes keep this enabled so the displayed and graded
+            forecasts agree at first pitch.
         freeze_started: if True (the production default), games whose start_time
             has passed are dropped before scoring, so neither model_outputs nor
             model_outputs_season can be rewritten once a game is underway. The
-            pick is frozen at the last pre-first-pitch score. Backtest replay
-            passes False to (re)populate finished historical dates on purpose.
+            pick is frozen at the last pre-first-pitch score. False permits
+            read-only replay with pre-cutoff artifacts; historical writes are
+            rejected and hindsight replays cannot pass the acceptance gate.
     """
     log.info(f"loading {N_DRAWS} posterior draws + tables...")
     rng = np.random.default_rng(seed)
-    draws = load_posterior_draws(rng, K=N_DRAWS)
+    draws = load_posterior_draws(rng, K=N_DRAWS, posteriors_dir=posteriors_dir)
+    provenance = posterior_provenance(posteriors_dir)
+    if provenance["training_max_date"] >= date:
+        raise ValueError("Training data reaches the prediction date; use a pregame posterior snapshot")
     adv = load_advancement_table()
+    if adv.training_max_date is None or adv.training_max_date >= date:
+        raise ValueError("Advancement tables need a known training cutoff before the prediction date")
     sub_table = load_out_subtype_table()
-    age = posterior_age_days()
+    if sub_table.training_max_date != adv.training_max_date:
+        raise ValueError("Simulator tables have inconsistent training cutoffs; rebuild them together")
+    age = posterior_age_days(posteriors_dir=posteriors_dir)
 
     contexts = build_contexts(date)
     if not contexts:
@@ -402,11 +391,10 @@ def score(
 
     year = pd.Timestamp(date).year
     cache = load_cache_for_year(year)
+    cache = cache[pd.to_datetime(cache["game_date"]) < pd.Timestamp(date)]
     fallback_lineups = top9_batters_by_team(cache)
-    relievers = {team: reliever_queue_for_team(cache, team) for team in {c.home_team for c in contexts} | {c.away_team for c in contexts}}
-    cache_queues = build_queues_from_cache(year)
 
-    # Live queues: rest-aware, built from pitcher_workload + active roster.
+    # Live queues use pregame role and rest evidence plus the active roster.
     live_q_contexts: list[LiveQueueContext] = []
     for c in contexts:
         if c.home_starter_id:
@@ -416,20 +404,20 @@ def score(
     try:
         live_queues = build_queues_live(pd.Timestamp(date).date(), live_q_contexts)
     except Exception as e:
-        log.warning(f"build_queues_live failed ({e}); falling back to cache")
+        log.warning(f"build_queues_live failed ({e}); using neutral pitching fallback")
         live_queues = {}
 
     live_lineups = fetch_lineups_for_games([c.game_pk for c in contexts])
 
     all_pitchers: set[int] = set()
-    for q in list(cache_queues.values()) + list(live_queues.values()):
+    for q in list(live_queues.values()):
         all_pitchers.add(q.starter)
         all_pitchers.update(q.relievers)
-    for relievers_list in relievers.values():
-        all_pitchers.update(relievers_list)
     throws_lookup = p_throws_for_pitchers(cache, list(all_pitchers))
 
-    n_per_draw = max(1, n_sims // N_DRAWS)
+    n_per_draw = n_sims // N_DRAWS
+    if n_per_draw < 2:
+        raise ValueError(f"n_sims must be at least {2 * N_DRAWS}")
     actual_n_sims = n_per_draw * N_DRAWS
     if actual_n_sims != n_sims:
         log.info(f"rounding n_sims {n_sims} -> {actual_n_sims} ({N_DRAWS} draws × {n_per_draw} sims)")
@@ -440,11 +428,24 @@ def score(
         live = live_lineups.get(ctx.game_pk, {"home": [], "away": []})
         inputs, lineup_tag, queue_source = build_inputs(
             ctx, live["home"], live["away"], fallback_lineups,
-            live_queues, cache_queues, relievers, throws_lookup,
+            live_queues, throws_lookup,
         )
+        accepted_plans = []
+        for side in ("home", "away"):
+            queue = getattr(inputs, f"{side}_queue")
+            matches = [p for p in (pitching_plans or []) if p.game_pk == ctx.game_pk and p.side == side]
+            context = LiveQueueContext(ctx.game_pk, side, getattr(ctx, f"{side}_team"), queue.starter)
+            if len(matches) == 1 and matches[0].valid_for(context, ctx.start_time):
+                queue = apply_pitching_plan(queue, matches[0])
+                setattr(inputs, f"{side}_queue", queue)
+                accepted_plans.append(asdict(matches[0]))
+            elif matches:
+                # Contradictory or stale reports do not extend workloads.
+                queue.usage_known = False
+                queue.starter_role = 1
+                queue.workloads[queue.starter] = (3,)
         lineup_source = f"lineup_{lineup_tag}+queue_{queue_source}"
-        _hash_input = sorted(live.get("home", [])) + sorted(live.get("away", []))
-        lhash = hashlib.sha1(str(_hash_input).encode()).hexdigest()[:16]
+        lhash = lineup_hash(live)
         h_chunks: list[np.ndarray] = []
         a_chunks: list[np.ndarray] = []
         per_draw_home_wp: list[float] = []
@@ -457,8 +458,21 @@ def score(
             per_draw_home_wp.append(wp_k)
         h = np.concatenate(h_chunks)
         a = np.concatenate(a_chunks)
-        home_wp_p10 = round(float(np.quantile(per_draw_home_wp, 0.10)), 4)
-        home_wp_p90 = round(float(np.quantile(per_draw_home_wp, 0.90)), 4)
+        uncertainty = win_probability_uncertainty(per_draw_home_wp, n_per_draw)
+        home_wp_p10 = uncertainty["p10"]
+        home_wp_p90 = uncertainty["p90"]
+        snapshot = {
+            **provenance, "tables_training_max_date": adv.training_max_date,
+            "inputs_as_of": pd.Timestamp.now(tz="UTC").isoformat(),
+            "uncertainty": uncertainty, "pitching_plans": accepted_plans,
+            "home_lineup": inputs.home_lineup.tolist(), "away_lineup": inputs.away_lineup.tolist(),
+            "home_queue": asdict(inputs.home_queue), "away_queue": asdict(inputs.away_queue),
+            "opener": inputs.home_queue.starter_role == 1 or inputs.away_queue.starter_role == 1,
+            "home_bp_outs_2d": inputs.home_queue.team_outs_2d,
+            "away_bp_outs_2d": inputs.away_queue.team_outs_2d,
+        }
+        snapshot["market_pairs"] = paired_market_quotes(ctx.home_odds, ctx.away_odds)
+
         rows = build_game_rows(
             game_pk=ctx.game_pk,
             game_date=ctx.game_date,
@@ -479,6 +493,8 @@ def score(
             lineup_hash=lhash,
             starters_known=ctx.home_starter_id is not None and ctx.away_starter_id is not None,
             lineups_live=lineup_tag == "live",
+            pitching_usage_known=inputs.home_queue.usage_known and inputs.away_queue.usage_known,
+            prediction_context=snapshot,
         )
         all_rows.extend(rows)
         for r in rows:
@@ -487,10 +503,14 @@ def score(
         log.info(
             f"game {ctx.game_pk} {ctx.away_team}@{ctx.home_team}: "
             f"xR {rows[1]['expected_runs']:.2f} / {rows[0]['expected_runs']:.2f}, "
-            f"home_wp {rows[0]['win_prob']:.3f} [{home_wp_p10:.3f}-{home_wp_p90:.3f}]"
+            f"home_wp {rows[0]['win_prob']:.3f}; parameter band {uncertainty['status']}"
         )
 
+    if write and not freeze_started:
+        raise ValueError("Historical replay is read-only; started-game forecasts cannot be replaced")
     if write and all_rows:
+        now = pd.Timestamp.now(tz="UTC")
+        all_rows = [r for r in all_rows if not is_started(r["start_time"], now)]
         write_daily(pd.Timestamp(date), all_rows)
         if update_season:
             append_season(all_rows)
@@ -508,8 +528,16 @@ def main():
     p.add_argument("--n-sims", type=int, default=10000)
     p.add_argument("--no-write", action="store_true")
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--posteriors-dir", type=Path, default=POSTERIORS_DIR)
+    p.add_argument("--pitching-plans", type=Path, help="JSON list of explicitly confirmed pregame reports")
+    p.add_argument("--export", type=Path, help="Save a local frozen forecast for later paired acceptance")
     args = p.parse_args()
-    score(args.date, n_sims=args.n_sims, write=not args.no_write, seed=args.seed)
+    plans = [PitchingPlan(**p) for p in json.loads(args.pitching_plans.read_text())] if args.pitching_plans else []
+    rows = score(args.date, n_sims=args.n_sims, write=not args.no_write, seed=args.seed,
+                 posteriors_dir=args.posteriors_dir, pitching_plans=plans)
+    if args.export:
+        args.export.parent.mkdir(parents=True, exist_ok=True)
+        rows.to_json(args.export, orient="records", date_format="iso", indent=2)
 
 
 if __name__ == "__main__":
