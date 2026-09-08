@@ -1,9 +1,7 @@
-"""Stage-B park-effect fit on residual wOBA.
+"""Fit a park logit coefficient through the simulator's expected-wOBA response.
 
-Combines the batter and pitcher posterior means into a per-PA expected wOBA,
-then fits a per-park scalar log-multiplier on the residual. Prior on each
-park's log-PF is centered at log(savant_pf/100) with a loose sigma so the
-data, not the prior, drives the posterior when there's signal.
+The observation likelihood remains in wOBA units. The coefficient is in logit
+units; these are linked by the actual softmax response, never equated.
 """
 from __future__ import annotations
 
@@ -33,20 +31,7 @@ REF_IDX = OUTCOMES.index("OUT")
 NON_REF_IDX = [i for i in range(len(OUTCOMES)) if i != REF_IDX]
 WOBA_VEC = np.array([WOBA_WEIGHTS[o] for o in OUTCOMES], dtype=np.float64)
 
-# Statcast home_team code -> savant park-factor key (where they differ).
-STATCAST_TO_SAVANT_TEAM = {
-    "AZ": "ARI", "CWS": "CHW", "KC": "KCR", "SD": "SDP",
-    "SF": "SFG", "TB": "TBR", "WSH": "WSN",
-}
-
-
-def savant_park_factors() -> dict[str, float]:
-    from backend.data.savant import _static_park_factors
-    df = _static_park_factors(season=2025)
-    return dict(zip(df["team"], df["park_factor"].astype(float)))
-
-
-def predict_woba_per_pa(
+def predict_probs_per_pa(
     pa_df: pd.DataFrame,
     batter_idata: az.InferenceData,
     pitcher_idata: az.InferenceData,
@@ -67,11 +52,10 @@ def predict_woba_per_pa(
 
     sigma_p = pit_post["sigma_pitcher"].mean(("chain", "draw")).values  # (role, K_FREE)
     z_p = pit_post["z_pitcher"].mean(("chain", "draw")).values  # (n_pitcher, K_FREE)
-    # For pitcher posterior we only need beta = sigma_per_pitcher * z; sigma_per_pitcher
-    # is unknown without role lookup. Approximate as role-averaged sigma to keep this
-    # stage standalone; the residual model is robust to the small bias this introduces.
-    sigma_p_avg = sigma_p.mean(axis=0)
-    beta_pitcher = sigma_p_avg * z_p
+    from v2.bayesian.pitcher_skill import classify_roles
+    roles = classify_roles(pa_df).reindex(pit_post["pitcher"].values).fillna("RP")
+    role_codes = (roles.to_numpy() == "RP").astype(int)
+    beta_pitcher = sigma_p[role_codes] * z_p
 
     batter_ids = bat_post["batter"].values
     pitcher_ids = pit_post["pitcher"].values
@@ -108,62 +92,60 @@ def predict_woba_per_pa(
         fi = next(free_iter)
         logit_full[:, i] = logit_free[:, fi]
     probs = sp.softmax(logit_full, axis=1)
-    return probs @ WOBA_VEC, pa_df
+    return probs, pa_df
 
 
-def venue_residuals(pa_df: pd.DataFrame, woba_pred: np.ndarray) -> pd.DataFrame:
-    outcome_codes = encode_outcomes(pa_df["outcome"])
-    woba_obs = WOBA_VEC[outcome_codes]
-    resid = woba_obs - woba_pred
-    grouped = (
-        pd.DataFrame({"home_team": pa_df["home_team"].values, "resid": resid})
-        .groupby("home_team")["resid"]
-        .agg(["mean", "var", "count"])
-        .reset_index()
-    )
-    grouped = grouped.rename(columns={"mean": "resid_mean", "var": "resid_var", "count": "n"})
-    return grouped
+PARK_GRID = np.linspace(-2.0, 2.0, 401)
+PARK_MODEL_VERSION = "woba-logit-response-v2"
+
+
+def venue_residuals(pa_df: pd.DataFrame, probabilities: np.ndarray) -> pd.DataFrame:
+    """Expected wOBA response under the exact softmax transformation used live.
+
+    Tabulate the per-PA response before averaging, avoiding a ratio-of-means
+    approximation. Linear interpolation in the fit uses a 0.01-logit grid.
+    """
+    if probabilities.shape != (len(pa_df), len(OUTCOMES)):
+        raise ValueError("Park fitting requires per-PA outcome probabilities")
+    observed = WOBA_VEC[encode_outcomes(pa_df["outcome"])]
+    tilt = np.exp(WOBA_VEC[:, None] * PARK_GRID[None, :])
+    rows = []
+    for venue in sorted(pa_df["home_team"].unique()):
+        mask = pa_df["home_team"].to_numpy() == venue
+        probs = probabilities[mask]
+        curve = np.zeros(len(PARK_GRID))
+        for start in range(0, len(probs), 2000):
+            block = probs[start:start + 2000]
+            curve += ((block * WOBA_VEC) @ tilt / (block @ tilt)).sum(axis=0)
+        curve /= len(probs)
+        residual = observed[mask] - probs @ WOBA_VEC
+        rows.append({"home_team": venue, "n": len(probs),
+                     "observed_woba": float(observed[mask].mean()),
+                     "resid_var": float(np.var(residual, ddof=1)),
+                     "response_curve": curve})
+    return pd.DataFrame(rows)
 
 
 def build_model(venue_df: pd.DataFrame) -> tuple[pm.Model, dict]:
-    pf_map = savant_park_factors()
-    venue_df = venue_df.copy()
-    venue_df["savant_team"] = venue_df["home_team"].map(STATCAST_TO_SAVANT_TEAM).fillna(
-        venue_df["home_team"]
-    )
-    venue_df["savant_pf"] = venue_df["savant_team"].map(pf_map).fillna(100.0)
-    venue_df["log_pf_prior"] = np.log(venue_df["savant_pf"].to_numpy() / 100.0)
+    import pytensor.tensor as pt
 
+    required = {"response_curve", "observed_woba", "resid_var", "n", "home_team"}
+    if not required.issubset(venue_df.columns):
+        raise ValueError("Park fit requires the nonlinear wOBA response, not a wOBA residual as a logit")
     n = venue_df["n"].to_numpy()
-    obs_mean = venue_df["resid_mean"].to_numpy()
+    curves = np.stack(venue_df["response_curve"])
     coords = {"venue": venue_df["home_team"].tolist()}
-
-    # sigma_resid is fixed: a free hyperprior couples chain means across all
-    # park_log values without adding signal (each venue has ~13k PAs and the
-    # data swamps any reasonable sigma in this range). The empirical posterior
-    # from a free fit was ~0.36; we lock it here.
-    SIGMA_RESID = 0.36
     with pm.Model(coords=coords) as model:
-        park_log = pm.Normal(
-            "park_log",
-            mu=venue_df["log_pf_prior"].to_numpy(),
-            sigma=0.08,
-            dims="venue",
-        )
-        pm.Normal(
-            "obs_mean",
-            mu=park_log,
-            sigma=SIGMA_RESID / np.sqrt(n),
-            observed=obs_mean,
-            dims="venue",
-        )
-
-    meta = {
-        "venues": venue_df["home_team"].tolist(),
-        "n_per_venue": n.tolist(),
-        "savant_pf": venue_df["savant_pf"].tolist(),
-    }
-    return model, meta
+        # Neutral prior in logit units. A published run park factor has different
+        # units and cannot be substituted for this coefficient.
+        park_log = pm.TruncatedNormal("park_log", mu=0.0, sigma=0.25,
+                                      lower=PARK_GRID[0], upper=PARK_GRID[-1], dims="venue")
+        response = pt.stack([pt.interp(park_log[i], PARK_GRID, curve) for i, curve in enumerate(curves)])
+        pm.Normal("obs_mean", mu=response,
+                  sigma=np.sqrt(np.maximum(venue_df["resid_var"].to_numpy(), 1e-6) / n),
+                  observed=venue_df["observed_woba"].to_numpy(), dims="venue")
+    return model, {"venues": coords["venue"], "n_per_venue": n.tolist(),
+                   "park_model_version": PARK_MODEL_VERSION}
 
 
 def fit(
@@ -189,6 +171,7 @@ def fit(
             progressbar=True,
         )
     elapsed = time.time() - t0
+    idata.posterior.attrs["park_model_version"] = PARK_MODEL_VERSION
     return idata, meta, elapsed
 
 
@@ -226,7 +209,7 @@ def main() -> int:
     pit_idata = az.from_netcdf(args.pitcher_trace)
 
     log.info("computing per-PA wOBA predictions...")
-    woba_pred, pa_df = predict_woba_per_pa(pa_df, bat_idata, pit_idata)
+    woba_pred, pa_df = predict_probs_per_pa(pa_df, bat_idata, pit_idata)
     log.info(f"predicted on {len(pa_df):,} PAs")
 
     venue_df = venue_residuals(pa_df, woba_pred)
@@ -251,7 +234,7 @@ def main() -> int:
     report = {
         "venues": meta["venues"],
         "n_per_venue": meta["n_per_venue"],
-        "savant_pf": meta["savant_pf"],
+        "park_model_version": PARK_MODEL_VERSION,
         "fit_seconds": elapsed,
         "fit_minutes": elapsed / 60,
         "n_divergent": n_div,

@@ -20,6 +20,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 
 from backend.db import engine
 from backend.simulation import american_to_prob
+from backend.strategy import HOME_FIELD_LOGIT, MARKET_ANCHOR_W_MODEL
 from v2.bayesian._common import POSTERIORS_DIR
 from v2.markets.ev import (
     flag_ml,
@@ -131,6 +132,8 @@ def build_game_rows(
     lineup_hash: str | None = None,
     starters_known: bool = True,
     lineups_live: bool = True,
+    pitching_usage_known: bool = True,
+    prediction_context: dict | None = None,
 ) -> list[dict]:
     """Return two dict rows (home + away) ready to write to model_outputs.
 
@@ -219,6 +222,22 @@ def build_game_rows(
     away_total_diff = home_total_diff
 
     now = datetime.now(UTC)
+    context = {
+        **(prediction_context or {}),
+        "schema_version": 1,
+        "raw_home_win_prob": float((h > a).mean() + 0.5 * (h == a).mean()),
+        "market_home_win_prob": p_market_home,
+        "blend_version": "logit-anchor-v1",
+        "blend_weight": MARKET_ANCHOR_W_MODEL,
+        "home_field_logit": HOME_FIELD_LOGIT,
+        "forecast_at": now.isoformat(),
+        "pitching_usage_known": pitching_usage_known,
+    }
+    margins, counts = np.unique(h - a, return_counts=True)
+    context["margin_distribution"] = {str(int(v)): float(c / n) for v, c in zip(margins, counts)}
+    for side, runs in (("home", h), ("away", a)):
+        values, counts = np.unique(runs, return_counts=True)
+        context[f"{side}_run_distribution"] = {str(int(v)): float(c / n) for v, c in zip(values, counts)}
     base = {
         "game_pk": int(game_pk),
         "date": pd.Timestamp(game_date).to_pydatetime().replace(tzinfo=None),
@@ -229,6 +248,7 @@ def build_game_rows(
         "lineup_hash": lineup_hash,
         "prediction_updated_at": now,
         "posterior_age_days": int(posterior_age_days),
+        "prediction_context": context,
     }
 
     home_row = {
@@ -310,7 +330,7 @@ def build_game_rows(
             row["kelly_full_ml"] = 0.0
             row["kelly_quarter_ml"] = 0.0
 
-    if not starters_known or not lineups_live:
+    if not starters_known or not lineups_live or not pitching_usage_known:
         _suppress_bet(home_row)
         _suppress_bet(away_row)
 
@@ -378,7 +398,8 @@ def write_daily(date: pd.Timestamp, rows: list[dict]) -> None:
                 text("DELETE FROM model_outputs WHERE game_pk = :g AND team = :t"),
                 {"g": int(game_pk), "t": team},
             )
-        df.to_sql("model_outputs", con=conn, if_exists="append", index=False, dtype={"runs_hist": JSONB})
+        df.to_sql("model_outputs", con=conn, if_exists="append", index=False,
+                  dtype={"runs_hist": JSONB, "prediction_context": JSONB})
 
 
 def append_season(rows: list[dict]) -> None:
@@ -395,7 +416,8 @@ def append_season(rows: list[dict]) -> None:
                 text("DELETE FROM model_outputs_season WHERE game_pk = :g AND team = :t"),
                 {"g": int(game_pk), "t": team},
             )
-        df.to_sql("model_outputs_season", con=conn, if_exists="append", index=False, dtype={"runs_hist": JSONB})
+        df.to_sql("model_outputs_season", con=conn, if_exists="append", index=False,
+                  dtype={"runs_hist": JSONB, "prediction_context": JSONB})
 
 
 def posterior_age_days(now: datetime | None = None, posteriors_dir: Path = POSTERIORS_DIR) -> int:

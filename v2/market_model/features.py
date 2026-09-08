@@ -10,11 +10,9 @@ import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
 from sklearn.metrics import brier_score_loss, log_loss
-from sqlalchemy import text
 
-from backend.db import engine
 from backend.strategy import EV_THRESHOLDS
-from v2.market_model.residual import american_to_prob
+from v2.market_model.residual import american_to_prob, chronological_folds, load_games, prepare_games
 
 TEAM_WINDOW = 20
 TEAM_PRIOR_GAMES = 10
@@ -25,12 +23,12 @@ FEATURE_BLOCKS = {
     "simulator": ["sim_disagreement"],
     "team_residuals": ["offense_residual_diff", "defense_residual_diff"],
     "team_form": ["run_margin_form_diff", "win_form_diff"],
-    "bullpen_rest": ["bullpen_rest_diff"],
-    "uncertainty": ["uncertainty_width"],
+    "bullpen_rest": ["bullpen_rest_diff", "bullpen_rest_missing"],
+    "uncertainty": ["uncertainty_width", "uncertainty_unresolved"],
     "lineup_queue_state": ["lineup_live", "queue_live"],
     "posterior_age": ["posterior_age_days"],
     "prediction_context": [
-        "uncertainty_width",
+        "uncertainty_width", "uncertainty_unresolved",
         "lineup_live",
         "queue_live",
         "posterior_age_days",
@@ -41,8 +39,8 @@ FEATURE_BLOCKS = {
         "defense_residual_diff",
         "run_margin_form_diff",
         "win_form_diff",
-        "bullpen_rest_diff",
-        "uncertainty_width",
+        "bullpen_rest_diff", "bullpen_rest_missing",
+        "uncertainty_width", "uncertainty_unresolved",
         "lineup_live",
         "queue_live",
         "posterior_age_days",
@@ -56,99 +54,14 @@ def _logit(probabilities: np.ndarray) -> np.ndarray:
 
 
 def load_feature_games(start: str, end: str) -> pd.DataFrame:
-    query = text("""
-        WITH paired_candidates AS (
-            SELECT g.game_pk, oh.book,
-                   GREATEST(oh.scraped_at, oa.scraped_at) AS market_quote_at,
-                   ABS(EXTRACT(EPOCH FROM (oh.scraped_at - oa.scraped_at))) AS pair_lag_seconds,
-                   ROW_NUMBER() OVER (
-                       PARTITION BY g.game_pk, oh.book
-                       ORDER BY GREATEST(oh.scraped_at, oa.scraped_at) DESC,
-                                ABS(EXTRACT(EPOCH FROM (oh.scraped_at - oa.scraped_at)))
-                   ) AS pair_rank,
-                   CASE WHEN oh.moneyline < 0
-                        THEN -oh.moneyline::double precision / (-oh.moneyline + 100.0)
-                        ELSE 100.0 / (oh.moneyline + 100.0)
-                   END AS home_implied,
-                   CASE WHEN oa.moneyline < 0
-                        THEN -oa.moneyline::double precision / (-oa.moneyline + 100.0)
-                        ELSE 100.0 / (oa.moneyline + 100.0)
-                   END AS away_implied
-            FROM games g
-            JOIN odds oh
-              ON oh.game_pk = g.game_pk AND oh.team = g.home_team
-            JOIN odds oa
-              ON oa.game_pk = g.game_pk
-             AND oa.team = g.away_team
-             AND oa.book = oh.book
-            WHERE g.game_date BETWEEN :start AND :end
-              AND oh.moneyline IS NOT NULL
-              AND oa.moneyline IS NOT NULL
-              AND oh.scraped_at < g.start_time
-              AND oa.scraped_at < g.start_time
-              AND ABS(EXTRACT(EPOCH FROM (oh.scraped_at - oa.scraped_at))) <= 5
-        ), market_consensus AS (
-            SELECT game_pk,
-                   AVG(home_implied / (home_implied + away_implied)) AS home_market_prob,
-                   COUNT(*) AS paired_books,
-                   MAX(pair_lag_seconds) AS max_pair_lag_seconds,
-                   MAX(market_quote_at) AS market_quote_at
-            FROM paired_candidates
-            WHERE pair_rank = 1
-            GROUP BY game_pk
-        )
-        SELECT g.game_pk, g.game_date, g.start_time,
-               g.home_team, g.away_team, g.home_score, g.away_score,
-               h.win_prob AS home_model_prob,
-               h.prediction_updated_at AS home_prediction_at,
-               a.prediction_updated_at AS away_prediction_at,
-               h.expected_runs AS home_expected_runs,
-               a.expected_runs AS away_expected_runs,
-               h.moneyline AS home_moneyline,
-               a.moneyline AS away_moneyline,
-               market.home_market_prob,
-               market.paired_books,
-               market.max_pair_lag_seconds,
-               market.market_quote_at,
-               h.win_prob_p10 AS home_win_prob_p10,
-               h.win_prob_p90 AS home_win_prob_p90,
-               h.lineup_source,
-               h.posterior_age_days,
-               COALESCE((
-                   SELECT SUM(b.reliever_outs)
-                   FROM bullpen_daily b
-                   WHERE b.team = g.home_team
-                     AND b.game_date BETWEEN g.game_date - 2 AND g.game_date - 1
-               ), 0) AS home_bp_outs_2d,
-               COALESCE((
-                   SELECT SUM(b.reliever_outs)
-                   FROM bullpen_daily b
-                   WHERE b.team = g.away_team
-                     AND b.game_date BETWEEN g.game_date - 2 AND g.game_date - 1
-               ), 0) AS away_bp_outs_2d
-        FROM games g
-        JOIN model_outputs_season h
-          ON h.game_pk = g.game_pk AND h.team = g.home_team
-        JOIN model_outputs_season a
-          ON a.game_pk = g.game_pk AND a.team = g.away_team
-        JOIN market_consensus market ON market.game_pk = g.game_pk
-        WHERE g.game_date BETWEEN :start AND :end
-          AND g.status = 'Final'
-          AND g.home_score IS NOT NULL
-          AND g.away_score IS NOT NULL
-          AND h.win_prob IS NOT NULL
-          AND h.expected_runs IS NOT NULL
-          AND a.expected_runs IS NOT NULL
-          AND h.moneyline IS NOT NULL
-          AND a.moneyline IS NOT NULL
-          AND h.date::date = g.game_date
-          AND a.date::date = g.game_date
-          AND h.prediction_updated_at < g.start_time
-          AND a.prediction_updated_at < g.start_time
-        ORDER BY g.game_date, g.start_time, g.game_pk
-    """)
-    with engine.begin() as conn:
-        return pd.read_sql(query, conn, params={"start": start, "end": end})
+    games = load_games(start, end)
+    # Workloads are captured with the forecast, so later corrections cannot
+    # change historical feature values.
+    for side in ("home", "away"):
+        games[f"{side}_bp_outs_2d"] = [
+            c.get(f"{side}_bp_outs_2d", np.nan) for c in games["prediction_context"]
+        ]
+    return games
 
 
 def _shrunk_mean(values: deque[float]) -> float:
@@ -156,15 +69,17 @@ def _shrunk_mean(values: deque[float]) -> float:
 
 
 def build_feature_frame(games: pd.DataFrame) -> pd.DataFrame:
-    frame = games.sort_values(["game_date", "start_time", "game_pk"]).reset_index(drop=True).copy()
+    frame = prepare_games(games).sort_values(["game_date", "start_time", "game_pk"]).reset_index(drop=True).copy()
     if "home_market_prob" not in frame:
         raise ValueError("home_market_prob must come from paired same-book pregame odds")
     frame["market_logit"] = _logit(frame["home_market_prob"])
     frame["market_logit_correction"] = frame["market_logit"]
     frame["sim_disagreement"] = _logit(frame["home_model_prob"]) - frame["market_logit"]
     frame["home_win"] = (frame["home_score"] > frame["away_score"]).astype(int)
-    frame["bullpen_rest_diff"] = frame["away_bp_outs_2d"] - frame["home_bp_outs_2d"]
+    frame["bullpen_rest_missing"] = frame[["away_bp_outs_2d", "home_bp_outs_2d"]].isna().any(axis=1).astype(float)
+    frame["bullpen_rest_diff"] = (frame["away_bp_outs_2d"] - frame["home_bp_outs_2d"]).fillna(0.0)
     frame["uncertainty_width"] = frame["home_win_prob_p90"] - frame["home_win_prob_p10"]
+    frame["uncertainty_unresolved"] = frame["uncertainty_width"].isna().astype(float)
     sources = frame["lineup_source"].fillna("")
     frame["lineup_live"] = sources.str.startswith("lineup_live").astype(float)
     frame["queue_live"] = sources.str.endswith("queue_live").astype(float)
@@ -287,9 +202,11 @@ def _metric_delta_intervals(
             + (1 - actual) * np.log(1 - market)
         ),
     })
-    daily = deltas.groupby("game_date")[["brier", "log_loss"]].mean().to_numpy()
+    daily = deltas.groupby("game_date")[["brier", "log_loss"]].sum().to_numpy()
+    counts = deltas.groupby("game_date").size().to_numpy()
     rng = np.random.default_rng(20260722)
-    samples = daily[rng.integers(0, len(daily), size=(n_boot, len(daily)))].mean(axis=1)
+    indices = rng.integers(0, len(daily), size=(n_boot, len(daily)))
+    samples = daily[indices].sum(axis=1) / counts[indices].sum(axis=1)[:, None]
     return {
         "brier": [round(float(value), 6) for value in np.quantile(samples[:, 0], [0.025, 0.975])],
         "log_loss": [round(float(value), 6) for value in np.quantile(samples[:, 1], [0.025, 0.975])],
@@ -372,18 +289,15 @@ def evaluate_feature_blocks(
     threshold: float = EV_THRESHOLDS["ml"],
     n_folds: int = 4,
 ) -> dict:
+    if len(games) < 100:
+        raise ValueError("At least 100 frozen pregame forecasts with raw probability provenance are required")
     frame = build_feature_frame(games)
     if len(frame) < 100:
         raise ValueError("at least 100 completed games are required")
 
-    cut_points = np.linspace(0.5, 1.0, n_folds + 1)
     tests = []
     predictions = {name: [] for name in FEATURE_BLOCKS}
-    for fold in range(n_folds):
-        train_end = int(len(frame) * cut_points[fold])
-        test_end = int(len(frame) * cut_points[fold + 1])
-        train = frame.iloc[:train_end]
-        test = frame.iloc[train_end:test_end]
+    for train, test in chronological_folds(frame, n_folds):
         tests.append(test)
         for name, columns in FEATURE_BLOCKS.items():
             model = fit_offset_logit(train, columns)

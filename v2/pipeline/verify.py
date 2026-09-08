@@ -86,6 +86,13 @@ def run_checks(date_str: str) -> bool:
             home = grp[grp["team"] == grp["home_team"].iloc[0]]
             away = grp[grp["team"] == grp["away_team"].iloc[0]]
             if len(home) == 1 and len(away) == 1:
+                bands = [home["win_prob_p10"].iloc[0], home["win_prob_p90"].iloc[0],
+                         away["win_prob_p10"].iloc[0], away["win_prob_p90"].iloc[0]]
+                if all(pd.isna(v) for v in bands):
+                    continue  # Parameter spread below Monte Carlo resolution.
+                if any(pd.isna(v) for v in bands):
+                    failures.append(f"game {gp} has partially missing uncertainty bands")
+                    continue
                 diff = abs(float(away["win_prob_p10"].iloc[0]) - (1.0 - float(home["win_prob_p90"].iloc[0])))
                 if diff > ANTI_CORR_TOL:
                     failures.append(f"game {gp} anti-correlation violated (diff={diff:.4f})")

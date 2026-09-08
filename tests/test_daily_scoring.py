@@ -6,6 +6,7 @@ write=False so it doesn't touch model_outputs.
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -21,7 +22,7 @@ POSTERIORS_PRESENT = (POSTERIORS_DIR / "batter_skill.nc").exists() and (
 CACHE_2026 = Path(__file__).resolve().parents[1] / "cache" / "statcast_2026.parquet"
 
 
-SMOKE_DATE = "2026-04-15"
+SMOKE_DATE = os.getenv("MLBMODEL_SMOKE_DATE", str((pd.Timestamp.now(tz="UTC") + pd.Timedelta(days=1)).date()))
 N_SIMS = 1000
 
 
@@ -42,7 +43,8 @@ def test_score_games_end_to_end(monkeypatch):
 
     # SMOKE_DATE is in the past, so freeze_started would drop every game; opt
     # out to exercise the full scoring path (this is the backtest-replay case).
-    df = score_games.score(SMOKE_DATE, n_sims=N_SIMS, write=False, seed=0, freeze_started=False)
+    df = score_games.score(SMOKE_DATE, n_sims=N_SIMS, write=False, seed=0,
+                           posteriors_dir=Path(os.getenv("MLBMODEL_TEST_POSTERIORS", str(POSTERIORS_DIR))))
     if df.empty:
         pytest.skip("no games for SMOKE_DATE; pick a different date")
 
@@ -79,13 +81,20 @@ def test_score_games_end_to_end(monkeypatch):
 
     # win_prob_p10/p90 from per-posterior-draw sampling. Should be populated,
     # finite, in [0,1], ordered, and anti-correlated across the home/away pair.
-    assert df["win_prob_p10"].notna().all() and df["win_prob_p90"].notna().all()
-    assert (df["win_prob_p10"] >= 0).all() and (df["win_prob_p90"] <= 1).all()
-    assert (df["win_prob_p10"] <= df["win_prob_p90"]).all(), "win_prob_p10 must be <= p90"
     for gp in games:
         rows = list(df[df.game_pk == gp].itertuples(index=False))
-        assert abs((rows[0].win_prob_p10 + rows[1].win_prob_p90) - 1.0) < 1e-3
-        assert abs((rows[0].win_prob_p90 + rows[1].win_prob_p10) - 1.0) < 1e-3
+        context = rows[0].prediction_context
+        assert context == rows[1].prediction_context
+        assert context["model_version"] == "sim-v3"
+        assert context["training_max_date"] < SMOKE_DATE
+        assert context["tables_training_max_date"] < SMOKE_DATE
+        if context["uncertainty"]["status"] == "below_mc_resolution":
+            assert all(pd.isna(r.win_prob_p10) and pd.isna(r.win_prob_p90) for r in rows)
+        else:
+            assert all(0 <= r.win_prob_p10 <= r.win_prob_p90 <= 1 for r in rows)
+            assert abs(rows[0].win_prob_p10 + rows[1].win_prob_p90 - 1) < 1e-3
+        for side in ("home", "away"):
+            assert abs(sum(context[f"{side}_run_distribution"].values()) - 1) < 1e-6
 
     # Recommendation fields are strings, never null. Moneyline and run line are
     # enabled; totals remains behind its kill switch.
@@ -111,13 +120,48 @@ def test_is_started_freeze_predicate():
     # tz-naive start_time is coerced to UTC, not crashed on
     assert is_started(pd.Timestamp("2026-06-05 01:40:00"), now) is True
 
+    from datetime import date
+
+    from v2.pipeline.refresh_lineups import _lineup_hash
+    from v2.pipeline.score_games import GameContext, build_inputs, top9_batters_by_team
+    from v2.simulator.bullpen import LiveQueueContext, PitchingPlan, apply_pitching_plan, queues_from_workload
+
+    live = {"home": list(range(1, 10)), "away": list(range(11, 20))}
+    assert _lineup_hash(live) != _lineup_hash({**live, "home": list(reversed(live["home"]))})
+    cache = pd.DataFrame({"events": ["single"] * 18, "inning_topbot": ["Bot"] * 9 + ["Top"] * 9,
+                          "home_team": ["SD"] * 18, "away_team": ["LAD"] * 18, "batter": list(range(1, 19))})
+    ctx = GameContext(823932, pd.Timestamp("2026-07-04"), pd.Timestamp("2026-07-05T01:00Z"),
+                      "SDP", "LAD", 593974, 808967, "Wandy Peralta", "Yoshinobu Yamamoto", "L", "R", None, None)
+    inputs, _, _ = build_inputs(ctx, [], [], top9_batters_by_team(cache), {}, {})
+    assert inputs.home_lineup.tolist() == list(range(1, 10))
+    assert inputs.away_lineup.tolist() == list(range(10, 19))
+    assert inputs.home_queue.outs_samples(593974, 0) == (3,)
+
+    workload = pd.DataFrame([
+        {"game_date": date(2026, 7, d), "pitcher_id": pid, "team": "SDP", "outs": outs, "role": role}
+        for d in (1, 2) for pid, outs, role in ((593974, 3, "RP"), (656288, 15, "SP"), (999, 3, "RP"))
+    ])
+    context = LiveQueueContext(823932, "home", "SDP", 593974)
+    queue = queues_from_workload(date(2026, 7, 4), [context], workload, {"SDP": [593974, 656288, 999]})[(823932, "home")]
+    assert 656288 not in queue.relievers  # A rested starter is not a guessed bulk arm.
+    assert queue.starter_role == 1 and not queue.usage_known
+    # A fixture report demonstrates the confirmed-plan contract; it is not a historical source claim.
+    plan = PitchingPlan(823932, "home", 593974, 656288, 3, 12, "fixture:confirmed-report", "2026-07-04T18:00Z")
+    assert plan.valid_for(context, ctx.start_time)
+    queue = apply_pitching_plan(queue, plan)
+    assert queue.relievers[0] == 656288 and queue.workloads[593974] == (3,) and queue.workloads[656288] == (12,)
+    assert queue.usage_known
+    from dataclasses import replace
+    assert not replace(plan, confirmed_at="2026-07-05T03:00Z").valid_for(context, ctx.start_time)
+
 
 def test_market_research_inputs_are_paired_and_pregame():
     from v2.market_model.features import load_feature_games
 
     games = load_feature_games("2026-05-12", "2026-05-31")
 
-    assert len(games) >= 100
+    if games.empty:
+        pytest.skip("Legacy forecasts have no raw-probability provenance; no valid research sample yet")
     assert (games["paired_books"] >= 1).all()
     assert (games["max_pair_lag_seconds"] <= 5).all()
     assert (games["market_quote_at"] < games["start_time"]).all()

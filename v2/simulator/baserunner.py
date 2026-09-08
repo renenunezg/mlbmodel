@@ -37,6 +37,25 @@ N_OUTS = 3
 N_OUTCOMES = len(OUTCOMES)
 N_BQ = 4  # batter GB quartile bins
 N_PQ = 4  # pitcher GB quartile bins
+TABLE_VERSION = 2
+
+
+def legal_transitions(df: pd.DataFrame) -> np.ndarray:
+    """Conserve runners and outs; runners may be stranded only at inning end."""
+    before = df["state"].map(lambda x: int(x).bit_count()).to_numpy() + 1
+    remaining = df["new_state"].map(lambda x: int(x).bit_count()).to_numpy()
+    accounted = remaining + df["runs"].to_numpy() + df["outs_added"].to_numpy()
+    end = df["outs"].to_numpy() + df["outs_added"].to_numpy() == 3
+    return (
+        df["state"].between(0, 7).to_numpy()
+        & df["new_state"].between(0, 7).to_numpy()
+        & df["outs"].between(0, 2).to_numpy()
+        & df["outs_added"].ge(0).to_numpy()
+        & df["runs"].ge(0).to_numpy()
+        & (df["outs"].to_numpy() + df["outs_added"].to_numpy() <= 3)
+        & (accounted <= before)
+        & np.where(end, remaining == 0, accounted == before)
+    )
 
 
 def _key_advancement(state: np.ndarray, outs: np.ndarray, outcome: np.ndarray, subtype: np.ndarray) -> np.ndarray:
@@ -63,6 +82,7 @@ class AdvancementTable:
     new_state: np.ndarray    # (TOTAL,) int8
     runs: np.ndarray         # (TOTAL,) int8
     outs_added: np.ndarray   # (TOTAL,) int8
+    training_max_date: str | None = None
 
     def sample(
         self,
@@ -109,6 +129,7 @@ class OutSubtypeTable:
     starts: np.ndarray       # (N_STATES * N_OUTS + 1,)
     cdf: np.ndarray
     subtype: np.ndarray      # int subtype indices
+    training_max_date: str | None = None
 
     def sample(
         self,
@@ -166,8 +187,19 @@ def _build_flat_lookup(
     return starts, cdf, df
 
 
-def load_advancement_table() -> AdvancementTable:
-    df = pd.read_parquet(TABLES_DIR / "advancement.parquet")
+def load_advancement_table(tables_dir: Path = TABLES_DIR) -> AdvancementTable:
+    df = pd.read_parquet(tables_dir / "advancement.parquet")
+    if "table_version" not in df or not df["table_version"].eq(TABLE_VERSION).all():
+        if tables_dir != TABLES_DIR:
+            raise ValueError("Stale advancement table; rebuild with python -m v2.simulator.build_advancement_table")
+        import subprocess
+        import sys
+        subprocess.run([sys.executable, "-m", "v2.simulator.build_advancement_table",
+                        "--years", "2024", "2025"], check=True,
+                       cwd=Path(__file__).resolve().parents[2])
+        df = pd.read_parquet(tables_dir / "advancement.parquet")
+    if not legal_transitions(df).all():
+        raise ValueError("Advancement table contains impossible runner/outs transitions")
     df["subtype_idx"] = df["subtype_key"].map(SUBTYPE_TO_IDX).astype(np.int64)
     n_keys = N_STATES * N_OUTS * N_OUTCOMES * N_SUBTYPES
     starts, cdf, df = _build_flat_lookup(
@@ -179,11 +211,14 @@ def load_advancement_table() -> AdvancementTable:
         new_state=df["new_state"].to_numpy(np.int64),
         runs=df["runs"].to_numpy(np.int64),
         outs_added=df["outs_added"].to_numpy(np.int64),
+        training_max_date=str(df["training_max_date"].max()) if "training_max_date" in df else None,
     )
 
 
-def load_out_subtype_table() -> OutSubtypeTable:
-    df = pd.read_parquet(TABLES_DIR / "out_subtype.parquet")
+def load_out_subtype_table(tables_dir: Path = TABLES_DIR) -> OutSubtypeTable:
+    df = pd.read_parquet(tables_dir / "out_subtype.parquet")
+    if "table_version" not in df or not df["table_version"].eq(TABLE_VERSION).all():
+        raise ValueError("Stale out-subtype table; rebuild the simulator tables together")
     df["subtype_idx"] = df["subtype_key"].map(SUBTYPE_TO_IDX).astype(np.int64)
     n_keys = N_STATES * N_OUTS * N_BQ * N_PQ
     starts, cdf, df = _build_flat_lookup(
@@ -193,6 +228,7 @@ def load_out_subtype_table() -> OutSubtypeTable:
         starts=starts,
         cdf=cdf,
         subtype=df["subtype_idx"].to_numpy(np.int64),
+        training_max_date=str(df["training_max_date"].max()) if "training_max_date" in df else None,
     )
 
 

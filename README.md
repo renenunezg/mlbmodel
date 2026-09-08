@@ -18,39 +18,30 @@ covers what's in this repository and how to run it.
 
 The current model (v2, live since 2026-05-12) is a two-layer system:
 
-1. **Hierarchical Bayesian skill layer.** Batter and pitcher skill are
-   hierarchical multinomial-logit models over the eight plate-appearance
-   outcomes (K, BB, HBP, 1B, 2B, 3B, HR, OUT): each actor carries a vector of
-   seven additive log-odds offsets against OUT as the reference category,
-   partially pooled through a non-centered Normal hierarchy, so an actor's
-   outcome probabilities are logistic-normal rather than Dirichlet. Batters
-   split by platoon (`vs_LHP`); pitchers shrink toward role-specific spreads
-   (`SP`/`RP`). Park is a separate Gaussian model of a per-venue log park
-   factor fit to residual wOBA after batter and pitcher effects. All three are
-   fit with NUTS via numpyro/JAX on aggregated per-actor outcome counts
-   (Multinomial likelihood), 4 chains × 2000 draws. R-hat 1.00 and min ESS >
-   400 on all three fits. Trained on 401,826 PAs across 2024 + 2025 +
-   2026-YTD, refit nightly (~12 min on M-series, ~30 min on a GitHub Actions
-   runner).
-2. **Per-PA Monte Carlo simulator.** K=30 random posterior draws × N
-   inning-level simulations per draw. N is configurable via `--n-sims`; the
-   production scoring default is 10,000 total sims (~333 per draw) and the
-   acceptance-gate test runs 990 (33 per draw). The K-draw outer loop
-   propagates parameter uncertainty; the inner loop samples PAs vectorized in
-   NumPy. Baserunner advancement uses an empirical
-   `P(new_state, runs, outs_added | state, outs, outcome, subtype)` table
-   built from 365k PAs of Statcast data, with linear shrinkage toward the
-   outcome-conditional marginal on cells with fewer than 100 observations and
-   deterministic forced advances for HR/BB/HBP. Bullpens are rest-aware:
-   relievers with ≥ 6 outs in the last 1 day or ≥ 9 outs in the last 2 days
-   are skipped.
+1. **Hierarchical Bayesian skill layer.**
+   Batter and pitcher skill use partially pooled multinomial-logit models over eight outcomes: K, BB, HBP, 1B, 2B, 3B, HR, and OUT.
+   Batters have a platoon effect; pitcher shrinkage uses the fitted SP/RP classification, with explicit protection for legitimate two-way pitchers.
+   Park coefficients are fitted against the nonlinear expected-wOBA response of the same softmax transformation used by the simulator.
+   The park prior is neutral in logit units, and the park observation likelihood remains in wOBA units.
+   All three models use NUTS sampling and record their training cutoff and diagnostic gates with the saved traces.
+2. **Per-PA Monte Carlo simulator.**
+   Thirty posterior realizations share the configured simulation budget, which defaults to 10,000 simulations per game.
+   Baserunner advancement uses empirical transitions with smoothing restricted to the same base/out state and explicit runner-conservation checks.
+   Bullpens use prior role and rest evidence from the active roster.
+   Rotation pitchers cannot enter the relief queue merely because they are rested.
+   Workloads are sampled per appearance; unspecified opener plans receive short workloads, and unknown relief coverage uses a neutral arm.
+   Explicit, timestamped opener/bulk reports can supply separate workloads.
+   Relievers with at least 6 outs yesterday or 9 outs over two days are skipped.
 
-Win, total, and run-line probabilities are computed empirically from the
-simulated run distributions per matchup. The p10/p90 win-probability band is
-taken across the K posterior draws (parameter uncertainty), not across the
-inner sims (run-scoring noise). A play is flagged when modeled probability
-exceeds the sportsbook's de-vigged implied probability by more than 4.5%
-(ML/RL) or 6.5% (totals); sizing is quarter-Kelly.
+Win, total, and run-line probabilities are computed from the simulated run distributions.
+Published moneyline probabilities blend the home-field-adjusted simulation logit with the paired, de-vigged market consensus at a model weight of 0.2.
+Raw simulation probabilities and the exact market snapshot are stored separately in prediction context.
+The p10/p90 win-probability band estimates between-posterior variation after subtracting estimated binomial simulation variance.
+Bands are unavailable when the parameter spread is below Monte Carlo resolution.
+Prediction context records simulation error and posterior integration error separately.
+Recommendations require known starters, complete posted lineups, and sufficient pitching-usage evidence; moneyline recommendations also require a paired market anchor.
+Moneyline and run-line thresholds remain 4.5 percentage points above the executable price's implied probability, with quarter-Kelly sizing.
+Totals recommendations remain disabled.
 
 v2 replaced an XGBoost regressor (v1) after a 542-game head-to-head backtest:
 Brier −6.9%, log-loss −7.3%, max calibration gap from 41.9% down to 3.2%, ROI
@@ -84,7 +75,7 @@ v2/
   pipeline/             daily_run, train, score_games, refresh_lineups,
                         verify, write_posterior_summaries.
   data/                 Multi-year Statcast cache builder + per-PA dataset.
-  tools/                One-off calibration scripts (form sigma, weather coefficients).
+  tools/                Frozen-forecast variance comparisons and weather calibration.
 tests/                  Production-critical suite; see below.
 ```
 
@@ -103,12 +94,21 @@ python -m v2.bayesian.fit_all --start-year 2024 --end-year 2026 --save-traces
 python -m v2.pipeline.daily_run
 
 # Score a specific date
-python -m v2.pipeline.score_games --date 2026-05-14 --n-sims 10000
+python -m v2.pipeline.score_games --date 2026-09-09 --n-sims 10000
 
 # Intraday lineup refresh (re-scores games whose posted lineup changed)
 python -m v2.pipeline.refresh_lineups
 
-# Market-relative research
+# Prepare the additive prediction_context column before deploying this scoring version:
+# backend/sql/prediction_context.sql (apply only with production approval)
+
+# Export a no-write pregame forecast for later chronological acceptance
+python -m v2.pipeline.score_games --date 2026-09-09 --no-write --export cache/candidate.json
+
+# Compare frozen exports after those games finish
+python -m v2.market_model.acceptance --candidate cache/candidate.json --baseline cache/baseline.json
+
+# Market-relative research (only versioned raw forecasts qualify)
 python -m v2.market_model.residual --start 2026-03-26 --end 2026-07-21 --market ml
 python -m v2.market_model.features --start 2026-03-26 --end 2026-07-21
 
@@ -211,8 +211,9 @@ cron on `nightly-eval.yml` is only a fallback.
 pytest tests/
 ```
 
-The suite includes a slow acceptance gate
-(`tests/test_simulator_acceptance.py::test_runs_per_game_within_5pct`) that simulates
-200 stratified 2025 games × 990 sims (= 396k team-game samples) and checks
-mean and variance against actuals. It takes ~2 min. `pytest tests/` runs it by
-default; pass `--ignore=tests/test_simulator_acceptance.py` for quick iteration.
+Simulator acceptance tests reproduce runner conservation, pregame provenance rejection, and Monte Carlo uncertainty separation.
+The former 2025 replay using current posteriors and actual relief appearances is no longer an accuracy gate.
+`v2.market_model.acceptance` compares paired frozen forecasts on run MAE, run and margin CRPS, run-line calibration, scoring tails, and win probabilities, including a separate opener segment.
+It refuses hindsight training cutoffs, missing provenance, mixed model versions, and insufficient paired evidence.
+Legacy forecasts have no recoverable raw probability or input snapshot and are excluded from raw-model research.
+No historical accuracy improvement is implied by passing the regression tests.

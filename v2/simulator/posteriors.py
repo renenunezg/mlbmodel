@@ -87,6 +87,7 @@ def _assemble(
     batter_ids: np.ndarray,
     pitcher_ids: np.ndarray,
     venue_codes: np.ndarray,
+    fitted_pitcher_roles: np.ndarray | None = None,
 ) -> PosteriorMeans:
     beta_main = sigma_batter[None, :] * z_batter
     beta_platoon = sigma_platoon[None, :] * z_platoon
@@ -95,7 +96,11 @@ def _assemble(
     platoon_offset = np.vstack([beta_platoon, np.zeros((1, K_FREE))])
 
     # ROLES = ("SP", "RP"); index 0 = SP, 1 = RP per pitcher_skill.py.
-    beta_pitcher = sigma_pitcher[None, :, :] * z_pitcher[:, None, :]
+    if fitted_pitcher_roles is None:
+        beta_pitcher = sigma_pitcher[None, :, :] * z_pitcher[:, None, :]
+    else:
+        beta = sigma_pitcher[fitted_pitcher_roles] * z_pitcher
+        beta_pitcher = np.repeat(beta[:, None, :], 2, axis=1)
     n_p = beta_pitcher.shape[0]
     pitcher_offset = np.concatenate([beta_pitcher, np.zeros((1, 2, K_FREE))], axis=0)
 
@@ -131,7 +136,9 @@ def load_posteriors(posteriors_dir: Path = POSTERIORS_DIR) -> PosteriorMeans:
     pit = az.from_netcdf(posteriors_dir / "pitcher_skill.nc")
     park = az.from_netcdf(posteriors_dir / "park_effects.nc")
 
+    _validate_traces(bat, pit, park)
     return _assemble(
+        fitted_pitcher_roles=pit.constant_data["pitcher_role"].values.astype(int),
         intercept=_posterior_mean(pit, "intercept"),
         sigma_batter=_posterior_mean(bat, "sigma_batter"),
         z_batter=_posterior_mean(bat, "z_batter"),
@@ -165,6 +172,7 @@ def load_posterior_draws(
     pit = az.from_netcdf(posteriors_dir / "pitcher_skill.nc")
     park = az.from_netcdf(posteriors_dir / "park_effects.nc")
 
+    _validate_traces(bat, pit, park)
     bat_s = bat.posterior.stack(sample=("chain", "draw"))
     pit_s = pit.posterior.stack(sample=("chain", "draw"))
     park_s = park.posterior.stack(sample=("chain", "draw"))
@@ -192,6 +200,7 @@ def load_posterior_draws(
     out: list[PosteriorMeans] = []
     for k in range(K):
         out.append(_assemble(
+            fitted_pitcher_roles=pit.constant_data["pitcher_role"].values.astype(int),
             intercept=pit_intercept[..., k],
             sigma_batter=bat_sigma[..., k],
             z_batter=bat_z[..., k],
@@ -205,3 +214,21 @@ def load_posterior_draws(
             venue_codes=venue_codes,
         ))
     return out
+
+
+def _validate_traces(bat, pit, park) -> None:
+    if park.posterior.attrs.get("park_model_version") != "woba-logit-response-v2":
+        raise ValueError("Park posterior uses obsolete units; refit all models before scoring")
+    if not hasattr(pit, "constant_data") or "pitcher_role" not in pit.constant_data:
+        raise ValueError("Pitcher posterior lacks fitted role metadata; refit all models")
+    cutoffs = {t.posterior.attrs.get("training_max_date") for t in (bat, pit, park)}
+    versions = {t.posterior.attrs.get("model_version") for t in (bat, pit, park)}
+    if len(cutoffs) != 1 or None in cutoffs or versions != {"sim-v3"}:
+        raise ValueError("Inconsistent posterior versions or training cutoffs; refit all models")
+
+
+def posterior_provenance(posteriors_dir: Path = POSTERIORS_DIR) -> dict:
+    import xarray as xr
+    with xr.open_dataset(posteriors_dir / "pitcher_skill.nc", group="posterior") as ds:
+        return {"model_version": ds.attrs.get("model_version"),
+                "training_max_date": ds.attrs.get("training_max_date")}

@@ -11,6 +11,7 @@ split 50/50 to mirror v1 settlement convention.
 from __future__ import annotations
 
 import numpy as np
+import pandas as pd
 
 from backend.simulation import american_to_prob
 from backend.strategy import HOME_FIELD_LOGIT, MARKET_ANCHOR_W_MODEL
@@ -67,25 +68,40 @@ def market_probs(
     return out
 
 
-def consensus_home_prob(home_odds: dict | None, away_odds: dict | None) -> float | None:
-    """De-vigged market home win prob, averaged over books quoting both sides.
+def paired_market_quotes(home_odds: dict | None, away_odds: dict | None) -> list[dict]:
+    """Pair prices and retain the exact observation timestamps used in scoring."""
+    home_prices, away_prices = _ml_by_book(home_odds), _ml_by_book(away_odds)
+    home_offers = {o.get("book"): o for o in (home_odds or {}).get("offers", [home_odds] if home_odds else [])}
+    away_offers = {o.get("book"): o for o in (away_odds or {}).get("offers", [away_odds] if away_odds else [])}
+    result = []
+    now = pd.Timestamp.now(tz="UTC")
+    for book in sorted(home_prices.keys() & away_prices.keys()):
+        h, a = home_offers[book], away_offers[book]
+        ht, at = h.get("scraped_at"), a.get("scraped_at")
+        pair = {"book": book, "home_moneyline": home_prices[book], "away_moneyline": away_prices[book]}
+        # Legacy callers can calculate a probability without timestamps, but
+        # those quotes cannot pass the frozen-forecast research gate.
+        if pd.notna(ht) or pd.notna(at):
+            if pd.isna(ht) or pd.isna(at):
+                continue
+            ht, at = pd.to_datetime(ht, utc=True), pd.to_datetime(at, utc=True)
+            if abs((ht - at).total_seconds()) > 5 or max(ht, at) > now:
+                continue
+            pair.update(home_quoted_at=ht.isoformat(), away_quoted_at=at.isoformat())
+        for side, offer in (("home", h), ("away", a)):
+            for key in ("spread", "spread_odds"):
+                value = offer.get(key)
+                pair[f"{side}_{key}"] = float(value) if pd.notna(value) else None
+        result.append(pair)
+    return result
 
-    Offers are paired by book so one book's vig cancels within its own pair.
-    Books quoting only one side are skipped. None when no complete pair exists.
-    """
-    home_by_book = _ml_by_book(home_odds)
-    away_by_book = _ml_by_book(away_odds)
+
+def consensus_home_prob(home_odds: dict | None, away_odds: dict | None) -> float | None:
     probs = []
-    for book, home_ml in home_by_book.items():
-        away_ml = away_by_book.get(book)
-        if away_ml is None:
-            continue
-        imp_home = american_to_prob(home_ml)
-        imp_away = american_to_prob(away_ml)
-        overround = imp_home + imp_away
-        if overround <= 0:
-            continue
-        probs.append(imp_home / overround)
+    for pair in paired_market_quotes(home_odds, away_odds):
+        h = american_to_prob(pair["home_moneyline"])
+        a = american_to_prob(pair["away_moneyline"])
+        probs.append(h / (h + a))
     return float(np.mean(probs)) if probs else None
 
 
