@@ -33,9 +33,13 @@ TOTALS_ENABLED = False
 WEATHER_ENABLED = os.getenv("MLBMODEL_WEATHER_ENABLED", "1") == "1"
 
 # Weight of the sim in the logit-scale blend with the de-vigged market
-# consensus. 0.2 was the out-of-sample log-loss optimum on 2026 games; the
-# raw sim prob flags big underdogs +EV systematically.
-MARKET_ANCHOR_W_MODEL = 0.2
+# consensus. The raw sim prob flags big underdogs +EV systematically. 0.2 was
+# the log-loss optimum on 2026 games (a 2026-09-09 sweep over 1272 v2 games
+# put it at 0 and worsening monotonically); at 0.2 the 4.5% ML threshold
+# needs a 20+ point sim/market disagreement and no ML pick surfaced for three
+# weeks. Raised to 0.4 on 2026-09-09 by decision, accepting the calibration
+# cost, so the moneyline market is not silently off.
+MARKET_ANCHOR_W_MODEL = 0.4
 
 # Home-field shift on the sim's home logit, applied before market anchoring.
 # The sim itself has none: batting last and walkoff logic net to ~zero.
