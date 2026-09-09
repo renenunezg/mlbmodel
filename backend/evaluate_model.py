@@ -49,7 +49,7 @@ def _build_bet_ledger(eval_df=None):
     ledger = pd.read_sql(
         text(
             "SELECT date, bet_type, team, game_pk, stake, decimal_odds, "
-            "won, payout, edge, american_odds, totals_side "
+            "won, payout, edge, american_odds, totals_side, push "
             "FROM bet_ledger_v"
         ),
         con=engine,
@@ -58,10 +58,11 @@ def _build_bet_ledger(eval_df=None):
         return pd.DataFrame(
             columns=["date", "bet_type", "team", "game_pk", "stake",
                      "decimal_odds", "won", "payout", "edge",
-                     "american_odds", "totals_side"]
+                     "american_odds", "totals_side", "push"]
         )
     ledger["date"] = pd.to_datetime(ledger["date"])
     ledger["won"] = ledger["won"].astype(bool)
+    ledger["push"] = ledger["push"].astype(bool)
     return ledger
 
 
@@ -156,6 +157,18 @@ def _write_edge_buckets(eval_date, eval_window, buckets):
 
 
 
+def _bet_record(bets):
+    """(n_bets, wins, accuracy) for a ledger slice; pushes count as bets but
+    are excluded from the accuracy denominator."""
+    n = len(bets)
+    if n == 0:
+        return 0, 0, np.nan
+    wins = int(bets["won"].sum())
+    pushes = int(bets["push"].sum()) if "push" in bets.columns else 0
+    decided = n - pushes
+    return n, wins, (wins / decided if decided > 0 else np.nan)
+
+
 def _compute_base_row(window_df, window_ledger):
     """Accuracy counts for a window. Bet-level counts come from the ledger
     so they always agree with the ROI / segment metrics."""
@@ -176,19 +189,14 @@ def _compute_base_row(window_df, window_ledger):
         rl_bets = window_ledger[window_ledger["bet_type"] == "rl"]
         totals_bets = window_ledger[window_ledger["bet_type"] == "total"]
     else:
-        empty = pd.DataFrame(columns=["won"])
+        empty = pd.DataFrame(columns=["won", "push"])
         ml_bets = rl_bets = totals_bets = empty
 
-    ml_total = len(ml_bets)
-    ml_correct = int(ml_bets["won"].sum()) if ml_total else 0
-    rl_total = len(rl_bets)
-    rl_correct = int(rl_bets["won"].sum()) if rl_total else 0
-    totals_total = len(totals_bets)
-    totals_correct = int(totals_bets["won"].sum()) if totals_total else 0
-
-    ml_accuracy = ml_correct / ml_total if ml_total > 0 else np.nan
-    rl_accuracy = rl_correct / rl_total if rl_total > 0 else np.nan
-    totals_accuracy = totals_correct / totals_total if totals_total > 0 else np.nan
+    # A push is a bet (it counts toward predictions) but neither a win nor a
+    # loss, so accuracy is wins over decided bets.
+    ml_total, ml_correct, ml_accuracy = _bet_record(ml_bets)
+    rl_total, rl_correct, rl_accuracy = _bet_record(rl_bets)
+    totals_total, totals_correct, totals_accuracy = _bet_record(totals_bets)
 
     return {
         "total_correct": total_correct,
