@@ -33,12 +33,15 @@ def test_runline_uses_best_price_at_one_and_a_half():
     team_runs = np.array([2, 3, 4, 5])
     opponent_runs = np.array([1, 4, 3, 2])
 
-    selected, p_cover = _best_runline(odds, team_runs, opponent_runs)
+    selected, p_cover = _best_runline(odds, team_runs, opponent_runs, home=True)
 
     assert selected["book"] == "fanduel"
     assert selected["spread"] == -1.5
     assert selected["spread_odds"] == 100
-    assert p_cover == 0.25
+    # raw sim cover = 0.25; home gets the +0.09 logit home-field shift
+    assert p_cover == pytest.approx(0.2673, abs=1e-4)
+    _, p_cover_away = _best_runline(odds, team_runs, opponent_runs, home=False)
+    assert p_cover_away == pytest.approx(0.2336, abs=1e-4)
 
 
 def test_fallback_lineup_suppresses_market_flags(monkeypatch):
