@@ -276,10 +276,14 @@ def hit_rate_by_edge_bucket(ledger, buckets=(0.045, 0.065, 0.10, 0.20)):
             continue
         total_staked = subset["stake"].sum()
         bucket_roi = (subset["payout"].sum() - total_staked) / total_staked if total_staked > 0 else 0
+        # Pushes are bets with zero P&L: in n_bets and ROI, out of the hit rate.
+        pushes = int(subset["push"].sum()) if "push" in subset.columns else 0
+        decided = len(subset) - pushes
+        hit_rate = float(subset["won"].sum()) / decided if decided > 0 else np.nan
         results.append({
             "bucket_label": label,
             "n_bets": int(len(subset)),
-            "hit_rate": round(float(subset["won"].mean()), 4),
+            "hit_rate": round(hit_rate, 4) if not np.isnan(hit_rate) else None,
             "roi": round(float(bucket_roi), 4),
         })
     return results
