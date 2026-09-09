@@ -121,6 +121,22 @@ def anchor_home_prob(p_home_sim: float, p_market_home: float | None) -> float:
     return round(_sigmoid(blended), 4)
 
 
+def shift_cover_prob(p_cover: float | None, home: bool) -> float | None:
+    """Apply the home-field advantage the sim lacks to a run-line cover prob.
+
+    The sim's margin distribution carries no home edge, so it under-rated home
+    covers by ~2.5 points (v2 2026: home covered 48.9% vs 46.9% predicted) and
+    ~90% of run-line picks landed on the away side. The logit shift fitted on
+    1556 games (2026-09-09) is 0.0875, stable across halves and both spread
+    signs, i.e. the same HOME_FIELD_LOGIT already applied to win prob. Away
+    covering is the complement of home covering, so away gets the negative.
+    """
+    if p_cover is None or pd.isna(p_cover):
+        return p_cover
+    shift = HOME_FIELD_LOGIT if home else -HOME_FIELD_LOGIT
+    return round(_sigmoid(_logit(p_cover) + shift), 4)
+
+
 def _ml_by_book(odds: dict | None) -> dict:
     if odds is None:
         return {}

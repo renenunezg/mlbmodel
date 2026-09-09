@@ -38,6 +38,7 @@ from v2.markets.probs import (
     consensus_home_prob,
     market_probs,
     runs_percentiles,
+    shift_cover_prob,
 )
 
 
@@ -64,18 +65,27 @@ def _best_runline(
     odds: dict | None,
     team_runs: np.ndarray,
     opponent_runs: np.ndarray,
+    home: bool,
 ) -> tuple[dict, float | None]:
+    """Best-priced ±1.5 offer and the team's HFA-shifted cover probability.
+
+    The shift is applied before price comparison so the offer choice and the
+    published prob, flag, and Kelly all see the same number.
+    """
     candidates = []
     for offer in _offers(odds):
         spread = _get(offer, "spread")
         if pd.isna(spread) or not np.isclose(abs(float(spread)), 1.5):
             continue
-        p_cover = market_probs(
-            team_runs,
-            opponent_runs,
-            None,
-            float(spread),
-        )["p_home_cover"]
+        p_cover = shift_cover_prob(
+            market_probs(
+                team_runs,
+                opponent_runs,
+                None,
+                float(spread),
+            )["p_home_cover"],
+            home,
+        )
         candidates.append((
             _price_edge(p_cover, _get(offer, "spread_odds")),
             offer,
@@ -179,8 +189,10 @@ def build_game_rows(
 
     home_ml_offer = _best_moneyline(home_odds, p_home_win)
     away_ml_offer = _best_moneyline(away_odds, p_away_win)
-    home_rl_offer, p_home_cover = _best_runline(home_odds, h, a)
-    away_rl_offer, p_away_cover = _best_runline(away_odds, a, h)
+    # Run-line cover probs get the same home-field shift as the win prob (the
+    # sim's margin distribution has none); they stay unanchored to the market.
+    home_rl_offer, p_home_cover = _best_runline(home_odds, h, a, home=True)
+    away_rl_offer, p_away_cover = _best_runline(away_odds, a, h, home=False)
     total_offer, p_over, p_under = _best_total(home_odds, away_odds, h, a)
 
     home_ml = _get(home_ml_offer, "moneyline")
