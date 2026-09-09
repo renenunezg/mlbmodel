@@ -37,9 +37,11 @@ WEATHER_ENABLED = os.getenv("MLBMODEL_WEATHER_ENABLED", "1") == "1"
 # the log-loss optimum on 2026 games (a 2026-09-09 sweep over 1272 v2 games
 # put it at 0 and worsening monotonically); at 0.2 the 4.5% ML threshold
 # needs a 20+ point sim/market disagreement and no ML pick surfaced for three
-# weeks. Raised to 0.4 on 2026-09-09 by decision, accepting the calibration
-# cost, so the moneyline market is not silently off.
-MARKET_ANCHOR_W_MODEL = 0.4
+# weeks. Raised to 0.5 on 2026-09-09 by decision, accepting the calibration
+# cost, so the moneyline market is not silently off. 0.5 is the highest
+# weight at which the measured big-underdog failure (sim 40% vs market 28%)
+# still stays No Play; see test_market_anchor_stops_flagging_big_dogs.
+MARKET_ANCHOR_W_MODEL = 0.5
 
 # Home-field shift on the sim's home logit, applied before market anchoring.
 # The sim itself has none: batting last and walkoff logic net to ~zero.
