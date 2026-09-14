@@ -35,6 +35,7 @@ from v2.markets.ev import (
 )
 from v2.markets.probs import (
     anchor_home_prob,
+    consensus_cover_prob,
     consensus_home_prob,
     market_probs,
     runs_percentiles,
@@ -66,16 +67,16 @@ def _best_runline(
     team_runs: np.ndarray,
     opponent_runs: np.ndarray,
     home: bool,
+    opponent_odds: dict | None = None,
 ) -> tuple[dict, float | None]:
-    """Best-priced ±1.5 offer and the team's HFA-shifted cover probability.
-
-    The shift is applied before price comparison so the offer choice and the
-    published prob, flag, and Kelly all see the same number.
-    """
+    """Shop fixed consensus probabilities; unpaired sim estimates are display-only."""
     candidates = []
     for offer in _offers(odds):
         spread = _get(offer, "spread")
         if pd.isna(spread) or not np.isclose(abs(float(spread)), 1.5):
+            continue
+        price = _get(offer, "spread_odds")
+        if pd.isna(price) or not np.isfinite(float(price)) or abs(float(price)) < 100:
             continue
         p_cover = shift_cover_prob(
             market_probs(
@@ -86,6 +87,9 @@ def _best_runline(
             )["p_home_cover"],
             home,
         )
+        market_cover = consensus_cover_prob(odds, opponent_odds, float(spread))
+        if market_cover is not None:
+            p_cover = market_cover
         candidates.append((
             _price_edge(p_cover, _get(offer, "spread_odds")),
             offer,
@@ -172,8 +176,8 @@ def build_game_rows(
     # market consensus (see backend/strategy.py constants for the 2026-08-16
     # measurements). The raw sim prob systematically over-rates big underdogs
     # relative to what they actually win, which made them look +EV; anchoring
-    # is what the ML flag, Kelly, and the site all consume. Run-line and
-    # totals probs remain pure sim quantities.
+    # is what the ML flag, Kelly, and the site all consume.
+    # Run lines use paired market consensus; totals remain simulator outputs.
     p_home_sim = market_probs(h, a, None, None)["p_home_win"]
     p_market_home = consensus_home_prob(home_odds, away_odds)
     p_home_win = anchor_home_prob(p_home_sim, p_market_home)
@@ -189,10 +193,8 @@ def build_game_rows(
 
     home_ml_offer = _best_moneyline(home_odds, p_home_win)
     away_ml_offer = _best_moneyline(away_odds, p_away_win)
-    # Run-line cover probs get the same home-field shift as the win prob (the
-    # sim's margin distribution has none); they stay unanchored to the market.
-    home_rl_offer, p_home_cover = _best_runline(home_odds, h, a, home=True)
-    away_rl_offer, p_away_cover = _best_runline(away_odds, a, h, home=False)
+    home_rl_offer, p_home_cover = _best_runline(home_odds, h, a, home=True, opponent_odds=away_odds)
+    away_rl_offer, p_away_cover = _best_runline(away_odds, a, h, home=False, opponent_odds=home_odds)
     total_offer, p_over, p_under = _best_total(home_odds, away_odds, h, a)
 
     home_ml = _get(home_ml_offer, "moneyline")
@@ -334,6 +336,12 @@ def build_game_rows(
     }
     away_row.update(_kelly_block(away_row, p_away_win, p_away_cover, p_over, p_under,
                                  away_ml, away_spread_odds, away_total_over, away_total_under))
+
+    for row, odds, opposite in ((home_row, home_odds, away_odds), (away_row, away_odds, home_odds)):
+        if consensus_cover_prob(odds, opposite, row["spread"]) is None:
+            row["run_line_ev_flag"] = "No Play"
+            row["run_line_confidence"] = float("nan")
+            row["kelly_full_rl"] = row["kelly_quarter_rl"] = 0.0
 
     if p_market_home is None:
         for row in (home_row, away_row):

@@ -43,6 +43,17 @@ def test_runline_uses_best_price_at_one_and_a_half():
     _, p_cover_away = _best_runline(odds, team_runs, opponent_runs, home=False)
     assert p_cover_away == pytest.approx(0.2336, abs=1e-4)
 
+    opposite = _package(
+        {"book": "draftkings", "spread": 1.5, "spread_odds": -110},
+        {"book": "fanduel", "spread": 1.5, "spread_odds": -120},
+    )
+    selected, p_cover = _best_runline(odds, team_runs, opponent_runs, home=True, opponent_odds=opposite)
+    assert selected["book"] == "fanduel"
+    assert p_cover == pytest.approx((0.5 + 0.5 / (0.5 + 120 / 220)) / 2)
+    # Changing the simulator cannot reintroduce an unsupported residual edge.
+    _, alternative = _best_runline(odds, team_runs + 10, opponent_runs, home=True, opponent_odds=opposite)
+    assert alternative == p_cover
+
 
 def test_fallback_lineup_suppresses_market_flags(monkeypatch):
     odds = {
@@ -150,6 +161,30 @@ def test_market_anchor_stops_flagging_big_dogs(monkeypatch):
             assert pd.isna(row["ml_confidence"])
             assert row["kelly_full_ml"] == row["kelly_quarter_ml"] == 0
             assert row["expected_runs"] > 0
+
+    # Colorado's repeated +1.5 regression: an inflated sim probability must
+    # not manufacture a run-line edge against a valid paired market.
+    rl_kwargs = {**kwargs, "home_runs": np.r_[np.full(320, 5), np.full(680, 2)],
+                 "away_runs": np.r_[np.full(320, 2), np.full(680, 5)]}
+    home_quote = {"book": "draftkings", "spread": -1.5, "spread_odds": 120}
+    away_quote = {"book": "draftkings", "spread": 1.5, "spread_odds": -142}
+    paired = build_game_rows(**rl_kwargs, home_odds=home_quote, away_odds=away_quote)
+    expected_cover = (142 / 242) / (142 / 242 + 100 / 220)
+    assert paired[1]["p_cover"] == pytest.approx(expected_cover)
+    assert paired[0]["p_cover"] + paired[1]["p_cover"] == pytest.approx(1)
+    assert paired[1]["run_line_ev_flag"] == "No Play"
+    assert paired[1]["kelly_full_rl"] == paired[1]["kelly_quarter_rl"] == 0
+    # No moneylines are needed, but missing, invalid, mismatched, and
+    # asynchronous opposite run-line quotes must fail closed.
+    for opposite in (None, {**home_quote, "book": "fanduel"},
+                     {**home_quote, "spread": 1.5},
+                     {**home_quote, "spread_odds": float("inf")},
+                     {**home_quote, "scraped_at": "2026-09-13T12:00:00Z"}):
+        _, unpaired = build_game_rows(**rl_kwargs, home_odds=opposite, away_odds=away_quote)
+        assert unpaired["p_cover"] > 0.65
+        assert unpaired["run_line_ev_flag"] == "No Play"
+        assert pd.isna(unpaired["run_line_confidence"])
+        assert unpaired["kelly_full_rl"] == unpaired["kelly_quarter_rl"] == 0
 
 
 def test_market_research_refuses_independently_shopped_baseline():

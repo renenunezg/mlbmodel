@@ -105,6 +105,50 @@ def consensus_home_prob(home_odds: dict | None, away_odds: dict | None) -> float
     return float(np.mean(probs)) if probs else None
 
 
+def consensus_cover_prob(odds: dict | None, opponent_odds: dict | None, spread: float) -> float | None:
+    """De-vig matching same-book +/-1.5 prices, independently of moneylines.
+
+    The September 14 replay found that simulator run-line probabilities added
+    error versus this baseline in both chronological periods.
+    Until a residual model passes validation, published cover probabilities
+    use this baseline; shopping still chooses the best executable price.
+    """
+    def quotes(package):
+        result = {}
+        for offer in (package or {}).get("offers") or ([package] if package else []):
+            book = offer.get("book")
+            try:
+                line = float(offer.get("spread"))
+                price = float(offer.get("spread_odds"))
+            except (TypeError, ValueError):
+                continue
+            if book and line in (-1.5, 1.5) and np.isfinite(price) and abs(price) >= 100:
+                result[(book, line)] = (offer, american_to_prob(price))
+        return result
+
+    own, other = quotes(odds), quotes(opponent_odds)
+    probs = []
+    now = pd.Timestamp.now(tz="UTC")
+    for (book, line), (offer, probability) in own.items():
+        counterpart = other.get((book, -line))
+        if line != spread or counterpart is None:
+            continue
+        opponent, opposite_probability = counterpart
+        ts, opposite_ts = offer.get("scraped_at"), opponent.get("scraped_at")
+        if pd.notna(ts) or pd.notna(opposite_ts):
+            try:
+                ts = pd.to_datetime(ts, utc=True)
+                opposite_ts = pd.to_datetime(opposite_ts, utc=True)
+            except (TypeError, ValueError):
+                continue
+            if (pd.isna(ts) or pd.isna(opposite_ts)
+                    or abs((ts - opposite_ts).total_seconds()) > 5
+                    or max(ts, opposite_ts) > now):
+                continue
+        probs.append(probability / (probability + opposite_probability))
+    return float(np.mean(probs)) if probs else None
+
+
 def anchor_home_prob(p_home_sim: float, p_market_home: float | None) -> float:
     """Published home win prob: HFA-shifted sim logit blended toward the market.
 
