@@ -3,7 +3,7 @@ pandas
 psycopg2-binary
 python-dateutil
 python-dotenv
-SQLAlchemy
+SQLAlchemy==2.0.54
 typing_extensions
 requests
 beautifulsoup4
