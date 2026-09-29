@@ -68,6 +68,19 @@ def _key_subtype(state: np.ndarray, outs: np.ndarray, b_q: np.ndarray, p_q: np.n
     return (((state * N_OUTS + outs) * N_BQ + b_q) * N_PQ + p_q)
 
 
+def _sample_indices(
+    cdf: np.ndarray, starts: np.ndarray, ends: np.ndarray, u: np.ndarray
+) -> np.ndarray:
+    """Batched left-side CDF search, clamped to each nonempty group's last entry."""
+    lo, hi = starts.copy(), ends - 1
+    while np.any(lo < hi):
+        mid = (lo + hi) // 2
+        right = cdf[mid] < u
+        lo = np.where((lo < hi) & right, mid + 1, lo)
+        hi = np.where(right, hi, mid)
+    return lo
+
+
 @dataclass
 class AdvancementTable:
     """Pre-baked flat lookup for advancement.
@@ -109,18 +122,9 @@ class AdvancementTable:
                 f"Advancement table missing {(lengths == 0).sum()} key(s); first: {missing.tolist()}"
             )
 
-        u = rng.random(size=len(keys))
-        results_ns = np.empty(len(keys), dtype=np.int64)
-        results_ru = np.empty(len(keys), dtype=np.int64)
-        results_oa = np.empty(len(keys), dtype=np.int64)
-        for i in range(len(keys)):
-            s, e = starts[i], ends[i]
-            j = s + np.searchsorted(self.cdf[s:e], u[i])
-            j = min(j, e - 1)
-            results_ns[i] = self.new_state[j]
-            results_ru[i] = self.runs[j]
-            results_oa[i] = self.outs_added[j]
-        return results_ns, results_ru, results_oa
+        indices = _sample_indices(self.cdf, starts, ends, rng.random(size=len(keys)))
+        return tuple(values[indices].astype(np.int64, copy=False) for values in
+                     (self.new_state, self.runs, self.outs_added))
 
 
 @dataclass
@@ -150,14 +154,8 @@ class OutSubtypeTable:
         if (ends - starts == 0).any():
             missing = keys[ends - starts == 0][:5]
             raise KeyError(f"Subtype table missing keys: {missing.tolist()}")
-        u = rng.random(size=len(keys))
-        out = np.empty(len(keys), dtype=np.int64)
-        for i in range(len(keys)):
-            s, e = starts[i], ends[i]
-            j = s + np.searchsorted(self.cdf[s:e], u[i])
-            j = min(j, e - 1)
-            out[i] = self.subtype[j]
-        return out
+        indices = _sample_indices(self.cdf, starts, ends, rng.random(size=len(keys)))
+        return self.subtype[indices].astype(np.int64, copy=False)
 
 
 def _build_flat_lookup(

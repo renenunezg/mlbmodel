@@ -72,7 +72,13 @@ def test_simulator_uses_the_pitcher_intercept(monkeypatch):
 
 def test_advancement_conserves_runners_and_uncertainty_separates_mc(tmp_path):
     from v2.data.pa_dataset import OUTCOMES
-    from v2.simulator.baserunner import legal_transitions, load_advancement_table
+    from v2.simulator.baserunner import (
+        N_OUTCOMES,
+        N_SUBTYPES,
+        OutSubtypeTable,
+        legal_transitions,
+        load_advancement_table,
+    )
     from v2.simulator.build_advancement_table import build_advancement
     from v2.simulator.uncertainty import win_probability_uncertainty
 
@@ -93,6 +99,45 @@ def test_advancement_conserves_runners_and_uncertainty_separates_mc(tmp_path):
     assert (new_state == 1).all() and (runs == 0).all() and (added == 0).all()
     # Exercise every stored transition, not just the most common game states.
     assert not ((table.state == 0) & (table.new_state.map(int.bit_count) + table.runs > 1)).any()
+
+    # Batched sampling must preserve the original draws, including exact CDF ties,
+    # duplicate probabilities, single-entry groups, and an empty batch.
+    lengths = np.tile([1, 4], 192)
+    sub = OutSubtypeTable(np.r_[0, lengths.cumsum()], np.tile([1., 0., .4, .4, 1.], 192),
+                          np.tile([1, 1, 2, 3, 4], 192))
+    for lookup, bases, values in (
+        (adv, (3, N_OUTCOMES, N_SUBTYPES), (adv.new_state, adv.runs, adv.outs_added)),
+        (sub, (3, 4, 4), (sub.subtype,)),
+    ):
+        keys = np.tile(np.flatnonzero(np.diff(lookup.starts)), 4)
+        args = np.unravel_index(keys, (8, *bases))
+        starts, ends = lookup.starts[keys], lookup.starts[keys + 1]
+        reference_rng, batch_rng = np.random.default_rng(7), np.random.default_rng(7)
+        draws = reference_rng.random(len(keys))
+
+        def check_sample(rng, draws):
+            indices = np.array([min(s + np.searchsorted(lookup.cdf[s:e], u), e - 1)
+                                for s, e, u in zip(starts, ends, draws)])
+            actual = lookup.sample(rng, *args)
+            actual = actual if isinstance(actual, tuple) else (actual,)
+            for observed, source in zip(actual, values):
+                np.testing.assert_array_equal(observed, source[indices])
+                assert observed.dtype == np.int64
+
+        check_sample(batch_rng, draws)
+        assert reference_rng.bit_generator.state == batch_rng.bit_generator.state
+
+        class FixedDraws:
+            def random(self, size):
+                assert size == len(draws)
+                return draws
+
+        boundary = lookup.cdf[starts]
+        for draws in (boundary, np.nextafter(boundary, 0), np.nextafter(boundary, 1),
+                      np.zeros(len(keys)), np.ones(len(keys))):
+            check_sample(FixedDraws(), draws)
+        empty = lookup.sample(batch_rng, *(np.array([], dtype=int) for _ in range(4)))
+        assert all(a.size == 0 for a in (empty if isinstance(empty, tuple) else (empty,)))
 
     rng = np.random.default_rng(10)
     unresolved = 0
