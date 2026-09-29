@@ -13,6 +13,8 @@ from backend.data.bullpen_daily import update_bullpen_daily
 from backend.data.fangraphs import fetch_bullpen_stats, fetch_pitcher_stats, fetch_team_batting
 from backend.data.mlb_api import fetch_probable_starters, fetch_schedule
 from backend.data.odds_api import (
+    DEFAULT_BOOKS,
+    ODDS_REFRESH_AGE,
     fetch_odds,
     latest_quota_state,
 )
@@ -241,6 +243,9 @@ def _has_recent_stored_odds(game_pks: list[int], cutoff: datetime) -> bool:
                     JOIN games g USING (game_pk)
                     WHERE o.game_pk = ANY(:game_pks)
                       AND o.scraped_at >= :cutoff
+                      AND o.scraped_at <= NOW()
+                      AND o.scraped_at < g.start_time
+                      AND o.book = ANY(:books)
                       AND o.team IN (g.home_team, g.away_team)
                     GROUP BY o.game_pk, o.book
                     HAVING COUNT(DISTINCT o.team) = 2
@@ -252,7 +257,7 @@ def _has_recent_stored_odds(game_pks: list[int], cutoff: datetime) -> bool:
                        AND BOOL_AND(o.total_under_odds IS NOT NULL)
                 ) complete
             """),
-            {"game_pks": game_pks, "cutoff": cutoff},
+            {"game_pks": game_pks, "cutoff": cutoff, "books": list(DEFAULT_BOOKS)},
         ).scalar()
         return int(recent_game_count or 0) == len(game_pks)
 
@@ -323,7 +328,7 @@ def fetch_and_load_odds(
     upcoming_game_pks = tuple(game_pks)
 
     if optional:
-        cutoff = now - timedelta(hours=3)
+        cutoff = now - ODDS_REFRESH_AGE
         if _has_recent_stored_odds(game_pks, cutoff):
             log.info("Skipping optional Odds API refresh: fresh odds already persisted for this window")
             return 0

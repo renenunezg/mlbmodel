@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import tempfile
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -23,6 +23,9 @@ SPORT = "baseball_mlb"
 DEFAULT_BOOKS = ("draftkings", "fanduel", "betmgm")
 DEFAULT_STATE_PATH = Path("cache/odds_api_state.json")
 MARKETS = ("h2h", "spreads", "totals")
+MAX_QUOTE_AGE = timedelta(hours=1)
+# Leave one refresh cycle for scoring before quotes expire.
+ODDS_REFRESH_AGE = MAX_QUOTE_AGE - timedelta(minutes=20)
 
 # Map The Odds API team names to our abbreviations
 ODDS_TEAM_MAP = {

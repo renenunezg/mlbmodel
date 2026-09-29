@@ -35,7 +35,7 @@ from v2.markets.ev import (
     rl_confidence,
 )
 from v2.markets.joint import VERSION as JOINT_VERSION
-from v2.markets.joint import adjust_joint, fresh_odds
+from v2.markets.joint import adjust_joint, fresh_odds, market_snapshot
 from v2.markets.probs import (
     anchor_home_prob,
     consensus_cover_prob,
@@ -261,6 +261,7 @@ def build_game_rows(
         "pitching_usage_known": pitching_usage_known,
         "joint_adjustment": joint,
         "market_pairs": paired_market_quotes(home_odds, away_odds),
+        "market_offers": market_snapshot(home_odds, away_odds),
         "win_band_method": "anchored-raw-simulator-parameter-band",
     }
     margins, counts = np.unique(h - a, return_counts=True)

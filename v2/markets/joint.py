@@ -14,6 +14,7 @@ import pandas as pd
 from scipy.optimize import minimize
 from scipy.special import expit, logit, logsumexp
 
+from backend.data.odds_api import MAX_QUOTE_AGE
 from backend.simulation import american_to_prob
 from backend.strategy import MARKET_ANCHOR_W_MODEL
 from v2.markets.probs import anchor_home_prob, consensus_cover_prob, consensus_home_prob
@@ -22,7 +23,6 @@ VERSION = "joint-entropy-v1"
 TOTALS_MODEL_WEIGHT = 0.5
 # Operational guards, not accuracy claims. A missed refresh must not turn an
 # old quote into a new model opinion or concentrate forecasts on rare samples.
-MAX_QUOTE_AGE = pd.Timedelta(hours=1)
 MIN_EFFECTIVE_SAMPLE_FRACTION = 0.5
 MAX_SAMPLE_WEIGHT_RATIO = 5.0
 TARGET_TOLERANCE = 1e-6
@@ -57,6 +57,17 @@ def fresh_odds(odds: dict | None, *, as_of: datetime, start_time) -> dict | None
         offers.append(offer)
     offers = [o for o in offers if o["book"] not in duplicates]
     return {**offers[0], "offers": offers} if offers else None
+
+
+def market_snapshot(home_odds: dict | None, away_odds: dict | None) -> dict:
+    """Stable record of the fresh offers used by a forecast, including totals."""
+    fields = ("book", "scraped_at", "moneyline", "spread", "spread_odds",
+              "total", "total_over_odds", "total_under_odds")
+    return {
+        side: [{key: offer.get(key) for key in fields}
+               for offer in sorted((package or {}).get("offers", []), key=lambda o: o["book"])]
+        for side, package in (("home", home_odds), ("away", away_odds))
+    }
 
 
 def _number(value) -> float | None:
