@@ -30,10 +30,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        # Keep live scoring and training on the same release until the
-        # prediction_context migration and sim-v3 artifacts are ready.
+        # Scoring and training use the same validated simulator release.
         with:
-          ref: 3301cffd9b720b5c6d588488b0227fcc61ad1475
+          ref: 8fe67f4da9ddd2e79cae1d5e6b1714fec9ff7607
 
       - name: Restore Statcast cache
         uses: actions/cache@v4
@@ -51,13 +50,16 @@ jobs:
           restore-keys: |
             odds-api-state-${{ runner.os }}-
 
-      - name: Restore posteriors
-        uses: actions/cache@v4
+      - name: Restore validated simulator bundle
+        uses: actions/cache/restore@v4
         with:
-          path: v2/bayesian/posteriors
-          key: posteriors-${{ runner.os }}-${{ github.run_id }}
-          restore-keys: |
-            posteriors-${{ runner.os }}-
+          path: |
+            v2/bayesian/posteriors/*.nc
+            v2/bayesian/posteriors/diagnostics.json
+            v2/simulator/tables/*.parquet
+          key: sim-v3-bundle-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: sim-v3-bundle-${{ runner.os }}-
+          fail-on-cache-miss: true
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -66,8 +68,10 @@ jobs:
           cache: "pip"
 
       - name: Install dependencies
-        # The pinned release has unbounded SQLAlchemy and only installs psycopg2.
-        run: pip install -r requirements.txt -r v2/requirements.txt 'SQLAlchemy==2.0.54' && pip install -e .
+        run: pip install -r requirements.txt -r v2/requirements.txt && pip install -e .
+
+      - name: Verify production artifacts
+        run: python -m v2.pipeline.verify_artifacts
 
       - name: Check whether the scheduled fallback is needed
         id: fallback
