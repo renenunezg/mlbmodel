@@ -1,0 +1,57 @@
+name: Playoff Forecast
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the forecast to Supabase (requires the playoff_forecasts migration)
+        type: boolean
+        default: false
+
+concurrency:
+  group: playoff-forecast
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  forecast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Restore validated simulator bundle
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            v2/bayesian/posteriors/*.nc
+            v2/bayesian/posteriors/diagnostics.json
+            v2/simulator/tables/*.parquet
+          key: sim-v3-bundle-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: sim-v3-bundle-${{ runner.os }}-
+          fail-on-cache-miss: true
+      - name: Install model dependencies
+        run: pip install -r requirements.txt -r v2/requirements.txt && pip install -e .
+      - name: Verify production artifacts
+        run: python -m v2.pipeline.verify_artifacts
+      - name: Compute postseason forecast
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PUBLISH_FORECAST: ${{ inputs.publish }}
+        run: |
+          args=(--output /tmp/playoff-forecast.json)
+          if [[ "$PUBLISH_FORECAST" == "true" ]]; then
+            args+=(--publish)
+          fi
+          python -m v2.postseason.publish "${args[@]}"
+      - name: Save inspectable forecast
+        uses: actions/upload-artifact@v4
+        with:
+          name: playoff-forecast
+          path: /tmp/playoff-forecast.json
+          retention-days: 7

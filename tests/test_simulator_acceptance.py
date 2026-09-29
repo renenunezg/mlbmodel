@@ -154,3 +154,37 @@ def test_chronological_acceptance_rejects_hindsight_forecasts():
     extreme.at[0, "prediction_context"] = context
     extreme.at[0, "away_prediction_context"] = context
     assert len(validated_forecasts(extreme)) == 1  # Do not hide overconfident errors.
+
+
+def test_postseason_probability_mass_and_completed_series():
+    """Protect bracket topology, exact series math, and absorbing completed results."""
+    from v2.postseason.bracket import forecast, series_outcomes
+
+    teams = [dict(code=f'{league}{seed}', league=league, seed=seed,
+                  ws_rank=(seed - 1) * 2 + (1 if league == 'AL' else 2))
+             for league in ('AL', 'NL') for seed in range(1, 7)]
+    result = forecast(teams, lambda a, b, home, n: [.5] * n)
+    by_team = {o['team']: o for o in result['odds']}
+    assert len(result['nodes']) == 11
+    assert sum(o['champion'] for o in result['odds']) == pytest.approx(1)
+    assert by_team['AL1']['champion'] == pytest.approx(.125)
+    assert by_team['AL4']['champion'] == pytest.approx(.0625)
+    for length in (3, 5, 7):
+        outcomes = series_outcomes([.5] * length)
+        assert sum(o['probability'] for o in outcomes) == pytest.approx(1)
+        assert sum(o['probability'] for o in outcomes if o['wins'][0] > o['wins'][1]) == pytest.approx(.5)
+        assert all(max(o['wins']) == length // 2 + 1 for o in outcomes)
+    # Two remaining games: 0.8 * 0.7 to come back from 0-1; the played p is ignored.
+    outcomes = series_outcomes([.01, .8, .7], (0, 1))
+    assert sum(o['probability'] for o in outcomes if o['wins'][0] == 2) == pytest.approx(.56)
+    assert series_outcomes([.1] * 3, (2, 1)) == [{'wins': [2, 1], 'probability': 1.}]
+    locked = forecast(teams, lambda a, b, home, n: [.5] * n,
+                      {'AL-WC45': {'AL4': 0, 'AL5': 2}, 'AL-DS1': {'AL1': 0, 'AL5': 3}})
+    odds = {o['team']: o for o in locked['odds']}
+    assert odds['AL4']['champion'] == odds['AL1']['champion'] == 0
+    assert odds['AL5']['CS'] == 1
+    assert odds['AL5']['champion'] == pytest.approx(.25)
+    with pytest.raises(ValueError):
+        series_outcomes([float('nan')] * 3)
+    with pytest.raises(ValueError):
+        forecast(teams, lambda a, b, home, n: [.5] * n, {'AL-WC45': {'NL4': 2, 'NL5': 1}})
