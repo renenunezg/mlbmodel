@@ -3,7 +3,7 @@ from unittest.mock import Mock
 
 import pandas as pd
 
-from backend.data.mlb_api import fetch_schedule
+from backend.data.mlb_api import fetch_probable_starters, fetch_schedule, fetch_schedule_range
 from backend.evaluate_model import (
     _evaluation_update_values,
     _merge_predictions_with_results,
@@ -24,6 +24,7 @@ def test_schedule_upsert_moves_rescheduled_game():
     schedule = pd.DataFrame([{
         "game_pk": 123456,
         "game_date": date(2026, 6, 3),
+        "game_type": "D",
         "start_time": "2026-06-03T17:35:00Z",
         "home_team": "BOS",
         "away_team": "NYY",
@@ -37,6 +38,8 @@ def test_schedule_upsert_moves_rescheduled_game():
 
     sql, params = conn.statements[0]
     assert "game_date = EXCLUDED.game_date" in sql
+    assert "game_type = EXCLUDED.game_type" in sql
+    assert params["game_type"] == "D"
     assert "start_time = EXCLUDED.start_time" in sql
     assert params["game_date"] == "2026-06-03"
     assert params["start_time"] == "2026-06-03T17:35:00Z"
@@ -50,11 +53,13 @@ def test_schedule_uses_rescheduled_date_and_start(monkeypatch):
             "date": "2026-06-01",
             "games": [{
                 "gamePk": 123456,
+                "gameType": "F",
                 "officialDate": "2026-06-03",
                 "gameDate": "2026-06-01T20:10:00Z",
                 "rescheduleDate": "2026-06-03T17:35:00Z",
                 "teams": {
-                    "home": {"team": {"abbreviation": "BOS"}},
+                    "home": {"team": {"abbreviation": "BOS"},
+                             "probablePitcher": {"id": 1, "fullName": "Fixture Starter"}},
                     "away": {"team": {"abbreviation": "NYY"}},
                 },
                 "status": {"abstractGameState": "Scheduled"},
@@ -63,12 +68,18 @@ def test_schedule_uses_rescheduled_date_and_start(monkeypatch):
         }],
     }
     monkeypatch.setattr("backend.data.mlb_api.requests.get", Mock(return_value=response))
+    monkeypatch.setattr("backend.data.mlb_api._batch_fetch_handedness", lambda *_: {})
 
     schedule = fetch_schedule(date(2026, 6, 1))
 
     assert schedule.loc[0, "game_date"] == "2026-06-03"
     assert schedule.loc[0, "start_time"] == "2026-06-03T17:35:00Z"
     assert schedule.loc[0, "away_team"] == "NYY"
+    assert schedule.loc[0, "game_type"] == "F"
+    ranged = fetch_schedule_range(date(2026, 6, 1), date(2026, 6, 3))
+    pd.testing.assert_frame_equal(schedule, ranged)
+    starters = fetch_probable_starters(date(2026, 6, 1))
+    assert starters.loc[0, "game_date"] == "2026-06-03"
 
 
 def test_evaluation_rejects_prediction_from_original_date():

@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from backend.data.game_types import regular_season_pitches
 from backend.log import setup_logging
 from backend.team_mappings import normalize_team
 
@@ -46,7 +47,7 @@ def _get_statcast_range(start_date: date = None) -> pd.DataFrame:
 
     if use_disk_cache and cache_path.exists():
         try:
-            cached_df = pd.read_parquet(cache_path)
+            cached_df = regular_season_pitches(pd.read_parquet(cache_path), end_dt.year)
             if "game_date" in cached_df.columns and not cached_df.empty:
                 max_cached = pd.to_datetime(cached_df["game_date"]).max().date()
                 # Overlap by one day in case the most recent day was partial
@@ -65,11 +66,7 @@ def _get_statcast_range(start_date: date = None) -> pd.DataFrame:
         log.info(f"Fetching Statcast data: {fetch_from} to {end_dt}...")
         new_df = statcast(start_dt=str(fetch_from), end_dt=str(end_dt))
 
-        if not new_df.empty and "game_type" in new_df.columns:
-            pre_filter = len(new_df)
-            new_df = new_df[new_df["game_type"] == "R"]
-            if len(new_df) < pre_filter:
-                log.info(f"Filtered to regular season: dropped {pre_filter - len(new_df)} non-R pitches")
+        new_df = regular_season_pitches(new_df, end_dt.year if use_disk_cache else None)
 
         if not cached_df.empty and not new_df.empty:
             df = pd.concat([cached_df, new_df], ignore_index=True)
@@ -224,8 +221,9 @@ def _get_prior_season_pitcher_stats() -> pd.DataFrame:
 
     if cache_path.exists():
         df = pd.read_parquet(cache_path)
-        log.info(f"Using cached {prior_year} pitcher stats: {len(df)} pitchers")
-        return df
+        if "game_type" in df and df.game_type.eq("R").all() and df.season.eq(prior_year).all():
+            log.info(f"Using cached {prior_year} pitcher stats: {len(df)} pitchers")
+            return df
 
     log.info(f"Fetching {prior_year} Statcast data for pitcher fallback (one-time)...")
     from pybaseball import statcast
@@ -250,9 +248,7 @@ def _get_prior_season_pitcher_stats() -> pd.DataFrame:
         log.info(f"No {prior_year} Statcast data available")
         return pd.DataFrame()
 
-    pitch_df = pd.concat(all_chunks, ignore_index=True)
-    if "game_type" in pitch_df.columns:
-        pitch_df = pitch_df[pitch_df["game_type"] == "R"]
+    pitch_df = regular_season_pitches(pd.concat(all_chunks, ignore_index=True), prior_year)
 
     # Compute stats for all pitchers (not just starters - they might start next year)
     df = _compute_pitcher_stats(pitch_df)
@@ -260,6 +256,7 @@ def _get_prior_season_pitcher_stats() -> pd.DataFrame:
         return pd.DataFrame()
 
     df["season"] = prior_year
+    df["game_type"] = "R"
     df.to_parquet(cache_path, index=False)
     log.info(f"Cached {len(df)} pitcher stats to {cache_path}")
     return df
@@ -292,7 +289,7 @@ def fetch_pitcher_stats(season: int = None) -> pd.DataFrame:
         log.info(f"Using {len(prior_stats)} prior-season pitcher stats as fallback")
         prior_stats["season"] = season
         prior_stats["role"] = "starter"
-        prior_stats = prior_stats.drop(columns=["p_throws"], errors="ignore")
+        prior_stats = prior_stats.drop(columns=["p_throws", "game_type"], errors="ignore")
         return prior_stats
 
     current_stats["season"] = season
@@ -312,7 +309,7 @@ def fetch_pitcher_stats(season: int = None) -> pd.DataFrame:
     if not prior_fallback.empty:
         prior_fallback["season"] = season
         prior_fallback["role"] = "starter"
-        prior_fallback = prior_fallback.drop(columns=["p_throws"], errors="ignore")
+        prior_fallback = prior_fallback.drop(columns=["p_throws", "game_type"], errors="ignore")
         log.info(f"Added {len(prior_fallback)} prior-season pitcher stats as fallback")
         return pd.concat([current_stats, prior_fallback], ignore_index=True)
 

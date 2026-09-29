@@ -190,6 +190,7 @@ def test_market_anchor_stops_flagging_big_dogs(monkeypatch):
 def test_market_research_refuses_independently_shopped_baseline():
     games = pd.DataFrame([{
         "game_pk": 1,
+        "game_type": "R",
         "game_date": pd.Timestamp("2026-08-01"),
         "start_time": pd.Timestamp("2026-08-01T19:10:00Z"),
         "home_model_prob": 0.55,
@@ -207,3 +208,21 @@ def test_market_research_refuses_independently_shopped_baseline():
     assert paired.loc[0, "home_market_prob"] == 0.61
     with pytest.raises(ValueError, match="raw simulator"):
         prepare_games(games.assign(home_market_prob=.61))
+    for game_type in ("F", "D", "L", "W", None):
+        with pytest.raises(ValueError, match="regular-season"):
+            prepare_games(paired.assign(game_type=game_type))
+
+    # The last regular-season result must not seed next year's team-form prior.
+    seasons = pd.concat([paired.assign(
+        home_team="BOS", away_team="NYY", home_score=8, away_score=1,
+        home_expected_runs=4., away_expected_runs=4.,
+        home_bp_outs_2d=3, away_bp_outs_2d=3,
+        home_win_prob_p10=.4, home_win_prob_p90=.6,
+        lineup_source="lineup_live+queue_live", posterior_age_days=1,
+    )] * 3, ignore_index=True)
+    seasons["game_pk"] = [1, 2, 3]
+    seasons["game_date"] = pd.to_datetime(["2026-09-26", "2026-09-27", "2027-04-01"])
+    seasons["start_time"] = seasons.game_date + pd.Timedelta(hours=19)
+    features = build_feature_frame(seasons)
+    assert features.loc[1, "win_form_diff"] > 0
+    assert features.loc[2, ["win_form_diff", "run_margin_form_diff", "offense_residual_diff", "defense_residual_diff"]].eq(0).all()

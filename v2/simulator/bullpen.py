@@ -1,6 +1,7 @@
 """Pregame pitching roles, workload distributions, and explicit opener/bulk plans."""
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
@@ -8,6 +9,9 @@ import numpy as np
 import pandas as pd
 from sqlalchemy import text
 
+from backend.data.game_types import POSTSEASON_GAME_TYPES
+
+log = logging.getLogger(__name__)
 # Rest eligibility: outs thrown over the last one and two days.
 ELIG_OUTS_1D = 6
 ELIG_OUTS_2D = 9
@@ -42,6 +46,9 @@ class BullpenQueue:
     roles: dict[int, int] = field(default_factory=dict)
     usage_known: bool = False
     team_outs_2d: int | None = None
+    roster_source: str = "unknown"
+    availability: dict[int, str] = field(default_factory=dict)
+    availability_assumption: str = "recent_workload"
 
     def outs_samples(self, pitcher_id: int, slot: int) -> tuple[int, ...]:
         # An unspecified plan must never give an opener six innings.
@@ -69,6 +76,7 @@ class LiveQueueContext:
     side: str            # "home" | "away"
     team: str            # canonical 3-letter team code
     starter_id: int
+    game_type: str = "R"
 
 
 def _load_workload(game_date: date, teams: list[str], engine) -> pd.DataFrame:
@@ -78,7 +86,7 @@ def _load_workload(game_date: date, teams: list[str], engine) -> pd.DataFrame:
         WHERE team = ANY(:teams)
           AND game_date >= :lo AND game_date < :hi
     """)
-    lo = game_date - timedelta(days=60)
+    lo = max(date(game_date.year, 1, 1), game_date - timedelta(days=60))
     hi = game_date
     with engine.begin() as conn:
         return pd.read_sql(sql, conn, params={"teams": teams, "lo": lo, "hi": hi})
@@ -94,15 +102,32 @@ def build_queues_live(
         from backend.db import engine as default_engine
         engine = default_engine
 
-    from backend.data.mlb_api import fetch_active_pitchers
+    from backend.data.mlb_api import fetch_active_pitchers, fetch_game_pitchers, fetch_probable_starters
     from backend.team_mappings import TEAM_ID_BY_CODE
 
     teams = list({c.team for c in contexts})
     wl = _load_workload(game_date, teams, engine)
-    return queues_from_workload(game_date, contexts, wl, {
-        team: fetch_active_pitchers(TEAM_ID_BY_CODE[team])
-        for team in teams if team in TEAM_ID_BY_CODE
-    })
+    regular_teams = {c.team for c in contexts if c.game_type not in POSTSEASON_GAME_TYPES}
+    rosters = {team: fetch_active_pitchers(TEAM_ID_BY_CODE[team], game_date)
+               for team in regular_teams if team in TEAM_ID_BY_CODE}
+    playoff_games = {c.game_pk for c in contexts if c.game_type in POSTSEASON_GAME_TYPES}
+    game_rosters = {}
+    reserved = None
+    if playoff_games:
+        # Probable future starters remain rotation commitments, not assumed
+        # relief plans. Failure leaves their availability unconfirmed.
+        try:
+            upcoming = fetch_probable_starters(game_date + timedelta(days=1), days_ahead=1)
+            reserved = set(upcoming.pitcher_id.dropna().astype(int)) if not upcoming.empty else set()
+        except Exception as exc:
+            log.warning(f"Could not verify future rotation commitments: {exc}")
+        for gp in playoff_games:
+            try:
+                for side, ids in fetch_game_pitchers(gp).items():
+                    game_rosters[(gp, side)] = ids
+            except Exception as exc:
+                log.warning(f"Could not verify game {gp} pitching roster: {exc}")
+    return queues_from_workload(game_date, contexts, wl, rosters, game_rosters, reserved)
 
 
 @dataclass(frozen=True)
@@ -135,17 +160,25 @@ class PitchingPlan:
 def queues_from_workload(
     game_date: date, contexts: list[LiveQueueContext], workload: pd.DataFrame,
     rosters: dict[str, list[int]],
+    game_rosters: dict[tuple[int, str], list[int]] | None = None,
+    reserved_starters: set[int] | None = None,
 ) -> dict[tuple[int, str], BullpenQueue]:
     """Use prior appearances to identify regular roles, not today's bulk pitcher.
 
-    Rotation arms and players with insufficient role history cannot enter the
-    relief queue. Missing bullpen coverage ends in a neutral replacement arm.
+    Regular-season queues require proven relief roles and apply fatigue gates.
+    Playoff bullpen arms are explicitly assumed fully rested. Relief arms come
+    first; other eligible pitchers get short emergency relief, never a guessed
+    bulk assignment. Announced future starters remain rotation commitments.
     """
     wl = workload.copy()
     wl["game_date"] = pd.to_datetime(wl["game_date"]).dt.date
-    wl = wl[(wl.game_date < game_date) & (wl.game_date >= game_date - timedelta(days=60))]
+    lo = max(date(game_date.year, 1, 1), game_date - timedelta(days=60))
+    wl = wl[(wl.game_date < game_date) & (wl.game_date >= lo)]
     out = {}
     for ctx in contexts:
+        postseason = ctx.game_type in POSTSEASON_GAME_TYPES
+        roster = ((game_rosters or {}).get((ctx.game_pk, ctx.side), []) if postseason
+                  else rosters.get(ctx.team, []))
         team = wl[wl.team == ctx.team].sort_values("game_date")
         # Sum doubleheader workload, rather than losing one appearance in a dict.
         recent = team[team.game_date >= game_date - timedelta(days=2)]
@@ -160,23 +193,43 @@ def queues_from_workload(
         workloads = {ctx.starter_id: tuple(int(np.clip(x, 3, 21)) for x in starts.outs)
                      if regular_starter else (3,)}
         candidates = []
-        for pid in rosters.get(ctx.team, []):
+        availability = {ctx.starter_id: "starting"}
+        proven_relief = 0
+        for pid in dict.fromkeys(roster):
             if pid == ctx.starter_id:
                 continue
             hist = histories.get(pid, team.iloc[:0])
-            if len(hist) < 2 or (hist.tail(5).role != "RP").any():
+            relief = hist[hist.role == "RP"]
+            regular_reliever = len(hist) >= 2 and (hist.tail(5).role == "RP").all()
+            if not postseason and not regular_reliever:
+                availability[pid] = "unconfirmed_relief_role"
                 continue
-            if yesterday.get(pid, 0) >= ELIG_OUTS_1D or two_days.get(pid, 0) >= ELIG_OUTS_2D:
+            if postseason and pid in (reserved_starters or set()):
+                availability[pid] = "scheduled_starter"
                 continue
-            candidates.append((pid, len(hist), int(two_days.get(pid, 0))))
-            workloads[pid] = tuple(int(np.clip(x, 1, 6)) for x in hist.outs) + (3, 3, 3)
-        candidates.sort(key=lambda x: (-x[1], x[2], x[0]))
-        ids = [p for p, _, _ in candidates]
+            if postseason and not regular_reliever and reserved_starters is None:
+                availability[pid] = "unconfirmed_rotation_availability"
+                continue
+            if not postseason and (yesterday.get(pid, 0) >= ELIG_OUTS_1D or two_days.get(pid, 0) >= ELIG_OUTS_2D):
+                availability[pid] = "recent_workload"
+                continue
+            priority = 0 if regular_reliever else 1
+            availability[pid] = "relief" if regular_reliever else "emergency_relief"
+            proven_relief += int(regular_reliever)
+            appearances = relief if postseason else hist
+            candidates.append((pid, priority, len(appearances), 0 if postseason else int(two_days.get(pid, 0))))
+            workloads[pid] = (tuple(int(np.clip(x, 1, 6)) for x in appearances.outs) + (3, 3, 3)
+                              if regular_reliever else (3,))
+        candidates.sort(key=lambda x: (x[1], -x[2], x[3], x[0]))
+        ids = [p for p, _, _, _ in candidates]
         out[(ctx.game_pk, ctx.side)] = BullpenQueue(
             starter=ctx.starter_id, relievers=ids + [0],
             starter_role=0 if regular_starter else 1, workloads=workloads,
-            usage_known=regular_starter and len(ids) >= 3,
+            usage_known=regular_starter and proven_relief >= 3 and (not postseason or ctx.starter_id in roster),
             team_outs_2d=int(recent[recent.role == "RP"].outs.sum()) if len(team) else None,
+            roster_source="game_boxscore" if postseason and roster else "active_roster" if not postseason and roster else "unknown",
+            availability=availability,
+            availability_assumption="full_rest" if postseason else "recent_workload",
         )
     return out
 
@@ -189,4 +242,7 @@ def apply_pitching_plan(queue: BullpenQueue, plan: PitchingPlan) -> BullpenQueue
         workloads={**queue.workloads, plan.opener_id: (plan.opener_outs,), plan.bulk_id: (plan.bulk_outs,)},
         roles={plan.bulk_id: 0}, usage_known=True,
         team_outs_2d=queue.team_outs_2d,
+        roster_source=queue.roster_source,
+        availability={**queue.availability, plan.opener_id: "confirmed_opener", plan.bulk_id: "confirmed_bulk"},
+        availability_assumption=queue.availability_assumption,
     )

@@ -42,7 +42,12 @@ def test_simulator_uses_the_pitcher_intercept(monkeypatch):
         return logits
 
     class OutsOnly:
+        calls = 0
+
         def sample(self, rng, state, outs, outcomes, subtype):
+            self.calls += 1
+            if self.calls == 58:  # Bottom 10th: walkoff HR after nine scoreless innings.
+                return np.zeros(len(state), int), 1 + (state == 2).astype(int), np.zeros(len(state), int)
             return np.zeros(len(state), int), np.zeros(len(state), int), np.ones(len(state), int)
 
     monkeypatch.setattr("v2.simulator.game_sim.pa_logits_batch", record_pa)
@@ -50,9 +55,19 @@ def test_simulator_uses_the_pitcher_intercept(monkeypatch):
                         BullpenQueue(593974, [656288, 0], starter_role=1,
                                      workloads={593974: (3,), 656288: (12,)}, roles={656288: 0}),
                         BullpenQueue(200, [0]), "AAA", {}, {})
-    simulate_game(np.random.default_rng(0), pm, OutsOnly(), None, inputs,
-                  n_sims=1, form_sigma=0, gbq=GBQuartiles({}, {}))
-    assert seen[593974] == 3 and seen[656288] == 12
+    for automatic_runner in (True, False):
+        seen.clear()
+        inputs.automatic_runner = automatic_runner
+        h, a = simulate_game(np.random.default_rng(0), pm, OutsOnly(), None, inputs,
+                             n_sims=1, form_sigma=0, gbq=GBQuartiles({}, {}))
+        assert seen[593974] == 3 and seen[656288] == 12
+        assert h.tolist() == [2 if automatic_runner else 1] and a.tolist() == [0]
+
+    unfinished = OutsOnly()
+    unfinished.calls = 100  # Never reaches the scripted walkoff.
+    with pytest.raises(RuntimeError, match="simulations unfinished"):
+        simulate_game(np.random.default_rng(0), pm, unfinished, None, inputs,
+                      n_sims=1, form_sigma=0, gbq=GBQuartiles({}, {}))
 
 
 def test_advancement_conserves_runners_and_uncertainty_separates_mc(tmp_path):

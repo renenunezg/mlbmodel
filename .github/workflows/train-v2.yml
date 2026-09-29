@@ -43,11 +43,11 @@ jobs:
         # The pinned release has unbounded SQLAlchemy and only installs psycopg2.
         run: pip install -r requirements.txt -r v2/requirements.txt 'SQLAlchemy==2.0.54' && pip install -e .
 
-      - name: Refresh 2026 Statcast cache
+      - name: Refresh Statcast caches through the current season
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           PYTHONPATH: "."
-        run: python -m v2.data.build_cache --years 2024 2025 2026
+        run: python -m v2.data.build_cache --years $(seq 2024 "$(date -u +%Y)")
 
       - name: Train v2 models
         env:

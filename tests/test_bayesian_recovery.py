@@ -3,9 +3,81 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from tests._synthetic_pa import synth_batter_pa, synth_pitcher_pa
 from v2.bayesian import batter_skill, park_effects, pitcher_skill
+
+
+def test_training_readers_exclude_postseason_and_wrong_year_cache_rows(monkeypatch, tmp_path):
+    from datetime import date
+
+    from backend.data import fangraphs
+    from v2.data import build_cache, pa_dataset
+    from v2.pipeline import score_games, write_posterior_summaries
+    from v2.simulator import build_advancement_table, gb_quartiles
+
+    rows = []
+    for player in range(4):
+        for pa in range(4):
+            rows.append({
+                "game_pk": 1, "game_date": "2026-09-27", "game_type": "R",
+                "batter": 101 + player, "pitcher": 201 + player,
+                "stand": "R", "p_throws": "R", "home_team": "LAD", "away_team": "SD",
+                "balls": 0, "strikes": 2, "events": "field_out", "inning": 1,
+                "inning_topbot": "Top", "launch_speed": 80., "launch_angle": 10.,
+                "at_bat_number": 4 * player + pa + 1, "pitch_number": 1, "outs_when_up": 2,
+                "on_1b": None, "on_2b": None, "on_3b": None, "bat_score": 0, "post_bat_score": 0,
+                "bb_type": "ground_ball" if pa < player else "fly_ball",
+            })
+    regular = pd.DataFrame(rows)
+    playoff = pd.concat([regular.assign(game_type=kind, game_pk=i + 10, batter=999, pitcher=998)
+                         for i, kind in enumerate(("F", "D", "L", "W", "S"))], ignore_index=True)
+    following_year = regular.assign(game_pk=2, game_date="2027-04-01", batter=301, pitcher=401)
+    mixed = pd.concat([regular, playoff, following_year], ignore_index=True)
+    for year in (2026, 2027):
+        mixed.to_parquet(tmp_path / f"statcast_{year}.parquet", index=False)
+    for module in (pa_dataset, build_cache, score_games, write_posterior_summaries,
+                   build_advancement_table, gb_quartiles, fangraphs):
+        monkeypatch.setattr(module, "CACHE_DIR", tmp_path)
+
+    trained = pa_dataset.load_pa_dataset(2026, 2027)
+    assert len(trained) == len(regular) + len(following_year)
+    assert set(trained.batter) == {101, 102, 103, 104, 301}
+    assert set(build_advancement_table._load_pa_rows([2026]).batter) == {101, 102, 103, 104}
+    monkeypatch.setattr(gb_quartiles, "MIN_BIP", 1)
+    assert set(gb_quartiles.build_gb_quartiles([2026]).player_id) == {101, 102, 103, 104, 201, 202, 203, 204}
+    assert set(score_games.load_cache_for_year(2027).batter) == {301}
+    assert set(write_posterior_summaries._load_window_pa(date(2026, 9, 1), date(2026, 10, 1)).batter) == {101, 102, 103, 104}
+
+    fetched = []
+
+    def fetch(_fetcher, start, end):
+        fetched.append((start, end))
+        return mixed
+
+    monkeypatch.setattr(build_cache, "_fetch_statcast", fetch)
+    cached = build_cache.fetch_year(2026)
+    assert fetched[0][0] == "2026-09-27"  # A 2027 contaminant cannot advance this cursor.
+    pd.testing.assert_frame_equal(cached.reset_index(drop=True), regular.reset_index(drop=True))
+    assert pd.read_parquet(tmp_path / "statcast_2026.parquet").game_type.eq("R").all()
+    with pytest.raises(ValueError, match="lacks game_type"):
+        pa_dataset.transform_pitch_frame(mixed.drop(columns="game_type"))
+
+    class WinterDate(date):
+        @classmethod
+        def today(cls):
+            return cls(2027, 1, 15)
+
+    # The year-round workflow includes 2027 in January, before pitches exist.
+    # It must create a typed empty file, not request an inverted date range or
+    # copy 2026's observations into the 2027 training input.
+    (tmp_path / "statcast_2027.parquet").unlink()
+    monkeypatch.setattr(build_cache, "date", WinterDate)
+    assert build_cache.fetch_year(2027).empty
+    assert len(fetched) == 1
+    assert len(pa_dataset.load_pa_dataset(2026, 2027)) == len(regular)
+    assert write_posterior_summaries._load_window_pa(date(2027, 1, 1), date(2027, 1, 15)).empty
 
 
 def test_batter_model_recovers_platoon_direction():

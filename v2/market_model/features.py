@@ -96,7 +96,12 @@ def build_feature_frame(games: pd.DataFrame) -> pd.DataFrame:
     margin_diffs = np.zeros(len(frame), dtype=float)
     win_diffs = np.zeros(len(frame), dtype=float)
 
-    for _, day in frame.groupby("game_date", sort=True):
+    season = None
+    for game_date, day in frame.groupby("game_date", sort=True):
+        year = pd.Timestamp(game_date).year
+        if year != season:
+            histories.clear()
+            season = year
         for index, row in day.iterrows():
             home = histories[row.home_team]
             away = histories[row.away_team]

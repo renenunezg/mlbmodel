@@ -7,9 +7,11 @@ write=False so it doesn't touch model_outputs.
 from __future__ import annotations
 
 import os
+from datetime import date
 from pathlib import Path
 from unittest.mock import Mock
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -43,7 +45,7 @@ def test_score_games_end_to_end(monkeypatch):
 
     # SMOKE_DATE is in the past, so freeze_started would drop every game; opt
     # out to exercise the full scoring path (this is the backtest-replay case).
-    df = score_games.score(SMOKE_DATE, n_sims=N_SIMS, write=False, seed=0,
+    df = score_games.score(SMOKE_DATE, n_sims=N_SIMS, write=False, seed=0, freeze_started=False,
                            posteriors_dir=Path(os.getenv("MLBMODEL_TEST_POSTERIORS", str(POSTERIORS_DIR))))
     if df.empty:
         pytest.skip("no games for SMOKE_DATE; pick a different date")
@@ -104,6 +106,194 @@ def test_score_games_end_to_end(monkeypatch):
     assert set(df["ev_flag"]) <= valid_flags
     assert set(df["run_line_ev_flag"]) <= valid_flags
     assert (df["total_play"] == "No Play").all(), "totals bypassed its market kill switch"
+
+
+def test_postseason_schedule_to_scoring(monkeypatch):
+    """Official game types survive ingestion, scoring, and frozen forecast context."""
+    from sqlalchemy import create_engine, text
+
+    from backend.data import mlb_api
+    from pipeline import _batch_upsert_games
+    from v2.data.pa_dataset import OUTCOMES
+    from v2.pipeline import score_games
+    from v2.simulator import bullpen
+    from v2.simulator.posteriors import K_FREE, PosteriorMeans
+
+    games = []
+    for gp, game_type in enumerate(("R", "F", "D", "L", "W", "S", "A"), 1):
+        games.append({
+            "gamePk": gp, "gameType": game_type, "officialDate": "2030-10-01",
+            "gameDate": "2030-10-01T23:00:00Z",
+            "status": {"abstractGameState": "Preview", "detailedState": "Scheduled"},
+            "teams": {
+                "home": {"team": {"abbreviation": "BOS"},
+                         "probablePitcher": {"id": 10, "fullName": "Home Starter"}},
+                "away": {"team": {"abbreviation": "NYY"},
+                         "probablePitcher": {"id": 20, "fullName": "Away Starter"}},
+            },
+        })
+    games.extend([
+        {**games[1], "gamePk": 8, "status": {"abstractGameState": "Preview", "detailedState": "Cancelled"}},
+        {**games[1], "gamePk": 9, "ifNecessary": "Y"},
+        {**games[1], "gamePk": 10, "teams": {
+            "home": {"team": {"abbreviation": "AL Higher Seed"}},
+            "away": {"team": {"abbreviation": "AL Lower Seed"}},
+        }},
+    ])
+    response = Mock()
+    response.json.return_value = {"dates": [{"date": "2030-10-01", "games": games}]}
+    get = Mock(return_value=response)
+    monkeypatch.setattr(mlb_api.requests, "get", get)
+    monkeypatch.setattr(mlb_api, "_batch_fetch_handedness", lambda *_: {})
+    schedule = mlb_api.fetch_schedule(date(2030, 10, 1))
+    assert get.call_args.kwargs["params"]["gameTypes"] == "R,F,D,L,W"
+    assert set(schedule.game_pk) == {1, 2, 3, 4, 5, 8, 9}
+    assert schedule.set_index("game_pk").loc[9, "status"] == "If Necessary"
+
+    # Exercise the real upsert and scoring SELECT using an isolated database.
+    db = create_engine("sqlite://")
+    with db.begin() as conn:
+        conn.connection.create_function("now", 0, lambda: "2030-09-30")
+        conn.execute(text("""CREATE TABLE games (
+            game_pk INTEGER PRIMARY KEY, game_date TEXT, game_type TEXT,
+            home_team TEXT, away_team TEXT, home_score INTEGER, away_score INTEGER,
+            status TEXT, venue TEXT, start_time TEXT, updated_at TEXT)"""))
+        _batch_upsert_games(conn, schedule)
+        _batch_upsert_games(conn, schedule)  # Refresh uses the same upsert contract.
+        conn.execute(text("UPDATE games SET game_type = NULL WHERE game_pk = 1"))
+    monkeypatch.setattr(score_games, "engine", db)
+    starters = mlb_api.fetch_probable_starters(date(2030, 10, 1), days_ahead=0)
+    monkeypatch.setattr(score_games, "fetch_starters", lambda *_: starters)
+    monkeypatch.setattr(score_games, "fetch_odds", lambda *_: pd.DataFrame(columns=["game_pk", "team"]))
+    monkeypatch.setattr(score_games, "fetch_weather", lambda *_: pd.DataFrame())
+    assert [c.game_type for c in score_games.build_contexts("2030-10-01")] == ["F", "D", "L", "W"]
+    with db.begin() as conn:
+        _batch_upsert_games(conn, schedule.iloc[:1])
+
+    rates = {"K": .22, "BB": .08, "HBP": .01, "1B": .15, "2B": .05, "3B": .005, "HR": .035, "OUT": .45}
+    pm = PosteriorMeans(
+        intercept=np.array([np.log(rates[o] / rates["OUT"]) for o in OUTCOMES if o != "OUT"]),
+        batter_offset=np.zeros((2, K_FREE)), platoon_offset=np.zeros((2, K_FREE)),
+        pitcher_offset=np.zeros((2, 2, K_FREE)), park_log=np.zeros(2),
+        batter_ids=np.array([1]), pitcher_ids=np.array([10]), venue_codes=np.array(["BOS"]),
+    )
+    monkeypatch.setattr(score_games, "N_DRAWS", 3)
+    monkeypatch.setattr(score_games, "load_posterior_draws", lambda *_args, **_kwargs: [pm, pm, pm])
+    monkeypatch.setattr(score_games, "posterior_provenance", lambda *_: {
+        "model_version": "fixture", "training_max_date": "2029-09-30",
+    })
+    cache = pd.DataFrame(columns=["game_date", "events", "inning_topbot", "home_team", "away_team", "batter", "pitcher", "p_throws"])
+    monkeypatch.setattr(score_games, "load_cache_for_year", lambda *_: cache)
+    monkeypatch.setattr(score_games, "fetch_lineups_for_games", lambda ids: {
+        gp: {"home": list(range(1, 10)), "away": list(range(11, 20))} for gp in ids
+    })
+    roster_ids = [101, 102, 103, 201, 202, 203, 204, 205]
+    workload = pd.DataFrame([
+        {"game_date": date(2030, 9, d), "team": team, "pitcher_id": pid, "outs": outs, "role": role}
+        for team in ("BOS", "NYY") for d in (20, 24)
+        for pid, outs, role in ((10, 15, "SP"), (20, 15, "SP"),
+                               (101, 3, "RP"), (102, 3, "RP"), (103, 3, "RP"),
+                               (201, 15, "SP"), (202, 15, "SP"), (203, 15, "SP"), (204, 15, "SP"))
+    ] + [
+        {"game_date": date(2030, 9, 30), "team": team, "pitcher_id": pid, "outs": outs, "role": role}
+        for team in ("BOS", "NYY") for pid, outs, role in ((102, 6, "RP"), (203, 15, "SP"), (201, 2, "RP"))
+    ])
+    monkeypatch.setattr(bullpen, "_load_workload", lambda *_: workload)
+    monkeypatch.setattr(mlb_api, "fetch_active_pitchers", lambda *_: [10, 20, *roster_ids, 999])
+    boxscore = Mock()
+    boxscore.json.return_value = {"teams": {
+        side: {"pitchers": [], "bullpen": [starter, *roster_ids, 300], "bench": list(range(401, 417)), "players": {
+            f"ID{pid}": {"position": {"abbreviation": "TWP" if pid == 204 else "DH" if pid >= 300 else "P"}}
+            for pid in [starter, *roster_ids, 300, *range(401, 417)]
+        }} for side, starter in (("home", 10), ("away", 20))
+    }}
+    get.return_value = boxscore
+    monkeypatch.setattr(mlb_api, "fetch_probable_starters", lambda *_args, **_kwargs: pd.DataFrame({"pitcher_id": [202]}))
+    daily_writer, season_writer = Mock(), Mock()
+    monkeypatch.setattr(score_games, "write_daily", daily_writer)
+    monkeypatch.setattr(score_games, "append_season", season_writer)
+
+    result = score_games.score("2030-10-01", n_sims=600, write=False)
+    assert len(result) == 10
+    assert set(result.game_pk) == {1, 2, 3, 4, 5}
+    for gp, rows in result.groupby("game_pk"):
+        context = rows.iloc[0].prediction_context
+        assert context["game_type"] == games[gp - 1]["gameType"]
+        assert context["automatic_runner"] is (gp == 1)
+        assert np.isfinite(rows.expected_runs).all()
+        assert abs(rows.win_prob.sum() - 1) < 1e-6
+        assert rows.total_play.eq("No Play").all()
+        assert "0" not in context["margin_distribution"]
+        queue = context["home_queue"]
+        if gp == 1:
+            assert queue["relievers"] == [101, 103, 0]
+            assert queue["roster_source"] == "active_roster"
+            assert queue["availability"][102] == "recent_workload"
+            assert queue["availability_assumption"] == "recent_workload"
+        else:
+            assert queue["relievers"] == [102, 101, 103, 201, 203, 204, 205, 0]
+            assert queue["roster_source"] == "game_boxscore"
+            assert queue["availability"][102] == "relief"
+            assert queue["availability"][202] == "scheduled_starter"
+            assert queue["availability"][203] == "emergency_relief"
+            assert queue["availability_assumption"] == "full_rest"
+            assert queue["workloads"][201] == (3,)  # Recent SP does not become a guessed bulk arm.
+            assert 300 not in queue["relievers"] and 999 not in queue["relievers"]
+    daily_writer.assert_not_called()
+    season_writer.assert_not_called()
+
+    # No game roster means neutral coverage, never fallback to September's roster.
+    get.side_effect = RuntimeError("roster unavailable")
+    missing = bullpen.build_queues_live(date(2030, 10, 1), [bullpen.LiveQueueContext(2, "home", "BOS", 10, "F")])[(2, "home")]
+    assert missing.relievers == [0] and not missing.usage_known
+    assert missing.roster_source == "unknown"
+    get.side_effect = None
+    for team in boxscore.json.return_value["teams"].values():
+        team["bench"].extend([417, 418])
+    unconfirmed = bullpen.build_queues_live(date(2030, 10, 1), [bullpen.LiveQueueContext(2, "home", "BOS", 10, "F")])[(2, "home")]
+    assert unconfirmed.relievers == [0] and not unconfirmed.usage_known
+    for team in boxscore.json.return_value["teams"].values():
+        team["bench"] = team["bench"][:-2]
+
+    # A roster change alone triggers a pregame refresh with the same batting order.
+    import json
+
+    from v2.pipeline import refresh_lineups
+
+    live_lineup = {"home": list(range(1, 10)), "away": list(range(11, 20))}
+    stored_context = json.loads(json.dumps(result[result.game_pk == 2].iloc[0].prediction_context))
+    refresh_games = schedule[schedule.game_pk == 2].copy()
+    refresh_games["stored_hash"] = score_games.lineup_hash(live_lineup)
+    refresh_games["prediction_context"] = [stored_context]
+    monkeypatch.setattr(refresh_lineups, "_fetch_scheduled_games", lambda *_: refresh_games)
+    monkeypatch.setattr(refresh_lineups, "_starter_map", lambda *_: {2: (10, 20)})
+    monkeypatch.setattr(refresh_lineups, "upsert_probable_starters", lambda *_: None)
+    monkeypatch.setattr(refresh_lineups, "fetch_lineup", lambda *_: live_lineup)
+    monkeypatch.setattr("backend.data.weather.fetch_weather", lambda *_: None)
+    refreshed = Mock()
+    monkeypatch.setattr(refresh_lineups, "score", refreshed)
+    monkeypatch.setattr("sys.argv", ["refresh_lineups", "--date", "2030-10-01"])
+    refresh_lineups.main()
+    refreshed.assert_not_called()
+    for team in boxscore.json.return_value["teams"].values():
+        team["bullpen"].remove(205)
+    refresh_lineups.main()
+    assert refreshed.call_args.kwargs["game_pks"] == [2]
+    assert refreshed.call_args.kwargs["update_season"] is True
+
+    # A prior year's playoff workloads cannot create next season's pitching roles.
+    rollover = bullpen.queues_from_workload(
+        date(2031, 1, 1), [bullpen.LiveQueueContext(2, "home", "BOS", 10)],
+        workload.assign(game_date=date(2030, 12, 31)), {"BOS": [10, *roster_ids]},
+    )[(2, "home")]
+    assert rollover.relievers == [0] and rollover.team_outs_2d is None
+
+    with db.begin() as conn:
+        conn.execute(text("UPDATE games SET start_time = '2000-10-01T23:00:00Z'"))
+    assert score_games.score("2030-10-01", n_sims=600, write=True).empty
+    daily_writer.assert_not_called()
+    season_writer.assert_not_called()
+    db.dispose()
 
 
 def test_is_started_freeze_predicate():

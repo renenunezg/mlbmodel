@@ -37,12 +37,13 @@ def _batch_upsert_games(conn, games_df):
     for _, g in games_df.iterrows():
         conn.execute(
             text("""
-                INSERT INTO games (game_pk, game_date, home_team, away_team,
+                INSERT INTO games (game_pk, game_date, game_type, home_team, away_team,
                                    home_score, away_score, status, venue, start_time)
-                VALUES (:game_pk, :game_date, :home_team, :away_team,
+                VALUES (:game_pk, :game_date, :game_type, :home_team, :away_team,
                         :home_score, :away_score, :status, :venue, :start_time)
                 ON CONFLICT (game_pk) DO UPDATE SET
                     game_date = EXCLUDED.game_date,
+                    game_type = EXCLUDED.game_type,
                     start_time = EXCLUDED.start_time,
                     home_team = EXCLUDED.home_team,
                     away_team = EXCLUDED.away_team,
@@ -55,6 +56,7 @@ def _batch_upsert_games(conn, games_df):
             {
                 "game_pk": int(g["game_pk"]),
                 "game_date": str(g["game_date"]),
+                "game_type": g["game_type"],
                 "home_team": g["home_team"],
                 "away_team": g["away_team"],
                 "home_score": int(g["home_score"]) if pd.notna(g.get("home_score")) else None,
@@ -218,7 +220,7 @@ def _upcoming_games(target_date: date) -> pd.DataFrame:
                   AND home_score IS NULL
                   AND start_time IS NOT NULL
                   AND start_time > NOW()
-                  AND LOWER(COALESCE(status, '')) NOT IN ('final', 'cancelled', 'postponed')
+                  AND LOWER(COALESCE(status, '')) NOT IN ('final', 'cancelled', 'canceled', 'postponed', 'if necessary')
                 ORDER BY game_date, start_time, game_pk
             """),
             conn,

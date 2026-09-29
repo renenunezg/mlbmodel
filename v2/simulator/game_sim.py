@@ -7,7 +7,7 @@ baserunner state via AdvancementTable.sample. Per-sim state arrays are int64.
 Termination & extras:
 - regulation: 9 innings; game ends when bottom of inning ≥ 9 starts and home leads,
   or when home goes ahead at any PA in bottom of 9th+ (walkoff).
-- extras: half-innings ≥ 10 start with state=0b010 (ghost runner on 2B).
+- extras: half-innings >= 10 start with a runner on 2B only in regular-season games.
 
 Known approximations:
 - mid-PA stolen bases and wild pitches are not modeled
@@ -61,6 +61,7 @@ class GameInputs:
     away_p_throws_lookup: dict[int, str]
     wind_signal: float = 0.0  # wind_speed_mph * signed out-component; 0 = dome/missing/disabled
     temp_c: float = 0.0       # temp_f - 70; 0 = dome/missing/disabled
+    automatic_runner: bool = True
 
 
 def _queue_arrays(q: BullpenQueue, throws: dict[int, str], roles: dict[int, int]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -153,7 +154,7 @@ def simulate_game(
     p_pa_a = np.zeros(n_sims, dtype=np.int64)
     done = np.zeros(n_sims, dtype=np.bool_)
 
-    MAX_PAS = 250  # safety cap (real games end well before this)
+    MAX_PAS = 1000  # Allow long postseason extras; never publish unfinished draws.
     for _ in range(MAX_PAS):
         if done.all():
             break
@@ -214,8 +215,7 @@ def simulate_game(
             is_top = new_is_top
             inning = np.where(flipped_to_top, inning + 1, inning)
             outs = np.where(inning_end, 0, outs)
-            # ghost runner if entering half-inning ≥ 10
-            entering_extras = inning_end & (inning >= 10)
+            entering_extras = inning_end & (inning >= 10) & inputs.automatic_runner
             state = np.where(entering_extras, GHOST_RUNNER_STATE, np.where(inning_end, 0, state))
 
             # skip bottom of 9+ if home leads
@@ -254,4 +254,6 @@ def simulate_game(
             p_runs_a = np.where(swap_a, 0, p_runs_a)
             p_pa_a = np.where(swap_a, 0, p_pa_a)
 
+    if not done.all():
+        raise RuntimeError(f"{int((~done).sum())} simulations unfinished after {MAX_PAS} plate appearances")
     return home_runs, away_runs

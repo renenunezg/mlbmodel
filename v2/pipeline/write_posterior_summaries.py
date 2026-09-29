@@ -30,6 +30,7 @@ import pandas as pd
 import statsapi
 from sqlalchemy import text
 
+from backend.data.game_types import regular_season_pitches
 from backend.db import engine
 from backend.log import setup_logging
 from v2.bayesian._common import POSTERIORS_DIR, WOBA_WEIGHTS, encode_outcomes
@@ -62,7 +63,7 @@ MIN_BF_SP_PER_DAY = 2.0             # ~20 BF across 10 days ~ one full start
 MIN_BF_RP_PER_DAY = 1.0             # ~10 BF across 10 days ~ 5 outings
 
 PARQUET_COLS = [
-    "game_pk", "game_date", "batter", "pitcher",
+    "game_pk", "game_date", "game_type", "batter", "pitcher",
     "p_throws", "events",
     "home_team", "away_team", "inning", "inning_topbot",
 ]
@@ -81,7 +82,7 @@ def _load_window_pa(window_start: date, window_end: date) -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(f"Missing {path}")
 
-    df = pd.read_parquet(path, columns=PARQUET_COLS)
+    df = regular_season_pitches(pd.read_parquet(path, columns=PARQUET_COLS), year)
     df["game_date"] = pd.to_datetime(df["game_date"]).dt.date
     df = df[(df["game_date"] >= window_start) & (df["game_date"] <= window_end)]
     df = df[df["events"].notna() & ~df["events"].isin(NON_PA_EVENTS)]

@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 from sqlalchemy import text
 
+from backend.data.game_types import POSTSEASON_GAME_TYPES, PREDICTION_GAME_TYPES, regular_season_pitches
 from backend.data.mlb_api import fetch_lineup
 from backend.data.odds_api import DEFAULT_BOOKS
 from backend.db import engine
@@ -84,6 +85,7 @@ class GameContext:
     wind_out_component: float | None = None
     temp_f: float | None = None
     is_dome: bool = False
+    game_type: str = "R"
 
 
 def lineup_hash(lineup: dict[str, list[int]]) -> str:
@@ -103,7 +105,11 @@ def is_started(start_time, now: pd.Timestamp) -> bool:
 
 
 def fetch_games_for_date(date: str) -> pd.DataFrame:
-    q = text("SELECT game_pk, game_date, start_time, home_team, away_team FROM games WHERE game_date = :d")
+    q = text("""
+        SELECT game_pk, game_date, game_type, start_time, home_team, away_team
+        FROM games WHERE game_date = :d
+          AND status NOT IN ('Postponed', 'Cancelled', 'Canceled', 'If Necessary')
+    """)
     with engine.begin() as conn:
         return pd.read_sql(q, conn, params={"d": date})
 
@@ -168,6 +174,9 @@ def build_contexts(date: str) -> list[GameContext]:
     contexts = []
     for _, g in games.iterrows():
         gp = int(g.game_pk)
+        if g.game_type not in PREDICTION_GAME_TYPES:
+            log.warning(f"Skipping game {gp}: unclassified game type; refresh the official schedule")
+            continue
         s_home = starters[(starters.game_pk == gp) & (starters.is_home == True)]  # noqa: E712
         s_away = starters[(starters.game_pk == gp) & (starters.is_home == False)]  # noqa: E712
         o_home = odds[(odds.game_pk == gp) & (odds.team == g.home_team)]
@@ -177,6 +186,7 @@ def build_contexts(date: str) -> list[GameContext]:
         contexts.append(
             GameContext(
                 game_pk=gp,
+                game_type=g.game_type,
                 game_date=pd.Timestamp(g.game_date),
                 start_time=pd.Timestamp(g.start_time) if pd.notna(g.start_time) else None,
                 home_team=g.home_team,
@@ -201,11 +211,11 @@ def build_contexts(date: str) -> list[GameContext]:
 def load_cache_for_year(year: int) -> pd.DataFrame:
     """Load cached batting appearances and pitcher handedness."""
     path = CACHE_DIR / f"statcast_{year}.parquet"
-    return pd.read_parquet(path, columns=[
+    return regular_season_pitches(pd.read_parquet(path, columns=[
         "game_pk", "batter", "pitcher", "inning", "inning_topbot",
         "at_bat_number", "pitch_number", "events", "home_team", "away_team",
-        "p_throws", "game_date",
-    ])
+        "p_throws", "game_date", "game_type",
+    ]), year)
 
 
 def top9_batters_by_team(cache: pd.DataFrame) -> dict[str, list[int]]:
@@ -298,6 +308,8 @@ def build_inputs(
     away_queue, away_qsrc = _resolve_queue(
         ctx.game_pk, "away", live_queues, ctx.away_starter_id or 0,
     )
+    if ctx.game_type in POSTSEASON_GAME_TYPES:
+        home_queue.availability_assumption = away_queue.availability_assumption = "full_rest"
     queue_source = home_qsrc if home_qsrc == away_qsrc else "mixed"
 
     # Throws: starter handedness from probable_starters, relievers from cache.
@@ -309,6 +321,8 @@ def build_inputs(
         away_throws[ctx.away_starter_id] = ctx.away_starter_throws or "R"
 
     wind_signal, temp_c = weather_scalars(ctx)
+    if ctx.game_type not in PREDICTION_GAME_TYPES:
+        raise ValueError(f"Unsupported game type: {ctx.game_type!r}")
     inputs = GameInputs(
         home_lineup=np.array(home_lineup, dtype=np.int64),
         away_lineup=np.array(away_lineup, dtype=np.int64),
@@ -319,6 +333,7 @@ def build_inputs(
         away_p_throws_lookup=away_throws,
         wind_signal=wind_signal,
         temp_c=temp_c,
+        automatic_runner=ctx.game_type == "R" and ctx.game_date.year >= 2020,
     )
     return inputs, lineup_tag, queue_source
 
@@ -398,9 +413,9 @@ def score(
     live_q_contexts: list[LiveQueueContext] = []
     for c in contexts:
         if c.home_starter_id:
-            live_q_contexts.append(LiveQueueContext(c.game_pk, "home", c.home_team, c.home_starter_id))
+            live_q_contexts.append(LiveQueueContext(c.game_pk, "home", c.home_team, c.home_starter_id, c.game_type))
         if c.away_starter_id:
-            live_q_contexts.append(LiveQueueContext(c.game_pk, "away", c.away_team, c.away_starter_id))
+            live_q_contexts.append(LiveQueueContext(c.game_pk, "away", c.away_team, c.away_starter_id, c.game_type))
     try:
         live_queues = build_queues_live(pd.Timestamp(date).date(), live_q_contexts)
     except Exception as e:
@@ -465,6 +480,7 @@ def score(
             **provenance, "tables_training_max_date": adv.training_max_date,
             "inputs_as_of": pd.Timestamp.now(tz="UTC").isoformat(),
             "uncertainty": uncertainty, "pitching_plans": accepted_plans,
+            "game_type": ctx.game_type, "automatic_runner": inputs.automatic_runner,
             "home_lineup": inputs.home_lineup.tolist(), "away_lineup": inputs.away_lineup.tolist(),
             "home_queue": asdict(inputs.home_queue), "away_queue": asdict(inputs.away_queue),
             "opener": inputs.home_queue.starter_role == 1 or inputs.away_queue.starter_role == 1,

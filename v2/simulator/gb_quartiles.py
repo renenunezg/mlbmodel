@@ -20,6 +20,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from backend.data.game_types import regular_season_pitches
 from backend.log import setup_logging
 from v2.data.pa_dataset import NON_PA_EVENTS
 
@@ -64,7 +65,9 @@ def build_gb_quartiles(years: list[int]) -> pd.DataFrame:
         path = CACHE_DIR / f"statcast_{y}.parquet"
         if not path.exists():
             raise FileNotFoundError(path)
-        frames.append(pd.read_parquet(path, columns=["events", "bb_type", "batter", "pitcher"]))
+        frames.append(regular_season_pitches(pd.read_parquet(
+            path, columns=["game_type", "game_date", "events", "bb_type", "batter", "pitcher"]
+        ), y))
     df = pd.concat(frames, ignore_index=True)
     df = df[df["events"].notna() & ~df["events"].isin(NON_PA_EVENTS)]
 

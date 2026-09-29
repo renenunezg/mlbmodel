@@ -20,6 +20,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from backend.data.game_types import regular_season_pitches
 from backend.log import setup_logging
 
 log = logging.getLogger(__name__)
@@ -57,26 +58,30 @@ def fetch_year(year: int, force: bool = False) -> pd.DataFrame:
     from pybaseball import statcast
 
     today = date.today()
+    if year > today.year:
+        raise ValueError("Cannot build a Statcast cache for a future season")
     cache_path = CACHE_DIR / f"statcast_{year}.parquet"
-    season_start = date(year, 3, 25)
+    season_start = date(year, 3, 1)  # Include regular-season international openers.
     season_end = date(year, 11, 30) if year < today.year else today
 
     cached = pd.DataFrame()
     fetch_from = season_start
 
     if cache_path.exists() and not force:
-        cached = pd.read_parquet(cache_path)
-        max_cached = pd.to_datetime(cached["game_date"]).max().date()
-        fetch_from = max(season_start, max_cached)
-        log.info(f"[{year}] cached through {max_cached} ({len(cached):,} pitches)")
+        cached = regular_season_pitches(pd.read_parquet(cache_path), year)
+        if not cached.empty:
+            max_cached = pd.to_datetime(cached["game_date"]).max().date()
+            fetch_from = max(season_start, max_cached)
+            log.info(f"[{year}] cached through {max_cached} ({len(cached):,} pitches)")
 
     if fetch_from >= season_end and not cached.empty:
         log.info(f"[{year}] cache up to date through {season_end}; skipping fetch")
         return cached
 
     log.info(f"[{year}] fetching {fetch_from} → {season_end}")
-    new_df = _fetch_statcast(statcast, str(fetch_from), str(season_end))
-    new_df = new_df[new_df["game_type"] == "R"]
+    new_df = (_fetch_statcast(statcast, str(fetch_from), str(season_end))
+              if fetch_from <= season_end else pd.DataFrame())
+    new_df = regular_season_pitches(new_df, year)
 
     if not cached.empty:
         df = pd.concat([cached, new_df], ignore_index=True).drop_duplicates(
@@ -84,6 +89,14 @@ def fetch_year(year: int, force: bool = False) -> pd.DataFrame:
         )
     else:
         df = new_df
+    if df.empty and not len(df.columns):
+        # Before the new season has any pitches, retain a typed empty cache so
+        # multi-year training can use prior seasons without copying their rows.
+        import pyarrow as pa
+        import pyarrow.parquet as pq
+
+        previous = CACHE_DIR / f"statcast_{year - 1}.parquet"
+        df = pa.Table.from_batches([], schema=pq.read_schema(previous)).to_pandas()
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     df.to_parquet(cache_path, index=False)

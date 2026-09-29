@@ -39,6 +39,7 @@ def load_frozen_games(start: str, end: str) -> pd.DataFrame:
     """
     query = text("""
         SELECT g.game_pk, g.game_date, g.start_time, g.home_team, g.away_team,
+               to_jsonb(g)->>'game_type' AS game_type,
                g.home_score, g.away_score,
                h.win_prob AS home_published_prob,
                h.expected_runs AS home_expected_runs, a.expected_runs AS away_expected_runs,
@@ -135,6 +136,9 @@ def _snapshot_market(row: dict, market: str) -> dict | None:
 
 def _load_market_games(start: str, end: str, market: str) -> pd.DataFrame:
     games = load_frozen_games(start, end)
+    # Playoff forecasts remain available for evaluation, but never enter the
+    # regular-season calibration population, including future-year refits.
+    games = games[games["game_type"].eq("R")].copy()
     records = []
     for row in games.to_dict("records"):
         snapshot = _snapshot_market(row, market)
@@ -175,6 +179,8 @@ def chronological_folds(frame: pd.DataFrame, n_folds: int):
 
 def prepare_games(games: pd.DataFrame) -> pd.DataFrame:
     frame = games.sort_values(["game_date", "game_pk"]).reset_index(drop=True).copy()
+    if "game_type" not in frame or not frame["game_type"].eq("R").all():
+        raise ValueError("Market-model training requires explicitly classified regular-season games")
     if "home_market_prob" not in frame:
         raise ValueError("home_market_prob must come from paired same-book pregame odds")
     if "probability_source" not in frame or not frame["probability_source"].eq("raw_simulator").all():

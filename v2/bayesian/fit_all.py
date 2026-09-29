@@ -97,6 +97,7 @@ def main() -> int:
 
     for trace in (bat_idata, pit_idata, park_idata):
         trace.posterior.attrs["training_max_date"] = str(max(pa_df["game_date"]))
+        trace.posterior.attrs["training_game_type"] = "R"
         trace.posterior.attrs["model_version"] = "sim-v3"
 
     if args.save_traces:
@@ -109,6 +110,7 @@ def main() -> int:
     payload = {
         "schema_version": SCHEMA_VERSION,
         "training_window": {
+            "game_type": "R",
             "start_year": args.start_year,
             "end_year": args.end_year,
             "n_pa": int(len(pa_df)),

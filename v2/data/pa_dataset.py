@@ -13,6 +13,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from backend.data.game_types import regular_season_pitches
+
 log = logging.getLogger(__name__)
 
 CACHE_DIR = Path(__file__).resolve().parents[2] / "cache"
@@ -92,11 +94,12 @@ def _load_year(year: int) -> pd.DataFrame:
             f"Missing {path}. Populate via the v1 pipeline first or run "
             f"`python -m v2.data.build_cache --years {year}`."
         )
-    return pd.read_parquet(path)
+    return regular_season_pitches(pd.read_parquet(path), year)
 
 
 def transform_pitch_frame(pitch_df: pd.DataFrame) -> pd.DataFrame:
     """Pure transform - kept separate from disk I/O for synthetic-data tests."""
+    pitch_df = regular_season_pitches(pitch_df)
     pa = pitch_df[pitch_df["events"].notna()].copy()
     pa = pa[~pa["events"].isin(NON_PA_EVENTS)]
 

@@ -22,6 +22,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from backend.data.game_types import regular_season_pitches
 from backend.log import setup_logging
 from v2.data.pa_dataset import (
     EVENT_TO_OUT_SUBTYPE,
@@ -79,14 +80,14 @@ def _load_pa_rows(years: list[int], before: str | None = None) -> pd.DataFrame:
         if not path.exists():
             raise FileNotFoundError(path)
         cols = [
-            "game_pk", "game_date", "at_bat_number", "pitch_number",
+            "game_pk", "game_date", "game_type", "at_bat_number", "pitch_number",
             "inning", "inning_topbot",
             "events", "outs_when_up",
             "on_1b", "on_2b", "on_3b",
             "bat_score", "post_bat_score",
             "batter", "pitcher",
         ]
-        frames.append(pd.read_parquet(path, columns=cols))
+        frames.append(regular_season_pitches(pd.read_parquet(path, columns=cols), y))
     df = pd.concat(frames, ignore_index=True)
 
     if before is not None:

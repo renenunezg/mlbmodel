@@ -7,8 +7,9 @@ import pandas as pd
 import requests
 import statsapi
 
+from backend.data.game_types import PREDICTION_GAME_TYPES
 from backend.log import setup_logging
-from backend.team_mappings import normalize_team
+from backend.team_mappings import TEAM_ID_BY_CODE, normalize_team
 
 log = logging.getLogger(__name__)
 
@@ -16,6 +17,17 @@ BASE_URL = "https://statsapi.mlb.com/api/v1"
 
 # Cache for pitcher handedness lookups (pitcher_id -> 'L'/'R')
 _handedness_cache: dict[int, str] = {}
+
+
+def _schedule_status(game: dict) -> str:
+    status = game.get("status", {})
+    detailed = status.get("detailedState", "")
+    # These games can still have an abstract Preview state and a start time.
+    if detailed in {"Postponed", "Cancelled", "Canceled", "If Necessary"}:
+        return detailed
+    if game.get("ifNecessary") == "Y" and status.get("abstractGameState") == "Preview":
+        return "If Necessary"
+    return status.get("abstractGameState", "Scheduled")
 
 
 def _fetch_pitcher_handedness(pitcher_id: int) -> str | None:
@@ -57,7 +69,7 @@ def _batch_fetch_handedness(pitcher_ids: list[int]) -> dict[int, str]:
 
 
 def fetch_schedule(game_date: date = None) -> pd.DataFrame:
-    """Schedule for a date (regular season only). Includes probable pitchers + handedness."""
+    """Regular-season and playoff schedule, including probable pitchers and game type."""
     if game_date is None:
         game_date = date.today()
 
@@ -66,7 +78,7 @@ def fetch_schedule(game_date: date = None) -> pd.DataFrame:
     params = {
         "sportId": 1,
         "date": date_str,
-        "gameType": "R",  # Regular season only (excludes spring training)
+        "gameTypes": ",".join(PREDICTION_GAME_TYPES),
         "hydrate": "probablePitcher(note),venue,team",
     }
     resp = requests.get(f"{BASE_URL}/schedule", params=params, timeout=15)
@@ -76,6 +88,8 @@ def fetch_schedule(game_date: date = None) -> pd.DataFrame:
     rows = []
     for date_entry in data.get("dates", []):
         for game in date_entry.get("games", []):
+            if game.get("gameType") not in PREDICTION_GAME_TYPES:
+                continue
             home = game.get("teams", {}).get("home", {})
             away = game.get("teams", {}).get("away", {})
 
@@ -84,13 +98,14 @@ def fetch_schedule(game_date: date = None) -> pd.DataFrame:
 
             rows.append({
                 "game_pk": game["gamePk"],
+                "game_type": game["gameType"],
                 "game_date": game.get("officialDate") or date_entry["date"],
                 "start_time": game.get("rescheduleDate") or game.get("gameDate"),
                 "home_team": home.get("team", {}).get("abbreviation", ""),
                 "away_team": away.get("team", {}).get("abbreviation", ""),
                 "home_score": home.get("score"),
                 "away_score": away.get("score"),
-                "status": game.get("status", {}).get("abstractGameState", "Scheduled"),
+                "status": _schedule_status(game),
                 "venue": game.get("venue", {}).get("name", ""),
                 "home_pitcher_name": home_pitcher.get("fullName"),
                 "home_pitcher_id": home_pitcher.get("id"),
@@ -104,6 +119,7 @@ def fetch_schedule(game_date: date = None) -> pd.DataFrame:
         # Normalize team abbreviations
         df["home_team"] = df["home_team"].apply(normalize_team)
         df["away_team"] = df["away_team"].apply(normalize_team)
+        df = df[df.home_team.isin(TEAM_ID_BY_CODE) & df.away_team.isin(TEAM_ID_BY_CODE)].copy()
 
         # Batch fetch handedness for all pitchers
         all_pitcher_ids = (
@@ -127,7 +143,7 @@ def fetch_schedule_range(start_date: date, end_date: date) -> pd.DataFrame:
         "startDate": start_date.strftime("%Y-%m-%d"),
         "endDate": end_date.strftime("%Y-%m-%d"),
         "hydrate": "probablePitcher(note),venue,team",
-        "gameType": "R",  # Regular season only
+        "gameTypes": ",".join(PREDICTION_GAME_TYPES),
     }
     resp = requests.get(f"{BASE_URL}/schedule", params=params, timeout=15)
     resp.raise_for_status()
@@ -136,6 +152,8 @@ def fetch_schedule_range(start_date: date, end_date: date) -> pd.DataFrame:
     rows = []
     for date_entry in data.get("dates", []):
         for game in date_entry.get("games", []):
+            if game.get("gameType") not in PREDICTION_GAME_TYPES:
+                continue
             home = game.get("teams", {}).get("home", {})
             away = game.get("teams", {}).get("away", {})
             home_pitcher = home.get("probablePitcher", {})
@@ -143,13 +161,14 @@ def fetch_schedule_range(start_date: date, end_date: date) -> pd.DataFrame:
 
             rows.append({
                 "game_pk": game["gamePk"],
+                "game_type": game["gameType"],
                 "game_date": game.get("officialDate") or date_entry["date"],
                 "start_time": game.get("rescheduleDate") or game.get("gameDate"),
                 "home_team": home.get("team", {}).get("abbreviation", ""),
                 "away_team": away.get("team", {}).get("abbreviation", ""),
                 "home_score": home.get("score"),
                 "away_score": away.get("score"),
-                "status": game.get("status", {}).get("abstractGameState", "Scheduled"),
+                "status": _schedule_status(game),
                 "venue": game.get("venue", {}).get("name", ""),
                 "home_pitcher_name": home_pitcher.get("fullName"),
                 "home_pitcher_id": home_pitcher.get("id"),
@@ -161,6 +180,7 @@ def fetch_schedule_range(start_date: date, end_date: date) -> pd.DataFrame:
     if not df.empty:
         df["home_team"] = df["home_team"].apply(normalize_team)
         df["away_team"] = df["away_team"].apply(normalize_team)
+        df = df[df.home_team.isin(TEAM_ID_BY_CODE) & df.away_team.isin(TEAM_ID_BY_CODE)].copy()
 
         # Batch fetch handedness for all pitchers
         all_pitcher_ids = (
@@ -191,6 +211,7 @@ def fetch_probable_starters(game_date: date = None, days_ahead: int = 7) -> pd.D
         "startDate": game_date.strftime("%Y-%m-%d"),
         "endDate": end_date.strftime("%Y-%m-%d"),
         "hydrate": "probablePitcher(note),team",
+        "gameTypes": ",".join(PREDICTION_GAME_TYPES),
     }
     resp = requests.get(f"{BASE_URL}/schedule", params=params, timeout=15)
     resp.raise_for_status()
@@ -199,8 +220,10 @@ def fetch_probable_starters(game_date: date = None, days_ahead: int = 7) -> pd.D
     rows = []
     for date_entry in data.get("dates", []):
         for game in date_entry.get("games", []):
+            if game.get("gameType") not in PREDICTION_GAME_TYPES:
+                continue
             game_pk = game["gamePk"]
-            gd = date_entry["date"]
+            gd = game.get("officialDate") or date_entry["date"]
 
             for side, is_home in [("home", True), ("away", False)]:
                 team_data = game.get("teams", {}).get(side, {})
@@ -250,18 +273,20 @@ def fetch_lineup(game_pk: int) -> dict[str, list[int]]:
     return out
 
 
-_active_roster_cache: dict[int, list[int]] = {}
+_active_roster_cache: dict[tuple[int, date], list[int]] = {}
 
 
-def fetch_active_pitchers(team_id: int) -> list[int]:
+def fetch_active_pitchers(team_id: int, game_date: date | None = None) -> list[int]:
     """Active 26-man-roster pitcher ids for a team. Cached in memory per process."""
-    if team_id in _active_roster_cache:
-        return _active_roster_cache[team_id]
+    game_date = game_date or date.today()
+    key = (team_id, game_date)
+    if key in _active_roster_cache:
+        return _active_roster_cache[key]
 
     try:
         resp = requests.get(
             f"{BASE_URL}/teams/{team_id}/roster",
-            params={"rosterType": "active"},
+            params={"rosterType": "active", "date": game_date.isoformat()},
             timeout=10,
         )
         resp.raise_for_status()
@@ -273,10 +298,38 @@ def fetch_active_pitchers(team_id: int) -> list[int]:
     ids = [
         int(p["person"]["id"])
         for p in roster
-        if p.get("position", {}).get("abbreviation") == "P"
+        if p.get("position", {}).get("abbreviation") in ("P", "TWP")
     ]
-    _active_roster_cache[team_id] = ids
+    _active_roster_cache[key] = ids
     return ids
+
+
+def fetch_game_pitchers(game_pk: int) -> dict[str, list[int]]:
+    """Game-specific eligible pitchers, including two-way players, from the boxscore.
+
+    A generic active roster can include players omitted from a playoff series.
+    The bullpen list is an eligibility pool, not a confirmed relief workload.
+    """
+    resp = requests.get(f"{BASE_URL}/game/{game_pk}/boxscore", timeout=10)
+    resp.raise_for_status()
+    teams = resp.json().get("teams", {})
+    result = {}
+    for side in ("home", "away"):
+        team = teams.get(side, {})
+        players = team.get("players", {})
+        ids = dict.fromkeys([*team.get("pitchers", []), *team.get("bullpen", [])])
+        roster = set([*ids, *team.get("batters", []), *team.get("bench", [])])
+        ordinary_pitchers = sum(players.get(f"ID{pid}", {}).get("position", {}).get("abbreviation") == "P"
+                                for pid in ids)
+        # Pregame boxscores can retain September's 28-player roster until the
+        # series roster is posted. Do not guess which players will be omitted.
+        if not 25 <= len(roster) <= 26 or ordinary_pitchers > 13:
+            log.warning(f"Game {game_pk} {side}: playoff roster is not confirmed ({len(roster)} players)")
+            result[side] = []
+            continue
+        result[side] = [int(pid) for pid in ids if players.get(f"ID{pid}", {}).get(
+            "position", {}).get("abbreviation") in ("P", "TWP")]
+    return result
 
 
 def fetch_batting_splits(season: int = None, split: str = "vs_rhp") -> pd.DataFrame:

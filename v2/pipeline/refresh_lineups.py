@@ -13,17 +13,21 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import logging
+from dataclasses import asdict
 from datetime import date
 
 import pandas as pd
 from sqlalchemy import text
 
+from backend.data.game_types import POSTSEASON_GAME_TYPES
 from backend.data.mlb_api import fetch_lineup, fetch_probable_starters
 from backend.db import engine
 from backend.log import setup_logging
 from pipeline import upsert_probable_starters
 from v2.pipeline.score_games import lineup_hash, score
+from v2.simulator.bullpen import LiveQueueContext, build_queues_live
 
 log = logging.getLogger(__name__)
 
@@ -40,7 +44,9 @@ def _fetch_scheduled_games(date_str: str) -> pd.DataFrame:
     underway its prediction is frozen — refresh can never rewrite it.
     """
     q = text("""
-        SELECT g.game_pk, COALESCE(o.lineup_hash, '') AS stored_hash
+        SELECT g.game_pk, g.game_type, g.home_team, g.away_team,
+               COALESCE(o.lineup_hash, '') AS stored_hash,
+               to_jsonb(o)->'prediction_context' AS prediction_context
         FROM games g
         LEFT JOIN model_outputs o
           ON o.game_pk = g.game_pk AND o.team = g.home_team
@@ -48,6 +54,7 @@ def _fetch_scheduled_games(date_str: str) -> pd.DataFrame:
           AND g.home_score IS NULL
           AND g.start_time IS NOT NULL
           AND g.start_time > NOW()
+          AND g.status NOT IN ('Postponed', 'Cancelled', 'Canceled', 'If Necessary')
     """)
     with engine.begin() as conn:
         return pd.read_sql(q, conn, params={"d": date_str})
@@ -87,9 +94,21 @@ def main() -> None:
     upsert_probable_starters(fetch_probable_starters(game_date=date.fromisoformat(args.date), days_ahead=0))
     after = _starter_map(args.date)
 
+    queue_contexts = [
+        LiveQueueContext(int(g.game_pk), side, getattr(g, f"{side}_team"), int(pid), g.game_type)
+        for g in games.itertuples(index=False) if g.game_type in POSTSEASON_GAME_TYPES
+        for side, pid in zip(("home", "away"), after.get(int(g.game_pk), (None, None))) if pid
+    ]
+    queues = build_queues_live(date.fromisoformat(args.date), queue_contexts) if queue_contexts else {}
     changed = set()
     for row in games.itertuples(index=False):
         gp = int(row.game_pk)
+        if row.game_type in POSTSEASON_GAME_TYPES:
+            stored = row.prediction_context if isinstance(row.prediction_context, dict) else {}
+            for side in ("home", "away"):
+                queue = queues.get((gp, side))
+                if queue is not None and json.loads(json.dumps(asdict(queue))) != stored.get(f"{side}_queue"):
+                    changed.add(gp)
         if before.get(gp) != after.get(gp):
             changed.add(gp)
         lineup = fetch_lineup(gp)
@@ -101,11 +120,11 @@ def main() -> None:
             changed.add(gp)
 
     if not changed:
-        log.info(f"no starter or lineup changes on {args.date}")
+        log.info(f"no starter, lineup, or playoff bullpen changes on {args.date}")
         return
 
     changed = sorted(changed)
-    log.info(f"{len(changed)} games changed (starter/lineup): {changed}")
+    log.info(f"{len(changed)} games changed (starter/lineup/playoff bullpen): {changed}")
     # Weather updates as first pitch approaches; refresh it for the re-scored games.
     from backend.data.weather import fetch_weather
     for gp in changed:
