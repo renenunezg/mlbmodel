@@ -1,0 +1,64 @@
+name: Prepare v2 Artifacts
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prepare-v2-artifacts
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      PYTHONPATH: "."
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache/restore@v4
+        with:
+          path: cache
+          key: statcast-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: statcast-${{ runner.os }}-
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r v2/requirements.txt && pip install -e .
+      - name: Refresh regular-season training inputs
+        run: python -m v2.data.build_cache --years $(seq 2024 "$(date -u +%Y)")
+      - name: Fit compatible models
+        run: python -m v2.pipeline.train --mode full
+      - name: Build compatible simulator tables
+        run: python -m v2.simulator.build_advancement_table --years 2024 2025
+      - name: Verify production artifacts
+        run: python -m v2.pipeline.verify_artifacts > artifact-validation.json
+      - name: Score current slate without writes
+        run: python -m v2.pipeline.score_games --date "$(date -u +%F)" --no-write --export scoring-preview.json
+      - name: Save validated simulator bundle
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            v2/bayesian/posteriors/*.nc
+            v2/bayesian/posteriors/diagnostics.json
+            v2/simulator/tables/*.parquet
+          key: sim-v3-bundle-${{ runner.os }}-${{ github.run_id }}
+      - name: Save refreshed Statcast inputs
+        uses: actions/cache/save@v4
+        with:
+          path: cache
+          key: statcast-${{ runner.os }}-${{ github.run_id }}
+      - name: Upload activation evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: activation-evidence
+          path: |
+            artifact-validation.json
+            scoring-preview.json
+          if-no-files-found: error
