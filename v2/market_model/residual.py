@@ -141,11 +141,22 @@ def _load_market_games(start: str, end: str, market: str) -> pd.DataFrame:
     games = games[games["game_type"].eq("R")].copy()
     records = []
     for row in games.to_dict("records"):
+        context = row["prediction_context"]
+        # Published xR now includes the market. Simulator feature research
+        # must continue using the untouched inputs archived with the forecast.
+        if context.get("joint_adjustment"):
+            for side in ("home", "away"):
+                row[f"{side}_expected_runs"] = context[f"raw_{side}_expected_runs"]
         snapshot = _snapshot_market(row, market)
         if snapshot is None:
             continue
         if market == "rl":
-            row.update(home_model_prob=row["home_cover_prob"],
+            distribution = context.get("margin_distribution")
+            if not distribution:
+                continue
+            raw_cover = sum(float(p) for margin, p in distribution.items()
+                            if float(margin) + row["home_spread"] > 0)
+            row.update(home_model_prob=raw_cover,
                        home_moneyline=row["home_spread_odds"], away_moneyline=row["away_spread_odds"],
                        home_win=int(row["home_score"]-row["away_score"]+row["home_spread"] > 0))
         if not all(pd.notna(row[k]) and np.isfinite(float(row[k])) for k in ("home_model_prob", "home_moneyline", "away_moneyline")):

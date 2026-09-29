@@ -31,7 +31,6 @@ from backend.log import setup_logging
 from backend.strategy import WEATHER_ENABLED
 from backend.team_mappings import normalize_team
 from v2.bayesian._common import POSTERIORS_DIR
-from v2.markets.probs import paired_market_quotes
 from v2.markets.writer import (
     append_season,
     build_game_rows,
@@ -487,7 +486,6 @@ def score(
             "home_bp_outs_2d": inputs.home_queue.team_outs_2d,
             "away_bp_outs_2d": inputs.away_queue.team_outs_2d,
         }
-        snapshot["market_pairs"] = paired_market_quotes(ctx.home_odds, ctx.away_odds)
 
         rows = build_game_rows(
             game_pk=ctx.game_pk,

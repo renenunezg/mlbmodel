@@ -10,6 +10,7 @@ that would only capture MC noise and mislead consumers.
 """
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -33,14 +34,19 @@ from v2.markets.ev import (
     our_odds_from_prob,
     rl_confidence,
 )
+from v2.markets.joint import VERSION as JOINT_VERSION
+from v2.markets.joint import adjust_joint, fresh_odds
 from v2.markets.probs import (
     anchor_home_prob,
     consensus_cover_prob,
     consensus_home_prob,
     market_probs,
+    paired_market_quotes,
     runs_percentiles,
     shift_cover_prob,
 )
+
+log = logging.getLogger(__name__)
 
 
 def _offers(odds: dict | None) -> list[dict]:
@@ -68,6 +74,7 @@ def _best_runline(
     opponent_runs: np.ndarray,
     home: bool,
     opponent_odds: dict | None = None,
+    weights: np.ndarray | None = None,
 ) -> tuple[dict, float | None]:
     """Shop fixed consensus probabilities; unpaired sim estimates are display-only."""
     candidates = []
@@ -78,18 +85,12 @@ def _best_runline(
         price = _get(offer, "spread_odds")
         if pd.isna(price) or not np.isfinite(float(price)) or abs(float(price)) < 100:
             continue
-        p_cover = shift_cover_prob(
-            market_probs(
-                team_runs,
-                opponent_runs,
-                None,
-                float(spread),
-            )["p_home_cover"],
-            home,
-        )
-        market_cover = consensus_cover_prob(odds, opponent_odds, float(spread))
-        if market_cover is not None:
-            p_cover = market_cover
+        p_cover = market_probs(team_runs, opponent_runs, None, float(spread), weights)["p_home_cover"]
+        if weights is None:
+            p_cover = shift_cover_prob(p_cover, home)
+            market_cover = consensus_cover_prob(odds, opponent_odds, float(spread))
+            if market_cover is not None:
+                p_cover = market_cover
         candidates.append((
             _price_edge(p_cover, _get(offer, "spread_odds")),
             offer,
@@ -106,17 +107,25 @@ def _best_total(
     away_odds: dict | None,
     home_runs: np.ndarray,
     away_runs: np.ndarray,
+    weights: np.ndarray | None = None,
 ) -> tuple[dict, float | None, float | None]:
-    offers = _offers(home_odds) or _offers(away_odds)
+    offers = _offers(home_odds) + _offers(away_odds)
     candidates = []
     for offer in offers:
         total = _get(offer, "total")
-        if pd.isna(total):
+        if any(pd.isna(value) for value in (total, _get(offer, "total_over_odds"), _get(offer, "total_under_odds"))):
             continue
-        probs = market_probs(home_runs, away_runs, float(total), None)
+        probs = market_probs(home_runs, away_runs, float(total), None, weights)
+        # Prices condition on settlement. Keep the legacy half-push display
+        # fields, but never shop an integer total as though pushes were wins.
+        push = float(np.average(home_runs + away_runs == float(total), weights=weights))
+        if push >= 1:
+            continue
+        over = (probs["p_over"] - 0.5 * push) / (1 - push)
+        under = (probs["p_under"] - 0.5 * push) / (1 - push)
         edge = max(
-            _price_edge(probs["p_over"], _get(offer, "total_over_odds")),
-            _price_edge(probs["p_under"], _get(offer, "total_under_odds")),
+            _price_edge(over, _get(offer, "total_over_odds")),
+            _price_edge(under, _get(offer, "total_under_odds")),
         )
         candidates.append((edge, offer, probs["p_over"], probs["p_under"]))
     if not candidates:
@@ -171,16 +180,20 @@ def build_game_rows(
     h = np.asarray(home_runs)
     a = np.asarray(away_runs)
     n = len(h)
+    now = datetime.now(UTC)
+    home_odds = fresh_odds(home_odds, as_of=now, start_time=start_time)
+    away_odds = fresh_odds(away_odds, as_of=now, start_time=start_time)
+    weights, joint = adjust_joint(h, a, home_odds, away_odds)
+    if weights is None:
+        log.warning("Joint adjustment rejected for game %s: %s; recommendations suppressed", game_pk, joint["reason"])
 
-    # Published win prob = HFA-shifted sim prob anchored to the de-vigged
-    # market consensus (see backend/strategy.py constants for the 2026-08-16
-    # measurements). The raw sim prob systematically over-rates big underdogs
-    # relative to what they actually win, which made them look +EV; anchoring
-    # is what the ML flag, Kelly, and the site all consume.
-    # Run lines use paired market consensus; totals remain simulator outputs.
+    # Successful adjustment makes every displayed quantity a summary of one
+    # joint forecast. A rejected adjustment retains the legacy display, with
+    # an explicit reason in provenance and all recommendations suppressed.
     p_home_sim = market_probs(h, a, None, None)["p_home_win"]
     p_market_home = consensus_home_prob(home_odds, away_odds)
-    p_home_win = anchor_home_prob(p_home_sim, p_market_home)
+    p_home_win = (round(market_probs(h, a, None, None, weights)["p_home_win"], 4) if weights is not None
+                  else anchor_home_prob(p_home_sim, p_market_home))
     p_away_win = round(1.0 - p_home_win, 4)
 
     # Transform the per-draw band endpoints through the same monotonic map so
@@ -193,9 +206,9 @@ def build_game_rows(
 
     home_ml_offer = _best_moneyline(home_odds, p_home_win)
     away_ml_offer = _best_moneyline(away_odds, p_away_win)
-    home_rl_offer, p_home_cover = _best_runline(home_odds, h, a, home=True, opponent_odds=away_odds)
-    away_rl_offer, p_away_cover = _best_runline(away_odds, a, h, home=False, opponent_odds=home_odds)
-    total_offer, p_over, p_under = _best_total(home_odds, away_odds, h, a)
+    home_rl_offer, p_home_cover = _best_runline(home_odds, h, a, home=True, opponent_odds=away_odds, weights=weights)
+    away_rl_offer, p_away_cover = _best_runline(away_odds, a, h, home=False, opponent_odds=home_odds, weights=weights)
+    total_offer, p_over, p_under = _best_total(home_odds, away_odds, h, a, weights)
 
     home_ml = _get(home_ml_offer, "moneyline")
     away_ml = _get(away_ml_offer, "moneyline")
@@ -209,17 +222,18 @@ def build_game_rows(
     away_total_over = home_total_over
     away_total_under = home_total_under
 
-    h_p10, h_p50, h_p90 = runs_percentiles(h)
-    a_p10, a_p50, a_p90 = runs_percentiles(a)
+    h_p10, h_p50, h_p90 = runs_percentiles(h, weights)
+    a_p10, a_p50, a_p90 = runs_percentiles(a, weights)
     total_arr = h + a
-    t_p10, t_p50, t_p90 = runs_percentiles(total_arr)
+    t_p10, t_p50, t_p90 = runs_percentiles(total_arr, weights)
 
     # Empirical run-distribution histograms (21 bins, 0..20 runs) for the site.
     # The capped-bin trick: runs > 20 land in bin 20. Tail mass past 20 is tiny.
     h_clipped = np.minimum(h, 20)
     a_clipped = np.minimum(a, 20)
-    h_hist = (np.bincount(h_clipped, minlength=21)[:21] / n).round(5).tolist()
-    a_hist = (np.bincount(a_clipped, minlength=21)[:21] / n).round(5).tolist()
+    mass = weights if weights is not None else np.full(n, 1 / n)
+    h_hist = np.bincount(h_clipped, weights=mass, minlength=21)[:21].round(5).tolist()
+    a_hist = np.bincount(a_clipped, weights=mass, minlength=21)[:21].round(5).tolist()
 
     # away band is the complement of the home band (perfectly anti-correlated
     # by construction: every per-draw home_wp_k pairs with away_wp_k = 1 - home_wp_k).
@@ -229,27 +243,30 @@ def build_game_rows(
     else:
         away_wp_p10 = away_wp_p90 = None
 
-    home_xR = float(h.mean())
-    away_xR = float(a.mean())
+    home_xR = float(np.average(h, weights=weights))
+    away_xR = float(np.average(a, weights=weights))
     our_total = round(home_xR + away_xR, 4)
     home_total_diff = round(our_total - float(total_line), 4) if pd.notna(total_line) else None
     away_total_diff = home_total_diff
 
-    now = datetime.now(UTC)
     context = {
         **(prediction_context or {}),
-        "schema_version": 1,
+        "schema_version": 2,
         "raw_home_win_prob": float((h > a).mean() + 0.5 * (h == a).mean()),
         "market_home_win_prob": p_market_home,
-        "blend_version": "logit-anchor-v1",
+        "blend_version": JOINT_VERSION if weights is not None else "logit-anchor-v1",
         "blend_weight": MARKET_ANCHOR_W_MODEL,
         "home_field_logit": HOME_FIELD_LOGIT,
         "forecast_at": now.isoformat(),
         "pitching_usage_known": pitching_usage_known,
+        "joint_adjustment": joint,
+        "market_pairs": paired_market_quotes(home_odds, away_odds),
+        "win_band_method": "anchored-raw-simulator-parameter-band",
     }
     margins, counts = np.unique(h - a, return_counts=True)
     context["margin_distribution"] = {str(int(v)): float(c / n) for v, c in zip(margins, counts)}
     for side, runs in (("home", h), ("away", a)):
+        context[f"raw_{side}_expected_runs"] = float(np.mean(runs))
         values, counts = np.unique(runs, return_counts=True)
         context[f"{side}_run_distribution"] = {str(int(v)): float(c / n) for v, c in zip(values, counts)}
     base = {
@@ -295,7 +312,7 @@ def build_game_rows(
         "total_play": flag_total_play(p_over, p_under, home_total_over, home_total_under, home_total_diff),
         "ml_confidence": ml_confidence(p_home_win, home_ml),
         "run_line_confidence": rl_confidence(p_home_cover, home_spread_odds),
-        "high_variance_flag": high_variance_flag(h),
+        "high_variance_flag": high_variance_flag(h, weights=weights),
         "runs_hist": h_hist,
     }
     home_row.update(_kelly_block(home_row, p_home_win, p_home_cover, p_over, p_under,
@@ -331,7 +348,7 @@ def build_game_rows(
         "total_play": flag_total_play(p_over, p_under, away_total_over, away_total_under, away_total_diff),
         "ml_confidence": ml_confidence(p_away_win, away_ml),
         "run_line_confidence": rl_confidence(p_away_cover, away_spread_odds),
-        "high_variance_flag": high_variance_flag(a),
+        "high_variance_flag": high_variance_flag(a, weights=weights),
         "runs_hist": a_hist,
     }
     away_row.update(_kelly_block(away_row, p_away_win, p_away_cover, p_over, p_under,
@@ -350,7 +367,7 @@ def build_game_rows(
             row["kelly_full_ml"] = 0.0
             row["kelly_quarter_ml"] = 0.0
 
-    if not starters_known or not lineups_live or not pitching_usage_known:
+    if weights is None or not starters_known or not lineups_live or not pitching_usage_known:
         _suppress_bet(home_row)
         _suppress_bet(away_row)
 

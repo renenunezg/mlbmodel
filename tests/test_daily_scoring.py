@@ -97,6 +97,21 @@ def test_score_games_end_to_end(monkeypatch):
             assert abs(rows[0].win_prob_p10 + rows[1].win_prob_p90 - 1) < 1e-3
         for side in ("home", "away"):
             assert abs(sum(context[f"{side}_run_distribution"].values()) - 1) < 1e-6
+        joint = context["joint_adjustment"]
+        raw = np.array(joint["raw_joint_counts"])
+        assert raw[:, 2].sum() == joint["sample_count"]
+        for i, side in enumerate(("home", "away")):
+            assert context[f"raw_{side}_expected_runs"] == pytest.approx(raw[:, i] @ raw[:, 2] / raw[:, 2].sum())
+        if joint["status"] == "adjusted":
+            adjusted = np.array(joint["joint_distribution"])
+            weights = adjusted[:, 2]
+            assert weights.sum() == pytest.approx(1)
+            assert joint["target_error"] <= 1e-6
+            for i, row in enumerate(rows):
+                assert row.expected_runs == pytest.approx(weights @ adjusted[:, i], abs=5.1e-5)
+                assert row.win_prob == pytest.approx(weights @ (adjusted[:, i] > adjusted[:, 1-i]), abs=5.1e-5)
+        else:
+            assert all(r.ev_flag == r.run_line_ev_flag == r.total_play == "No Play" for r in rows)
 
     # Recommendation fields are strings, never null. Moneyline and run line are
     # enabled; totals remains behind its kill switch.

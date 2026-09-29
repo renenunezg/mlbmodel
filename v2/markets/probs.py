@@ -22,6 +22,7 @@ def market_probs(
     away_runs: np.ndarray,
     total_line: float | None,
     spread_home: float | None,
+    weights: np.ndarray | None = None,
 ) -> dict:
     """ML / RL / totals empirical probabilities from sim arrays. Missing inputs → None keys."""
     h = np.asarray(home_runs)
@@ -31,16 +32,20 @@ def market_probs(
         raise ValueError("home_runs and away_runs must be same non-empty length")
 
     margin = h - a
-    p_home_win_strict = float((margin > 0).mean())
-    p_away_win_strict = float((margin < 0).mean())
-    p_tie = float((margin == 0).mean())
+    p_home_win_strict = float(np.average(margin > 0, weights=weights))
+    p_away_win_strict = float(np.average(margin < 0, weights=weights))
+    p_tie = float(np.average(margin == 0, weights=weights))
     # Ties shouldn't happen (game_sim resolves via extras), but split 50/50 if so.
     p_home_win = p_home_win_strict + 0.5 * p_tie
     p_away_win = p_away_win_strict + 0.5 * p_tie
 
+    # Preserve consensus precision when the empirical samples are reweighted.
+    def probability(value):
+        return float(value) if weights is not None else round(float(value), 4)
+
     out = {
-        "p_home_win": round(p_home_win, 4),
-        "p_away_win": round(p_away_win, 4),
+        "p_home_win": probability(p_home_win),
+        "p_away_win": probability(p_away_win),
         "p_home_cover": None,
         "p_away_cover": None,
         "p_over": None,
@@ -50,20 +55,20 @@ def market_probs(
     if spread_home is not None and not _isnan(spread_home):
         # Home covers when (h - a) > -spread_home. Push at equality.
         threshold = -float(spread_home)
-        p_home_strict = float((margin > threshold).mean())
-        p_push_rl = float((margin == threshold).mean())
-        p_away_strict = float((margin < threshold).mean())
-        out["p_home_cover"] = round(p_home_strict + 0.5 * p_push_rl, 4)
-        out["p_away_cover"] = round(p_away_strict + 0.5 * p_push_rl, 4)
+        p_home_strict = float(np.average(margin > threshold, weights=weights))
+        p_push_rl = float(np.average(margin == threshold, weights=weights))
+        p_away_strict = float(np.average(margin < threshold, weights=weights))
+        out["p_home_cover"] = probability(p_home_strict + 0.5 * p_push_rl)
+        out["p_away_cover"] = probability(p_away_strict + 0.5 * p_push_rl)
 
     if total_line is not None and not _isnan(total_line):
         totals = h + a
         line = float(total_line)
-        p_over_strict = float((totals > line).mean())
-        p_under_strict = float((totals < line).mean())
-        p_push_t = float((totals == line).mean())
-        out["p_over"] = round(p_over_strict + 0.5 * p_push_t, 4)
-        out["p_under"] = round(p_under_strict + 0.5 * p_push_t, 4)
+        p_over_strict = float(np.average(totals > line, weights=weights))
+        p_under_strict = float(np.average(totals < line, weights=weights))
+        p_push_t = float(np.average(totals == line, weights=weights))
+        out["p_over"] = probability(p_over_strict + 0.5 * p_push_t)
+        out["p_under"] = probability(p_under_strict + 0.5 * p_push_t)
 
     return out
 
@@ -204,9 +209,14 @@ def _sigmoid(x: float) -> float:
     return float(1.0 / (1.0 + np.exp(-x)))
 
 
-def runs_percentiles(arr: np.ndarray) -> tuple[float, float, float]:
+def runs_percentiles(arr: np.ndarray, weights: np.ndarray | None = None) -> tuple[float, float, float]:
     """Return (p10, p50, p90) of runs."""
     a = np.asarray(arr)
+    if weights is not None:
+        order = np.argsort(a)
+        cumulative = np.cumsum(weights[order]) / np.sum(weights)
+        indexes = np.minimum(np.searchsorted(cumulative, [0.1, 0.5, 0.9]), len(a) - 1)
+        return tuple(float(v) for v in a[order][indexes])
     p10, p50, p90 = np.quantile(a, [0.10, 0.50, 0.90])
     return float(p10), float(p50), float(p90)
 

@@ -113,7 +113,10 @@ def kelly_total(
     return float(full), round(full * 0.25, 6)
 
 
-def high_variance_flag(samples: np.ndarray, threshold: float = HIGH_VARIANCE_RUNS_STDEV) -> str:
+def high_variance_flag(
+    samples: np.ndarray, threshold: float = HIGH_VARIANCE_RUNS_STDEV, weights: np.ndarray | None = None,
+) -> str:
     """'Yes' / 'No' based on stdev of per-team runs across sims."""
-    s = float(np.std(samples))
+    mean = np.average(samples, weights=weights)
+    s = float(np.sqrt(np.average((samples - mean) ** 2, weights=weights)))
     return "Yes" if s > threshold else "No"
