@@ -1,7 +1,7 @@
 name: Live Win Probability
 
 on:
-  # Supabase queues the replacement hourly. One publisher runs at a time;
+  # Supabase dispatches only around unfinished games. One publisher runs at a time;
   # additional dispatches replace only the pending run, never the active feed.
   repository_dispatch:
     types: [live-win-probability]
@@ -37,5 +37,5 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         # Hand off before the six-hour runner limit; the queued replacement
-        # starts after this worker exits. No frozen forecasts are updated.
+        # starts after this worker exits. Idle slates exit early.
         run: python -m v2.live.publish --artifact models/live_win_expectancy.json --watch --duration 20700 --publish

@@ -1,6 +1,6 @@
 """Poll current MLB games and publish snapshots across the Supabase boundary.
 
-Defaults to one read-only pass. --watch polls until interrupted; --publish opts
+Defaults to one read-only pass. --watch stops when the slate is idle; --publish opts
 into database writes and still requires the backend database write guard.
 Example: python -m v2.live.publish --artifact models/live_win_expectancy.json --watch
 """
@@ -12,7 +12,7 @@ import json
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -23,6 +23,7 @@ from v2.live.model import WinExpectancy
 
 log = logging.getLogger(__name__)
 HEARTBEAT_SECONDS = 60
+INACTIVE_STATUSES = {"Postponed", "Cancelled", "Canceled", "Suspended", "If Necessary"}
 
 
 def scheduled_games() -> list[dict]:
@@ -33,9 +34,18 @@ def scheduled_games() -> list[dict]:
     }, timeout=15)
     response.raise_for_status()
     games = {game["gamePk"]: game for day in response.json().get("dates", []) for game in day["games"]
-             if game.get("gameType") in {"R", "F", "D", "L", "W"}
-             and game.get("status", {}).get("abstractGameState") in {"Live", "Final"}}
+             if game.get("gameType") in {"R", "F", "D", "L", "W"}}
     return list(games.values())
+
+
+def needs_watch(game: dict, now: datetime) -> bool:
+    status = game["status"]
+    if status.get("detailedState") in INACTIVE_STATUSES or status["abstractGameState"] == "Final":
+        return False
+    if status["abstractGameState"] == "Live":
+        return True  # Includes rain delays and games continuing past midnight.
+    start = datetime.fromisoformat(game["gameDate"].replace("Z", "+00:00"))
+    return now - timedelta(days=1) <= start <= now + timedelta(minutes=15)
 
 
 def snapshot(game_pk: int, model: WinExpectancy, artifact_sha256: str) -> dict:
@@ -129,8 +139,10 @@ def main() -> None:
                     next_schedule = started + 60
                 fingerprints = {g["gamePk"]: json.dumps([g["status"], g["teams"]], sort_keys=True)
                                 for g in games}
-                pending = [g for g in games if g["status"]["abstractGameState"] == "Live"
-                           or completed.get(g["gamePk"]) != fingerprints[g["gamePk"]]]
+                pending = [g for g in games if g["status"]["abstractGameState"] in {"Live", "Final"}
+                           and g["status"].get("detailedState") not in INACTIVE_STATUSES
+                           and (g["status"]["abstractGameState"] == "Live"
+                                or completed.get(g["gamePk"]) != fingerprints[g["gamePk"]])]
                 jobs = {workers.submit(snapshot, g["gamePk"], model, digest): g["gamePk"] for g in pending}
                 snapshots = []
                 for job in as_completed(jobs):
@@ -149,6 +161,16 @@ def main() -> None:
                 # Bound state across long-running workers and season changes.
                 completed = {pk: fp for pk, fp in completed.items() if pk in fingerprints}
                 published = {pk: state for pk, state in published.items() if pk in fingerprints}
+                # Do not exit until the final batch commits. Failed or incomplete
+                # final feeds remain pending and are retried on the next pass.
+                unfinished_finals = any(g["status"]["abstractGameState"] == "Final"
+                                        and completed.get(g["gamePk"]) != fingerprints[g["gamePk"]]
+                                        for g in games)
+                if args.watch and not unfinished_finals and not any(
+                    needs_watch(g, datetime.now(UTC)) for g in games
+                ):
+                    log.info("No live or imminent games; stopping until the next scheduled dispatch")
+                    return
             except Exception:
                 if not args.watch:
                     raise

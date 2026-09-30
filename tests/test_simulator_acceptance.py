@@ -133,6 +133,63 @@ def test_live_probability_feed_endings_and_frozen_forecast_separation(tmp_path, 
     assert publish_snapshots([final], published, now=130) == {123}
     assert publish_snapshots([final], published, now=240) == set()  # Finals need no heartbeat.
 
+    # Run the actual watch loop across the last final and an unsuccessful final
+    # commit. Stopping early loses the result; not stopping burns overnight work.
+    from v2.live import publish as publisher
+
+    wall_now = datetime.now(UTC)
+
+    def scheduled(state, *, minutes=0, detail=None):
+        return {"gamePk": 123, "gameDate": (wall_now + timedelta(minutes=minutes)).isoformat(),
+                "status": {"abstractGameState": state, "detailedState": detail or state}, "teams": {}}
+
+    def run_watch(slates, fail_final=False):
+        elapsed = [0.]
+        reads, writes = [], []
+
+        def schedule():
+            slate = slates[min(len(reads), len(slates) - 1)]
+            reads.append(slate)
+            return slate
+
+        def sleep(seconds):
+            assert len(reads) < 5, "Worker kept polling after the slate became idle"
+            elapsed[0] += 60
+
+        def score(*args):
+            state = reads[-1][0]["status"]["abstractGameState"]
+            return {**final, "abstract_state": state, "status": state,
+                    "home_team": "HOME", "away_team": "AWAY"}
+
+        def write(items, acknowledged):
+            nonlocal fail_final
+            if fail_final and items and items[0]["abstract_state"] == "Final":
+                fail_final = False
+                raise RuntimeError("Final transaction failed")
+            writes.extend(items)
+            return {item["game_pk"] for item in items}
+
+        with monkeypatch.context() as patch:
+            patch.setattr(sys, "argv", ["publish", "--artifact", str(tmp_path / "model.json"),
+                                        "--watch", "--publish"])
+            patch.setattr(sys.modules["backend.db"], "writes_allowed", lambda: True, raising=False)
+            patch.setattr(publisher, "scheduled_games", schedule)
+            patch.setattr(publisher, "snapshot", score)
+            patch.setattr(publisher, "publish_snapshots", write)
+            patch.setattr(publisher.time, "monotonic", lambda: elapsed[0])
+            patch.setattr(publisher.time, "sleep", sleep)
+            publisher.main()
+        return reads, writes
+
+    reads, writes = run_watch([[scheduled("Live")], [scheduled("Final")]], fail_final=True)
+    assert len(reads) == 3 and [item["abstract_state"] for item in writes] == ["Live", "Final"]
+    for slate in ([], [scheduled("Final")], [scheduled("Preview", minutes=120)],
+                  [scheduled("Live", detail="Suspended")], [scheduled("Preview", detail="Postponed")]):
+        assert len(run_watch([slate])[0]) == 1
+    for active in (scheduled("Preview", minutes=5), scheduled("Live", minutes=-600),
+                   scheduled("Live", detail="Delayed")):
+        assert len(run_watch([[active], [scheduled("Final")]])[0]) == 2
+
 
 def test_simulator_uses_the_pitcher_intercept(monkeypatch):
     from v2.simulator.posteriors import K_FREE, _assemble
