@@ -53,6 +53,30 @@ def snapshot(game_pk: int, model: WinExpectancy, artifact_sha256: str) -> dict:
             "artifact_sha256": artifact_sha256, "probability_source": "league_average_game_state"}
 
 
+def schedule_fingerprint(game: dict) -> str:
+    # Team records change after unrelated games; only game status and scores
+    # should invalidate a saved final. A score correction triggers a new fetch.
+    return json.dumps([game["status"], *[game["teams"].get(side, {}).get("score")
+                                       for side in ("away", "home")]], sort_keys=True)
+
+
+def saved_finals(game_pks: list[int], artifact_sha256: str) -> dict[int, str]:
+    from sqlalchemy import text
+
+    from backend.db import engine
+
+    with engine.connect() as conn:
+        return dict(conn.execute(text("""
+            SELECT game_pk, payload->>'schedule_fingerprint'
+            FROM live_win_probability
+            WHERE game_pk = ANY(:game_pks)
+                AND payload->>'abstract_state' = 'Final'
+                AND payload->>'artifact_sha256' = :artifact
+                AND payload->>'schedule_fingerprint' IS NOT NULL
+                AND payload->>'home_win_probability' IN ('0.0', '1.0', '0', '1')
+        """), {"game_pks": game_pks, "artifact": artifact_sha256}).tuples().all())
+
+
 def publish_snapshots(
     snapshots: list[dict], published: dict[int, tuple[str, float, str]], *, now: float | None = None,
 ) -> set[int]:
@@ -130,6 +154,8 @@ def main() -> None:
     games = []
     next_schedule = 0.
     deadline = time.monotonic() + args.duration if args.duration else float("inf")
+    expires_at = (datetime.now(UTC) + timedelta(seconds=args.duration)).isoformat() if args.duration else None
+    restored = not args.publish
     with ThreadPoolExecutor(max_workers=4) as workers:
         while True:
             started = time.monotonic()
@@ -137,8 +163,10 @@ def main() -> None:
                 if started >= next_schedule:
                     games = scheduled_games()
                     next_schedule = started + 60
-                fingerprints = {g["gamePk"]: json.dumps([g["status"], g["teams"]], sort_keys=True)
-                                for g in games}
+                if not restored:
+                    completed.update(saved_finals([g["gamePk"] for g in games], digest))
+                    restored = True
+                fingerprints = {g["gamePk"]: schedule_fingerprint(g) for g in games}
                 pending = [g for g in games if g["status"]["abstractGameState"] in {"Live", "Final"}
                            and g["status"].get("detailedState") not in INACTIVE_STATUSES
                            and (g["status"]["abstractGameState"] == "Live"
@@ -147,7 +175,9 @@ def main() -> None:
                 snapshots = []
                 for job in as_completed(jobs):
                     try:
-                        snapshots.append(job.result())
+                        item = job.result()
+                        snapshots.append({**item, "schedule_fingerprint": fingerprints[item["game_pk"]],
+                                          "worker_expires_at": expires_at})
                     except (requests.RequestException, ValueError, KeyError):
                         log.exception("Could not refresh game %s", jobs[job])
                 written = publish_snapshots(snapshots, published) if args.publish else set()

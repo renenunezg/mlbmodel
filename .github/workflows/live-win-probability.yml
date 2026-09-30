@@ -1,8 +1,8 @@
 name: Live Win Probability
 
 on:
-  # Supabase dispatches only around unfinished games. One publisher runs at a time;
-  # additional dispatches replace only the pending run, never the active feed.
+  # Supabase dispatches around unfinished games only when live publication is
+  # stale or the worker is nearing expiry. One publisher runs at a time.
   repository_dispatch:
     types: [live-win-probability]
   workflow_dispatch:

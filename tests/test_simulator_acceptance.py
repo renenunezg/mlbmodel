@@ -143,7 +143,7 @@ def test_live_probability_feed_endings_and_frozen_forecast_separation(tmp_path, 
         return {"gamePk": 123, "gameDate": (wall_now + timedelta(minutes=minutes)).isoformat(),
                 "status": {"abstractGameState": state, "detailedState": detail or state}, "teams": {}}
 
-    def run_watch(slates, fail_final=False):
+    def run_watch(slates, fail_final=False, stored=None):
         elapsed = [0.]
         reads, writes = [], []
 
@@ -174,6 +174,7 @@ def test_live_probability_feed_endings_and_frozen_forecast_separation(tmp_path, 
                                         "--watch", "--publish"])
             patch.setattr(sys.modules["backend.db"], "writes_allowed", lambda: True, raising=False)
             patch.setattr(publisher, "scheduled_games", schedule)
+            patch.setattr(publisher, "saved_finals", lambda *args: stored or {})
             patch.setattr(publisher, "snapshot", score)
             patch.setattr(publisher, "publish_snapshots", write)
             patch.setattr(publisher.time, "monotonic", lambda: elapsed[0])
@@ -189,6 +190,16 @@ def test_live_probability_feed_endings_and_frozen_forecast_separation(tmp_path, 
     for active in (scheduled("Preview", minutes=5), scheduled("Live", minutes=-600),
                    scheduled("Live", detail="Delayed")):
         assert len(run_watch([[active], [scheduled("Final")]])[0]) == 2
+
+    # A restarted publisher reuses a committed final, including when team
+    # records change elsewhere. A correction to this game's score is refreshed.
+    cached = scheduled("Final")
+    cached["teams"] = {"away": {"score": 3, "leagueRecord": {"wins": 90}}, "home": {"score": 4}}
+    stored = {123: publisher.schedule_fingerprint(cached)}
+    cached["teams"]["away"]["leagueRecord"]["wins"] = 91
+    assert run_watch([[cached]], stored=stored)[1] == []
+    cached["teams"]["away"]["score"] = 5
+    assert len(run_watch([[cached]], stored=stored)[1]) == 1
 
 
 def test_simulator_uses_the_pitcher_intercept(monkeypatch):

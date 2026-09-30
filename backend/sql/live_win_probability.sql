@@ -40,6 +40,14 @@ SELECT cron.schedule('live-win-probability-dispatch', '*/5 * * * *', $dispatch$
           AND g.start_time <= now() + interval '15 minutes'
           AND g.status NOT IN ('Final', 'Postponed', 'Cancelled', 'Canceled', 'Suspended', 'If Necessary')
           AND coalesce(live.payload->>'abstract_state', '') <> 'Final'
+    ) AND NOT EXISTS (
+        -- Existing live writes are the heartbeat. Queue a handoff before the
+        -- bounded worker expires, or a recovery when publication stops.
+        SELECT 1 FROM mlb.live_win_probability
+        WHERE updated_at > now() - interval '2 minutes'
+          AND payload->>'abstract_state' = 'Live'
+          AND coalesce((payload->>'worker_expires_at')::timestamptz, 'infinity'::timestamptz)
+              > now() + interval '10 minutes'
     );
 $dispatch$);
 COMMIT;
