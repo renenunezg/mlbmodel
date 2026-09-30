@@ -8,6 +8,8 @@
 pymc==5.22.0
 arviz==0.21.0
 matplotlib<3.11
+# xarray 2026.9 requires Variable.filters(), absent from h5netcdf 1.6.1.
+xarray==2026.7.0
 h5netcdf==1.6.1
 netcdf4==1.7.4
 numpyro==0.20.1
