@@ -6,6 +6,134 @@ import pandas as pd
 import pytest
 
 
+def test_live_probability_feed_endings_and_frozen_forecast_separation(tmp_path, monkeypatch):
+    import json
+    import sys
+    from contextlib import contextmanager
+    from copy import deepcopy
+    from datetime import UTC, datetime, timedelta
+    from types import SimpleNamespace
+
+    from v2.live.feed import score_feed
+    from v2.live.model import GameState, WinExpectancy
+
+    distributions = np.broadcast_to([.8, .15, .05], (2, 3, 8, 4, 3, 3)).copy()
+    distributions[:, :, 2] = [.2, .65, .15]
+    model = WinExpectancy(distributions, {"version": "acceptance"})
+    model.save(tmp_path / "model.json")
+    model = WinExpectancy.load(tmp_path / "model.json")
+    feed = {
+        "gamePk": 123,
+        "metaData": {"timeStamp": "20260930_190000"},
+        "gameData": {"game": {"type": "R"}, "status": {"abstractGameState": "Live"}},
+        "liveData": {"linescore": {
+            "scheduledInnings": 9, "currentInning": 9, "inningState": "End",
+            "outs": 3, "balls": 0, "strikes": 3, "offense": {},
+            "teams": {"home": {"runs": 2}, "away": {"runs": 2}},
+        }, "plays": {"allPlays": []}},
+    }
+    now = datetime(2026, 9, 30, 19, 0, 30, tzinfo=UTC)
+    untouched = deepcopy(feed)
+    result = score_feed(feed, model, fetched_at=now)
+    assert feed == untouched  # No mutation of source or pregame forecast objects.
+    assert result["state"] == {
+        "inning": 10, "top": True, "outs": 0, "bases": 2, "home_score": 2,
+        "away_score": 2, "balls": 0, "strikes": 0, "automatic_runner": True,
+    }
+    assert result["home_win_probability"] + result["away_win_probability"] == 1
+    # Identical staffs starting the 10th with identical automatic runners are 50/50.
+    # The bottom half must receive its runner too, not just the observed top half.
+    assert result["home_win_probability"] == pytest.approx(.5)
+    assert not result["stale"]
+    feed["gameData"]["game"]["type"] = "D"
+    postseason = score_feed(feed, model, fetched_at=now)
+    assert postseason["state"]["bases"] == 0 and not postseason["state"]["automatic_runner"]
+
+    ls = feed["liveData"]["linescore"]
+    # Home ahead after the top ninth: no bottom half should be simulated.
+    ls.update(inningState="Middle")
+    ls["teams"]["home"]["runs"] = 3
+    assert score_feed(feed, model, fetched_at=now)["home_win_probability"] == 1
+    # The same lead before the third out is not a finished game.
+    ls.update(inningState="Top", outs=2, strikes=2)
+    assert 0 < score_feed(feed, model, fetched_at=now)["home_win_probability"] < 1
+    # Walkoff before three outs and an away win after the bottom ninth.
+    ls.update(inningState="Bottom", outs=0)
+    assert score_feed(feed, model, fetched_at=now)["home_win_probability"] == 1
+    ls.update(inningState="End", outs=3)
+    ls["teams"]["away"]["runs"] = 4
+    assert score_feed(feed, model, fetched_at=now)["home_win_probability"] == 0
+    feed["gameData"]["status"]["abstractGameState"] = "Final"
+    assert score_feed(feed, model, fetched_at=now)["home_win_probability"] == 0
+    ls["currentInning"] = 7
+    called = score_feed(feed, model, fetched_at=now)
+    assert called["history"][-1]["label"] == "Final"
+    assert called["history"][-1]["home_win_probability"] == 0
+
+    feed["gameData"]["status"]["abstractGameState"] = "Live"
+    ls.update(inningState="Top", outs=0, balls=4)
+    invalid = score_feed(feed, model, fetched_at=now)
+    assert invalid["home_win_probability"] is None and invalid["unavailable_reason"]
+    ls["balls"] = 0
+    assert score_feed(feed, model, fetched_at=datetime(2026, 9, 30, 19, 5, tzinfo=UTC))["stale"]
+    del ls["outs"]
+    assert score_feed(feed, model, fetched_at=now)["home_win_probability"] is None
+    with pytest.raises(ValueError, match="integers"):
+        GameState(9, True, 0, 0, 1.5, 0)
+
+    # Exercise the publication path without a database: suppress clock-only
+    # updates, retain freshness, and retry a batch whose commit failed.
+    from v2.live.publish import publish_snapshots
+
+    commits = []
+    fail_commit = False
+
+    @contextmanager
+    def transaction():
+        batch = []
+
+        def execute(statement, params):
+            assert "INSERT INTO live_win_probability" in str(statement)
+            assert "model_outputs" not in str(statement)
+            batch.extend(json.loads(params["snapshots"]))
+
+        yield SimpleNamespace(execute=execute)
+        if fail_commit:
+            raise RuntimeError("commit failed")
+        commits.append(batch)
+
+    monkeypatch.setitem(sys.modules, "backend.db", SimpleNamespace(engine=SimpleNamespace(begin=transaction)))
+    published = {}
+
+    def packet(second):
+        stamp = (now + timedelta(seconds=second)).isoformat()
+        return {**deepcopy(result), "fetched_at": stamp, "source_timestamp": stamp}
+
+    first = packet(0)
+    assert publish_snapshots([first], published, now=0) == {123}
+    assert publish_snapshots([packet(30)], published, now=30) == set()
+    assert len(commits) == 1
+    assert publish_snapshots([packet(60)], published, now=60) == {123}
+    assert commits[-1][0]["payload"]["fetched_at"] == packet(60)["fetched_at"]
+    changed = packet(61)
+    changed["state"]["balls"] = 1
+    assert publish_snapshots([changed], published, now=61) == {123}
+    assert publish_snapshots([packet(59)], published, now=62) == set()  # Out-of-order upstream response.
+    corrected = deepcopy(changed)
+    corrected["history"][0]["description"] = "Corrected play description"
+    fail_commit = True
+    with pytest.raises(RuntimeError, match="commit failed"):
+        publish_snapshots([corrected], published, now=63)
+    fail_commit = False
+    assert publish_snapshots([corrected], published, now=64) == {123}
+    frozen_source = {**corrected, "fetched_at": packet(125)["fetched_at"], "stale": True}
+    assert publish_snapshots([frozen_source], published, now=125) == {123}
+    assert commits[-1][0]["source_timestamp"] == corrected["source_timestamp"]
+    final = {**packet(130), "abstract_state": "Final", "home_win_probability": 1., "away_win_probability": 0.}
+    assert publish_snapshots([final], published, now=130) == {123}
+    assert publish_snapshots([final], published, now=240) == set()  # Finals need no heartbeat.
+
+
 def test_simulator_uses_the_pitcher_intercept(monkeypatch):
     from v2.simulator.posteriors import K_FREE, _assemble
 

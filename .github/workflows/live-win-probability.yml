@@ -1,0 +1,41 @@
+name: Live Win Probability
+
+on:
+  # Supabase queues the replacement hourly. One publisher runs at a time;
+  # additional dispatches replace only the pending run, never the active feed.
+  repository_dispatch:
+    types: [live-win-probability]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-win-probability
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install live publisher dependencies
+        run: pip install numpy pandas requests SQLAlchemy==2.0.54 psycopg2-binary python-dotenv
+      - name: Download validated probability artifact
+        run: |
+          mkdir -p models
+          curl --fail --location --retry 3 --output models/live_win_expectancy.json \
+            https://github.com/renenunezg/mlbmodel/releases/download/live-win-expectancy-2026-09-30/live_win_expectancy.json
+          echo 'ceda00504006d66e455d5335529787461a41f13cac72303df2d57c202fbdfc1a  models/live_win_expectancy.json' | sha256sum --check
+      - name: Publish live snapshots
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        # Hand off before the six-hour runner limit; the queued replacement
+        # starts after this worker exits. No frozen forecasts are updated.
+        run: python -m v2.live.publish --artifact models/live_win_expectancy.json --watch --duration 20700 --publish
