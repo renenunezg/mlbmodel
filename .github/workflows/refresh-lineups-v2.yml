@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v4
         # Scoring and training use the same validated simulator release.
         with:
-          ref: b13ee8ec882daf1b87cb91f25c353e96414a2a8e
+          ref: 3583b21f608dadf318f146b9f4b348765da53c60
 
       - name: Restore Statcast cache
         uses: actions/cache@v4
