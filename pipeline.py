@@ -88,12 +88,9 @@ def update_scores_and_schedule():
         if not sched.empty:
             schedules[d] = sched
 
-    if not schedules:
-        log.info("No schedule data returned for any date")
-        return
-
     # Upsert all games and update scores in one transaction
     score_updates = 0
+    scheduled_pks = [int(pk) for sched in schedules.values() for pk in sched["game_pk"]]
     with engine.begin() as conn:
         for d, sched in schedules.items():
             _batch_upsert_games(conn, sched)
@@ -116,6 +113,20 @@ def update_scores_and_schedule():
                         },
                     )
                     score_updates += result.rowcount
+
+        # MLB drops an unneeded series game from the schedule once the series
+        # is clinched, so no upsert ever reaches its row.
+        dropped = conn.execute(
+            text("""
+                DELETE FROM games
+                WHERE game_date = ANY(:dates)
+                  AND status = 'If Necessary'
+                  AND NOT (game_pk = ANY(:scheduled_pks))
+            """),
+            {"dates": dates, "scheduled_pks": scheduled_pks},
+        ).rowcount
+    if dropped:
+        log.info(f"{dropped} unplayed if-necessary games removed")
 
     total_games = sum(len(s) for s in schedules.values())
     log.info(f"{total_games} games upserted across {len(schedules)} dates, {score_updates} scores finalized")
