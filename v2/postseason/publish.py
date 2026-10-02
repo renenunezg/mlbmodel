@@ -71,6 +71,20 @@ def field(year: int) -> list[dict]:
     return teams
 
 
+def regular_season_end(year: int) -> date:
+    """Date of the last regular-season game, the latest a model can be trained through."""
+    dates = [d["date"] for d in api("schedule", sportId=1, season=year, gameType="R")["dates"]]
+    if not dates:
+        raise ValueError("The regular-season schedule is unavailable")
+    return date.fromisoformat(max(dates))
+
+
+def model_is_stale(cutoff: date, today: date, season_end: date) -> bool:
+    """The model trains on regular-season games only, so once it covers the
+    whole regular season it stays current for the entire postseason."""
+    return cutoff < season_end and (today - cutoff).days > MAX_MODEL_AGE
+
+
 def roster_plan(team: dict, year: int) -> dict:
     roster = api(
         f"teams/{team['id']}/roster",
@@ -197,7 +211,8 @@ def build_snapshot(
     cutoff = date.fromisoformat(provenance["training_max_date"])
     if cutoff >= today:
         raise ValueError("Model training cutoff must precede the forecast date")
-    if for_publication and ((today - cutoff).days > MAX_MODEL_AGE or n_sims < MIN_PUBLISH_SIMS):
+    stale = model_is_stale(cutoff, today, regular_season_end(year))
+    if for_publication and (stale or n_sims < MIN_PUBLISH_SIMS):
         raise ValueError("Refresh model artifacts and use at least 10,000 simulations before publication")
     teams = field(year)
     with ThreadPoolExecutor(max_workers=4) as pool:
@@ -212,7 +227,7 @@ def build_snapshot(
     ):
         raise ValueError("Simulator tables need consistent pre-forecast training cutoffs")
     warnings = []
-    if (today - cutoff).days > MAX_MODEL_AGE:
+    if stale:
         warnings.append(f"Model training ends {cutoff}; refresh model artifacts before publication.")
     if n_sims < MIN_PUBLISH_SIMS:
         warnings.append(f"Preview uses {n_sims:,} simulations per game; publication requires {MIN_PUBLISH_SIMS:,}.")
@@ -290,7 +305,7 @@ def build_snapshot(
         probability_source="pure_model_hfa",
         teams=teams,
         warnings=warnings,
-        publishable=(today - cutoff).days <= MAX_MODEL_AGE and n_sims >= MIN_PUBLISH_SIMS,
+        publishable=not stale and n_sims >= MIN_PUBLISH_SIMS,
         assumptions=[
             "Model-only plate-appearance simulation, with the model home-field adjustment. No betting-market blend.",
             "Current active-roster hitters ranked by season plate appearances form projected batting orders.",
