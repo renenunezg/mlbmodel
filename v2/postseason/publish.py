@@ -2,6 +2,8 @@
 
 python -m v2.postseason.publish --output /tmp/playoffs.json
 Only fresh, full-resolution forecasts may be published.
+One snapshot is kept per round, taken before that round's first final, so the
+site can show what the bracket prediction was going into each round.
 """
 
 from __future__ import annotations
@@ -160,6 +162,16 @@ def schedule_context(teams: list[dict], year: int) -> tuple[dict, dict]:
     return completed, scheduled
 
 
+def stage(nodes: list[dict], completed: dict) -> tuple[str, bool]:
+    """The first round still undecided, and whether one of its games is final."""
+    for name in ("WC", "DS", "CS", "WS"):
+        series = [n for n in nodes if n["round"] == name]
+        wins = [max(completed.get(n["id"], {}).values(), default=0) for n in series]
+        if any(w < n["best_of"] // 2 + 1 for w, n in zip(wins, series)):
+            return name, any(completed.get(n["id"]) for n in series)
+    raise ValueError("The postseason is complete; there is no round left to forecast")
+
+
 def queue(plan: dict, starter: int) -> BullpenQueue:
     p = plan["players"].get(starter, {}).get("pitching", {})
     regular = p.get("gamesStarted", 0) >= 2 and p["gamesStarted"] >= p.get("gamesPitched", 0) / 2
@@ -264,9 +276,12 @@ def build_snapshot(
         return ps
 
     result = forecast(teams, probabilities, completed)
+    current_stage, stage_started = stage(result["nodes"], completed)
     return dict(
         schema_version=1,
         season=year,
+        stage=current_stage,
+        stage_started=stage_started,
         generated_at=datetime.now(UTC).isoformat(),
         model_version=provenance["model_version"],
         training_max_date=str(cutoff),
@@ -292,14 +307,26 @@ def build_snapshot(
 def publish(snapshot: dict) -> None:
     if not snapshot["publishable"]:
         raise ValueError("Refusing to publish a stale or low-resolution forecast")
+    # A round's snapshot is the prediction going into it: refresh it freely
+    # until the round's first final, then keep it. A round with no snapshot
+    # yet still gets one, with the finals so far locked in.
     with engine.begin() as conn:
-        conn.execute(
-            text("""INSERT INTO playoff_forecasts (season, generated_at, payload)
-            VALUES (:season, :generated_at, CAST(:payload AS jsonb))
-            ON CONFLICT (season) DO UPDATE SET generated_at = EXCLUDED.generated_at, payload = EXCLUDED.payload
-            WHERE playoff_forecasts.generated_at < EXCLUDED.generated_at"""),
-            dict(season=snapshot["season"], generated_at=snapshot["generated_at"], payload=json.dumps(snapshot)),
-        )
+        stored = conn.execute(
+            text("""INSERT INTO playoff_forecasts (season, stage, generated_at, payload)
+            VALUES (:season, :stage, :generated_at, CAST(:payload AS jsonb))
+            ON CONFLICT (season, stage) DO UPDATE
+            SET generated_at = EXCLUDED.generated_at, payload = EXCLUDED.payload
+            WHERE playoff_forecasts.generated_at < EXCLUDED.generated_at AND NOT :stage_started"""),
+            dict(
+                season=snapshot["season"],
+                stage=snapshot["stage"],
+                generated_at=snapshot["generated_at"],
+                payload=json.dumps(snapshot),
+                stage_started=snapshot["stage_started"],
+            ),
+        ).rowcount
+    if not stored:
+        log.info("%s is under way; its pre-round snapshot stays frozen", snapshot["stage"])
 
 
 def main() -> None:
