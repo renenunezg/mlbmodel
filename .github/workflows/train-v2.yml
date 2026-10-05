@@ -39,7 +39,7 @@ jobs:
           cache: "pip"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt -r v2/requirements.txt && pip install -e .
+        run: pip install -c constraints.txt -r requirements.txt -r v2/requirements.txt && pip install --no-deps -e .
 
       - name: Refresh Statcast caches through the current season
         env:

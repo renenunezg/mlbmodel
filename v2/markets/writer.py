@@ -1,8 +1,8 @@
 """Build per-team rows from sim arrays + odds, write to model_outputs / model_outputs_season.
 
 Row schema mirrors the live Supabase columns. Keyed by (game_pk, team). The
-daily table is rebuilt per-date (delete + insert); the season table is upserted
-keyed on (game_pk, team).
+daily and season tables are replaced together per game inside one transaction.
+The authoritative schedule row serializes publishers and enforces the kickoff boundary.
 
 `win_prob_p10` / `win_prob_p90` are passed in by the caller (computed from
 per-posterior-draw win-prob samples). The writer doesn't bootstrap them, since
@@ -417,45 +417,54 @@ def _to_float(v):
     return float(v)
 
 
-def write_daily(date: pd.Timestamp, rows: list[dict]) -> None:
-    """Upsert per (game_pk, team) into model_outputs.
-
-    Per-game upsert (not date-wide DELETE) so a partial scoring run, e.g. the
-    hourly lineup refresh that only touches changed games, can't blank out the
-    rest of the day's slate between DELETE and INSERT.
-    """
+def publish_forecasts(rows: list[dict]) -> None:
+    """Publish both forecast copies atomically, rejecting late or stale runs."""
     if not rows:
         return
-    df = pd.DataFrame(rows)
-    pairs = list(df[["game_pk", "team"]].itertuples(index=False, name=None))
-    if not pairs:
-        return
+    frame = pd.DataFrame(rows)
+    if frame.duplicated(["game_pk", "team"]).any():
+        raise ValueError("Duplicate forecast sides")
     with engine.begin() as conn:
-        for game_pk, team in pairs:
-            conn.execute(
-                text("DELETE FROM model_outputs WHERE game_pk = :g AND team = :t"),
-                {"g": int(game_pk), "t": team},
-            )
-        df.to_sql("model_outputs", con=conn, if_exists="append", index=False,
-                  dtype={"runs_hist": JSONB, "prediction_context": JSONB})
-
-
-def append_season(rows: list[dict]) -> None:
-    """Upsert into model_outputs_season keyed on (game_pk, team). Idempotent."""
-    if not rows:
-        return
-    df = pd.DataFrame(rows)
-    pairs = list(df[["game_pk", "team"]].itertuples(index=False, name=None))
-    if not pairs:
-        return
-    with engine.begin() as conn:
-        for game_pk, team in pairs:
-            conn.execute(
-                text("DELETE FROM model_outputs_season WHERE game_pk = :g AND team = :t"),
-                {"g": int(game_pk), "t": team},
-            )
-        df.to_sql("model_outputs_season", con=conn, if_exists="append", index=False,
-                  dtype={"runs_hist": JSONB, "prediction_context": JSONB})
+        accepted = []
+        for game_pk, group in frame.groupby("game_pk", sort=True):
+            game = conn.execute(text(
+                "SELECT game_date, start_time, home_team, away_team, status "
+                "FROM games WHERE game_pk = :g FOR UPDATE"
+            ), {"g": int(game_pk)}).mappings().one()
+            now = conn.execute(text("SELECT clock_timestamp()")).scalar_one()
+            start = pd.Timestamp(game["start_time"])
+            if pd.isna(start) or start <= pd.Timestamp(now) or game["status"] in {
+                "Live", "In Progress", "Final", "Postponed", "Cancelled", "Canceled", "If Necessary"
+            }:
+                continue
+            if set(group.team) != {game["home_team"], game["away_team"]}:
+                raise ValueError(f"Forecast must contain both scheduled teams for {game_pk}")
+            if not pd.to_datetime(group["date"]).dt.date.eq(game["game_date"]).all():
+                raise ValueError(f"Forecast date differs from official schedule for {game_pk}")
+            stamps = pd.to_datetime(group["prediction_updated_at"], utc=True)
+            if stamps.isna().any() or stamps.nunique() != 1 or (stamps > now).any():
+                raise ValueError("Forecast requires one valid source snapshot time")
+            newest = conn.execute(text(
+                "SELECT max(prediction_updated_at) FROM ("
+                "SELECT prediction_updated_at FROM model_outputs WHERE game_pk = :g "
+                "UNION ALL SELECT prediction_updated_at FROM model_outputs_season WHERE game_pk = :g) existing"
+            ), {"g": int(game_pk)}).scalar_one()
+            if newest is not None and stamps.iloc[0] <= pd.Timestamp(newest):
+                continue
+            accepted.extend(group.to_dict("records"))
+        if not accepted:
+            return
+        ids = sorted({int(row["game_pk"]) for row in accepted})
+        for table in ("model_outputs", "model_outputs_season"):
+            conn.execute(text(f"DELETE FROM {table} WHERE game_pk = ANY(:ids)"), {"ids": ids})
+            pd.DataFrame(accepted).to_sql(table, con=conn, if_exists="append", index=False,
+                                        dtype={"runs_hist": JSONB, "prediction_context": JSONB})
+        crossed = conn.execute(text(
+            "SELECT game_pk FROM games WHERE game_pk = ANY(:ids) "
+            "AND start_time <= clock_timestamp()"
+        ), {"ids": ids}).first()
+        if crossed:
+            raise RuntimeError("First pitch crossed during publication; both copies rolled back")
 
 
 def posterior_age_days(now: datetime | None = None, posteriors_dir: Path = POSTERIORS_DIR) -> int:

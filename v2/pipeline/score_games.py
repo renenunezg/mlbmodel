@@ -32,10 +32,9 @@ from backend.strategy import WEATHER_ENABLED
 from backend.team_mappings import normalize_team
 from v2.bayesian._common import POSTERIORS_DIR
 from v2.markets.writer import (
-    append_season,
     build_game_rows,
     posterior_age_days,
-    write_daily,
+    publish_forecasts,
 )
 from v2.simulator import (
     BullpenQueue,
@@ -368,6 +367,9 @@ def score(
             read-only replay with pre-cutoff artifacts; historical writes are
             rejected and hindsight replays cannot pass the acceptance gate.
     """
+    snapshot_started_at = pd.Timestamp.now(tz="UTC")
+    if write and not update_season:
+        raise ValueError("Published forecasts must update daily and season copies together")
     log.info(f"loading {N_DRAWS} posterior draws + tables...")
     rng = np.random.default_rng(seed)
     draws = load_posterior_draws(rng, K=N_DRAWS, posteriors_dir=posteriors_dir)
@@ -510,6 +512,8 @@ def score(
             pitching_usage_known=inputs.home_queue.usage_known and inputs.away_queue.usage_known,
             prediction_context=snapshot,
         )
+        for row in rows:
+            row["prediction_updated_at"] = snapshot_started_at.to_pydatetime()
         all_rows.extend(rows)
         for r in rows:
             if r["ev_flag"] != "No Play" or r["run_line_ev_flag"] != "No Play" or r["total_play"] != "No Play":
@@ -525,12 +529,8 @@ def score(
     if write and all_rows:
         now = pd.Timestamp.now(tz="UTC")
         all_rows = [r for r in all_rows if not is_started(r["start_time"], now)]
-        write_daily(pd.Timestamp(date), all_rows)
-        if update_season:
-            append_season(all_rows)
-            log.info(f"wrote {len(all_rows)} rows to model_outputs + season")
-        else:
-            log.info(f"wrote {len(all_rows)} rows to model_outputs (season skipped)")
+        publish_forecasts(all_rows)
+        log.info(f"submitted {len(all_rows)} rows for atomic pregame publication")
 
     log.info(f"{flagged} +EV flags across {len(all_rows)} rows; posterior_age_days={age}")
     return pd.DataFrame(all_rows)

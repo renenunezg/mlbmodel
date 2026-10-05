@@ -1,18 +1,12 @@
 # MLB Expected Runs Model
 
-A daily pipeline that predicts a per-team run distribution for every MLB game,
-derives win, run-line, and totals probabilities by Monte Carlo simulation, and
-publishes the output to a public dashboard each morning of the season. The
-betting markets function as a calibration benchmark, not as a gambling
-application: sharp participants push lines toward true probabilities quickly,
-which makes them a higher-quality signal than most independently constructed
-models.
+A daily pipeline that predicts a per-team run distribution for every MLB game, derives win, run-line, and totals probabilities by Monte Carlo simulation, and publishes the output to a public dashboard each morning of the season.
+The betting markets function as a calibration benchmark, not as a gambling application: sharp participants push lines toward true probabilities quickly, which makes them a higher-quality signal than most independently constructed models.
 
-The site is at [renenunez.dev](https://renenunez.dev) and lives in its own
-repository, [momentumweb](https://github.com/renenunezg/momentumweb). Supabase
-is the only interface between the two: this pipeline writes tables, the site
-reads them. The methodology page describes the model in detail; this README
-covers what's in this repository and how to run it.
+The site is at [renenunez.dev](https://renenunez.dev) and lives in its own repository, [momentumweb](https://github.com/renenunezg/momentumweb).
+Supabase is the only interface between the two: this pipeline owns forecast publication and nightly reconciliation.
+The site also verifies official finals and publishes explicitly provisional live summaries.
+The methodology page describes the model in detail; this README covers what's in this repository and how to run it.
 
 ## What's in the model
 
@@ -34,7 +28,8 @@ The current model (v2, live since 2026-05-12) is a two-layer system:
    Relievers with at least 6 outs yesterday or 9 outs over two days are skipped.
 
 Win, total, and run-line probabilities are computed from the simulated run distributions.
-Published moneyline probabilities blend the home-field-adjusted simulation logit with the paired, de-vigged market consensus at a model weight of 0.2.
+Published moneyline probabilities blend the home-field-adjusted simulation logit with the paired, de-vigged market consensus at a model weight of 0.5.
+A joint entropy adjustment reconciles the simulated score distribution with the selected market targets before publishing coherent win, spread, and total probabilities.
 Raw simulation probabilities and the exact market snapshot are stored separately in prediction context.
 The p10/p90 win-probability band estimates between-posterior variation after subtracting estimated binomial simulation variance.
 Bands are unavailable when the parameter spread is below Monte Carlo resolution.
@@ -43,11 +38,8 @@ Recommendations require known starters, complete posted lineups, and sufficient 
 Moneyline and run-line thresholds remain 4.5 percentage points above the executable price's implied probability, with quarter-Kelly sizing.
 Totals recommendations remain disabled.
 
-v2 replaced an XGBoost regressor (v1) after a 542-game head-to-head backtest:
-Brier −6.9%, log-loss −7.3%, max calibration gap from 41.9% down to 3.2%, ROI
-up on every market. The comparison tooling was retired after cutover. v1
-predictions before 2026-05-12 still live in `model_outputs_v1_archive` and
-`model_outputs_season_v1_archive`.
+v2 replaced an XGBoost regressor (v1) after a 542-game head-to-head backtest: Brier −6.9%, log-loss −7.3%, max calibration gap from 41.9% down to 3.2%, ROI up on every market.
+The comparison tooling was retired after cutover. v1 predictions before 2026-05-12 still live in `model_outputs_v1_archive` and `model_outputs_season_v1_archive`.
 
 ## Repository layout
 
@@ -83,9 +75,8 @@ tests/                  Production-critical suite; see below.
 
 ```
 # Backend (v2)
-pip install -r requirements.txt
-pip install -r v2/requirements.txt
-pip install -e .
+pip install -c constraints.txt -r requirements.txt -r v2/requirements.txt
+pip install --no-deps -e .
 
 # Refit the Bayesian skill layer (writes NetCDF traces to v2/bayesian/posteriors/)
 python -m v2.bayesian.fit_all --start-year 2024 --end-year 2026 --save-traces
@@ -119,13 +110,13 @@ pytest tests/
 ruff check .
 ```
 
-Sampler pins are load-bearing: `numpyro==0.20.1` + `jax==0.7.2` +
-`jaxlib==0.7.2`. Newer JAX dropped `xla_pmap_p`, which numpyro still uses, and
-sampling fails silently if those drift. Pins are in `v2/requirements.txt`.
+Sampler pins are load-bearing: `numpyro==0.20.1` + `jax==0.7.2` + `jaxlib==0.7.2`.
+Newer JAX dropped `xla_pmap_p`, which numpyro still uses, and sampling fails silently if those drift.
+Pins are in `v2/requirements.txt`.
 
-The first Statcast fetch for a prior season takes ~30 min. After that runs
-read from `cache/` and finish in seconds. The cache is gitignored and reused
-across CI runs via `actions/cache`.
+The first Statcast fetch for a prior season takes ~30 min.
+After that runs read from `cache/` and finish in seconds.
+The cache is gitignored and reused across CI runs via `actions/cache`.
 
 ## Environment
 
@@ -135,17 +126,13 @@ DATABASE_URL=postgresql://...   # Supabase session pooler URL.
 ODDS_API_KEY=...                # the-odds-api.com key.
 ```
 
-`DATABASE_URL` points at the live production database, so `backend/db.py`
-refuses write statements unless `GITHUB_ACTIONS=true` (set by CI) or
-`MLBMODEL_DB_WRITES=1` is set explicitly. Read-only local runs need neither.
-Schema changes are applied directly in Supabase, not through migration files
-in this repo.
+`DATABASE_URL` points at the live production database, so `backend/db.py` refuses write statements unless `GITHUB_ACTIONS=true` (set by CI) or `MLBMODEL_DB_WRITES=1` is set explicitly.
+Read-only local runs need neither.
+Schema changes are applied directly in Supabase, not through migration files in this repo.
 
 ## Database
 
-All tables live in the `mlb` schema and key off `game_pk`, the integer ID
-from the MLB Stats API, so joins stay clean even when data sources disagree on
-team naming.
+All tables live in the `mlb` schema and key off `game_pk`, the integer ID from the MLB Stats API, so joins stay clean even when data sources disagree on team naming.
 
 | Table | Holds |
 |---|---|
@@ -161,18 +148,14 @@ team naming.
 | `model_evaluation`, `model_calibration`, `model_edge_buckets` | Running accuracy across the full season (v1 + v2 stitched). |
 | `posterior_skills`, `posterior_sigmas` | Top-N xwOBA leaderboard and per-outcome σ rows, written after each refit. |
 
-Row-level security is on for every table with one policy, `public_read`,
-granting SELECT to `anon` and `authenticated`. The site reads through that
-policy; this pipeline writes through `DATABASE_URL` as `postgres`.
+Row-level security is on for every table with one policy, `public_read`, granting SELECT to `anon` and `authenticated`.
+The site reads through that policy; this pipeline writes through `DATABASE_URL` as `postgres`.
 
 ## Evaluation
 
-`model_evaluation` holds running tallies keyed on `(date, eval_window)`. The
-morning `daily-pipeline-v2.yml` and midnight `nightly-eval.yml` runs execute
-`backend/evaluate_model.py` and upsert every window. The site also grades a
-game the moment it goes final so the dashboard updates within a minute; the
-nightly run is the source of truth and reconciles anything the live path
-missed.
+`model_evaluation` holds running tallies keyed on `(date, eval_window)`.
+The morning `daily-pipeline-v2.yml` and midnight `nightly-eval.yml` runs execute `backend/evaluate_model.py` and upsert every window.
+The site also grades a game the moment it goes final so the dashboard updates within a minute; the nightly run is the source of truth and reconciles anything the live path missed.
 
 ## Schedule
 
@@ -182,9 +165,7 @@ missed.
 | `daily-pipeline-v2.yml` | `workflow_run` on train-v2 success | Schedule → bullpen → odds → score → verify. Chained off train to guarantee fresh posteriors. |
 | `refresh-lineups-v2.yml` | `repository_dispatch` from Supabase pg_cron, every 20 min ~5 AM-7:40 PM PT | Re-scores games whose posted lineup hash changed. |
 | `nightly-eval.yml` | `repository_dispatch` at 12:01 AM PT, `37 8 * * *` fallback | Eval yesterday + write tomorrow's predictions. |
-GitHub's scheduler drops or delays cron fires often enough that the two
-intraday workflows are dispatched from Supabase pg_cron instead; the GitHub
-cron on `nightly-eval.yml` is only a fallback.
+GitHub's scheduler drops or delays cron fires often enough that the two intraday workflows are dispatched from Supabase pg_cron instead; the GitHub cron on `nightly-eval.yml` is only a fallback.
 
 ## Known limits
 
@@ -217,3 +198,23 @@ The former 2025 replay using current posteriors and actual relief appearances is
 It refuses hindsight training cutoffs, missing provenance, mixed model versions, and insufficient paired evidence.
 Legacy forecasts have no recoverable raw probability or input snapshot and are excluded from raw-model research.
 No historical accuracy improvement is implied by passing the regression tests.
+
+
+## Database recovery and release contract
+
+The secret-free schema snapshot in `backend/sql/baseline/2026_10_05.sql` restores the deployed schema as inspected on October 5, 2026, without production rows.
+On an empty Supabase project, install `momentumweb/sql/001_site_revalidate.sql` first, restore this baseline with `psql -X -v ON_ERROR_STOP=1`, then apply `interval_coverage_population.sql`, `live_evaluation_reconciliation.sql`, and `history_record_bounds.sql` from `backend/sql`.
+The baseline includes the earlier migrations; do not replay those on top of it.
+The shared function requires pg_net and Vault, with `site_revalidate_secret` provisioned separately and matched to the site's `REVALIDATE_SECRET`.
+A plain PostgreSQL test database needs the `anon`, `authenticated`, and `service_role` roles and a local callback substitute.
+Production schema changes require separate approval.
+
+Forecast publication locks the official fixture, rejects stale snapshots and started games, and commits the daily and season copies together.
+Live evaluation is provisional; the database rejects older concurrent snapshots and never lets live summaries replace a canonical nightly result for the same date.
+Interval coverage uses the frozen run PMF and records its available population; legacy surrogate coverage is not displayed as measured simulation coverage.
+The supported runtime is Python 3.13 from a repository checkout with both requirements files installed using `constraints.txt`.
+An editable install includes `pipeline`, `backend`, and `v2`; runtime data, credentials, and trained artifacts remain separately provisioned.
+`pytest` excludes `live_read` and `expensive` cases by default.
+Set `MLB_TEST_DATABASE_URL` to a disposable localhost PostgreSQL admin database to include the publication acceptance scenario; it creates and removes its own test database.
+Use `pytest -m live_read` only for deliberate read-only provider checks and `pytest -m expensive` only for deliberate model fitting.
+Scoring never rebuilds missing or incompatible simulator tables; build and validate those artifacts explicitly before release.

@@ -75,7 +75,8 @@ def _write_evaluation_row(eval_date, eval_window, base_row, metric_dict):
     metadata.reflect(bind=engine)
     table = metadata.tables["model_evaluation"]
 
-    row = {**base_row, **metric_dict, "date": eval_date, "eval_window": eval_window}
+    row = {**base_row, **metric_dict, "date": eval_date, "eval_window": eval_window,
+           "evaluation_state": "canonical", "evaluation_started_at": datetime.datetime.now(datetime.UTC)}
     # Clean NaN/inf for Postgres
     for k, v in row.items():
         if isinstance(v, float) and (np.isnan(v) or np.isinf(v)):
@@ -122,9 +123,8 @@ def _write_calibration(eval_date, cal_bins):
     if eval_date < V1_CUTOVER_DATE:
         log.info(f"skip model_calibration write for {eval_date}; pre-cutover")
         return
-    if not cal_bins:
-        return
     with engine.begin() as conn:
+        conn.execute(text("DELETE FROM model_calibration WHERE date = :date"), {"date": eval_date})
         for b in cal_bins:
             conn.execute(text("""
                 INSERT INTO model_calibration (date, bin_mid, predicted_mean, observed_rate, count)
@@ -142,9 +142,9 @@ def _write_edge_buckets(eval_date, eval_window, buckets):
     if eval_date < V1_CUTOVER_DATE:
         log.info(f"skip model_edge_buckets write for {eval_date} ({eval_window}); pre-cutover")
         return
-    if not buckets:
-        return
     with engine.begin() as conn:
+        conn.execute(text("DELETE FROM model_edge_buckets WHERE date = :date AND eval_window = :window"),
+                     {"date": eval_date, "window": eval_window})
         for b in buckets:
             conn.execute(text("""
                 INSERT INTO model_edge_buckets (date, eval_window, bucket_label, n_bets, hit_rate, roi)
@@ -252,7 +252,9 @@ def main(as_of: datetime.date | None = None):
     # dates to the frozen v1 archive (real v1 live picks) and post-cutover
     # to the live v2 table. v2's hindsight backfill rows for pre-cutover
     # dates are filtered out by the view, so they never enter the eval.
-    model_df = pd.read_sql(text("SELECT * FROM model_outputs_season_unified"), con=engine)
+    model_df = pd.read_sql(text("SELECT u.*, s.runs_hist FROM model_outputs_season_unified u "
+        "LEFT JOIN model_outputs_season s ON s.game_pk = u.game_pk AND s.team = u.team "
+        "AND s.date::date = u.date::date AND u.model_version = 'v2'"), con=engine)
     games_df = pd.read_sql_table("games", con=engine)
 
     games_df = games_df[games_df["status"] == "Final"].dropna(subset=["home_score", "away_score"])
@@ -317,8 +319,8 @@ def main(as_of: datetime.date | None = None):
 
     windows = {
         "day": eval_df[eval_df["game_date"] == latest_date],
-        "7d": eval_df[eval_df["game_date"] >= latest_date - pd.Timedelta(days=7)],
-        "30d": eval_df[eval_df["game_date"] >= latest_date - pd.Timedelta(days=30)],
+        "7d": eval_df[eval_df["game_date"] >= latest_date - pd.Timedelta(days=6)],
+        "30d": eval_df[eval_df["game_date"] >= latest_date - pd.Timedelta(days=29)],
         "season": eval_df,
     }
 
@@ -344,10 +346,10 @@ def main(as_of: datetime.date | None = None):
         outcomes = window_df["actual_win"].values.astype(float)
 
         reg = regression_summary(y_true, y_pred)
-        prob = probabilistic_summary(probs, outcomes, y_pred, y_true)
+        prob = probabilistic_summary(probs, outcomes, histograms=window_df["runs_hist"].tolist(), actual_runs=y_true)
 
         # Financial metrics for this window (window_ledger built above)
-        fin = financial_summary(window_ledger) if not window_ledger.empty else {}
+        fin = financial_summary(window_ledger)
         seg = segment_summary(window_ledger)
 
         # Equity end
@@ -367,9 +369,8 @@ def main(as_of: datetime.date | None = None):
         _write_evaluation_row(eval_date, window_name, base_row, metrics)
 
         # Edge buckets per window
-        if not window_ledger.empty:
-            buckets = hit_rate_by_edge_bucket(window_ledger)
-            _write_edge_buckets(eval_date, window_name, buckets)
+        buckets = hit_rate_by_edge_bucket(window_ledger) if not window_ledger.empty else []
+        _write_edge_buckets(eval_date, window_name, buckets)
 
     # --- Calibration curve (season-wide, latest date) ---
     season_df = windows["season"]

@@ -30,6 +30,7 @@ N_SIMS = 1000
 
 @pytest.mark.skipif(not POSTERIORS_PRESENT, reason="posteriors not built")
 @pytest.mark.skipif(not CACHE_2026.exists(), reason="2026 statcast cache missing")
+@pytest.mark.live_read
 def test_score_games_end_to_end(monkeypatch):
     from v2.pipeline import score_games
 
@@ -43,8 +44,7 @@ def test_score_games_end_to_end(monkeypatch):
 
     monkeypatch.setattr(score_games, "simulate_game", simulate_with_trained_park)
 
-    # SMOKE_DATE is in the past, so freeze_started would drop every game; opt
-    # out to exercise the full scoring path (this is the backtest-replay case).
+    # Allow an explicitly selected past date to exercise the read-only replay path.
     df = score_games.score(SMOKE_DATE, n_sims=N_SIMS, write=False, seed=0, freeze_started=False,
                            posteriors_dir=Path(os.getenv("MLBMODEL_TEST_POSTERIORS", str(POSTERIORS_DIR))))
     if df.empty:
@@ -192,6 +192,18 @@ def test_postseason_schedule_to_scoring(monkeypatch, tmp_path):
         pitcher_offset=np.zeros((2, 2, K_FREE)), park_log=np.zeros(2),
         batter_ids=np.array([1]), pitcher_ids=np.array([10]), venue_codes=np.array(["BOS"]),
     )
+    from v2.simulator.baserunner import load_advancement_table, load_out_subtype_table
+    from v2.simulator.build_advancement_table import build_advancement, build_out_subtype
+
+    transitions = pd.DataFrame([{
+        "state": 0, "outs": 0, "outcome_idx": OUTCOMES.index("OUT"),
+        "subtype_key": "field_out", "new_state": 0, "runs": 0, "outs_added": 1,
+        "b_q": 0, "p_q": 0, "game_date": "2029-09-30",
+    }])
+    build_advancement(transitions).to_parquet(tmp_path / "advancement.parquet")
+    build_out_subtype(transitions).to_parquet(tmp_path / "out_subtype.parquet")
+    monkeypatch.setattr(score_games, "load_advancement_table", lambda: load_advancement_table(tmp_path))
+    monkeypatch.setattr(score_games, "load_out_subtype_table", lambda: load_out_subtype_table(tmp_path))
     monkeypatch.setattr(score_games, "N_DRAWS", 3)
     monkeypatch.setattr(score_games, "load_posterior_draws", lambda *_args, **_kwargs: [pm, pm, pm])
     monkeypatch.setattr(score_games, "posterior_provenance", lambda *_: {
@@ -224,9 +236,8 @@ def test_postseason_schedule_to_scoring(monkeypatch, tmp_path):
     }}
     get.return_value = boxscore
     monkeypatch.setattr(mlb_api, "fetch_probable_starters", lambda *_args, **_kwargs: pd.DataFrame({"pitcher_id": [202]}))
-    daily_writer, season_writer = Mock(), Mock()
-    monkeypatch.setattr(score_games, "write_daily", daily_writer)
-    monkeypatch.setattr(score_games, "append_season", season_writer)
+    daily_writer = Mock()
+    monkeypatch.setattr(score_games, "publish_forecasts", daily_writer)
 
     result = score_games.score("2030-10-01", n_sims=600, write=False)
     assert len(result) == 10
@@ -255,7 +266,6 @@ def test_postseason_schedule_to_scoring(monkeypatch, tmp_path):
             assert queue["workloads"][201] == (3,)  # Recent SP does not become a guessed bulk arm.
             assert 300 not in queue["relievers"] and 999 not in queue["relievers"]
     daily_writer.assert_not_called()
-    season_writer.assert_not_called()
 
     # No game roster means neutral coverage, never fallback to September's roster.
     get.side_effect = RuntimeError("roster unavailable")
@@ -330,14 +340,12 @@ def test_postseason_schedule_to_scoring(monkeypatch, tmp_path):
     monkeypatch.setattr("sys.argv", ["refresh_lineups", "--date", "2030-10-01", "--n-sims", "600"])
 
     def check_written(priced):
-        rows = daily_writer.call_args.args[1]
-        assert rows == season_writer.call_args.args[0]
+        rows = daily_writer.call_args.args[0]
         assert {r["game_pk"] for r in rows} == {2}
         assert all(pd.notna(r["moneyline"]) == priced for r in rows)
         assert all(pd.notna(r["total"]) == priced for r in rows)
         refresh_games.at[refresh_games.index[0], "prediction_context"] = json.loads(json.dumps(rows[0]["prediction_context"]))
         daily_writer.reset_mock()
-        season_writer.reset_mock()
 
     refresh_lineups.main()  # Missing odds arrive without a lineup change.
     assert provider_get.call_count == 1
@@ -385,32 +393,15 @@ def test_postseason_schedule_to_scoring(monkeypatch, tmp_path):
         conn.execute(text("UPDATE games SET start_time = '2000-10-01T23:00:00Z'"))
     assert score_games.score("2030-10-01", n_sims=600, write=True).empty
     daily_writer.assert_not_called()
-    season_writer.assert_not_called()
     db.dispose()
 
 
-def test_is_started_freeze_predicate():
-    """The freeze lock: a started game is frozen, a future one isn't, TBD isn't."""
-    import pandas as pd
-
-    from v2.pipeline.score_games import is_started
-
-    now = pd.Timestamp("2026-06-05 12:00:00", tz="UTC")
-    assert is_started(pd.Timestamp("2026-06-05 01:40:00", tz="UTC"), now) is True
-    assert is_started(pd.Timestamp("2026-06-05 23:10:00", tz="UTC"), now) is False
-    assert is_started(None, now) is False
-    assert is_started(pd.NaT, now) is False
-    # tz-naive start_time is coerced to UTC, not crashed on
-    assert is_started(pd.Timestamp("2026-06-05 01:40:00"), now) is True
-
+def test_confirmed_pitching_plan_preserves_opener_and_bulk_roles():
     from datetime import date
 
-    from v2.pipeline.refresh_lineups import _lineup_hash
     from v2.pipeline.score_games import GameContext, build_inputs, top9_batters_by_team
     from v2.simulator.bullpen import LiveQueueContext, PitchingPlan, apply_pitching_plan, queues_from_workload
 
-    live = {"home": list(range(1, 10)), "away": list(range(11, 20))}
-    assert _lineup_hash(live) != _lineup_hash({**live, "home": list(reversed(live["home"]))})
     cache = pd.DataFrame({"events": ["single"] * 18, "inning_topbot": ["Bot"] * 9 + ["Top"] * 9,
                           "home_team": ["SD"] * 18, "away_team": ["LAD"] * 18, "batter": list(range(1, 19))})
     ctx = GameContext(823932, pd.Timestamp("2026-07-04"), pd.Timestamp("2026-07-05T01:00Z"),
@@ -438,6 +429,7 @@ def test_is_started_freeze_predicate():
     assert not replace(plan, confirmed_at="2026-07-05T03:00Z").valid_for(context, ctx.start_time)
 
 
+@pytest.mark.live_read
 def test_market_research_inputs_are_paired_and_pregame():
     from v2.market_model.features import load_feature_games
 

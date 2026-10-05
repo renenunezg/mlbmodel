@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "date": "2026-10-02",
+  "predictions": [
+    {
+      "game_pk": 1,
+      "date": "2026-10-01",
+      "team": "H"
+    },
+    {
+      "game_pk": 2,
+      "date": "2026-09-25",
+      "team": "H"
+    },
+    {
+      "game_pk": 3,
+      "date": "2026-10-02",
+      "team": "H"
+    }
+  ],
+  "games": [
+    {
+      "game_pk": 1,
+      "game_date": "2026-10-02"
+    },
+    {
+      "game_pk": 2,
+      "game_date": "2026-09-25"
+    },
+    {
+      "game_pk": 3,
+      "game_date": "2026-10-02"
+    }
+  ],
+  "matched_ids": [
+    2,
+    3
+  ],
+  "window_counts": {
+    "day": 1,
+    "7d": 1,
+    "30d": 2,
+    "season": 2
+  }
+}

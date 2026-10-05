@@ -1,7 +1,6 @@
 """Model evaluation metrics: regression, probabilistic, financial. Pure functions, no DB."""
 import numpy as np
 import pandas as pd
-from scipy.stats import nbinom
 
 # ---------------------------------------------------------------------------
 # Regression metrics (predicted runs vs actual runs)
@@ -126,43 +125,44 @@ def calibration_curve(probs, outcomes, n_bins=10):
     return result
 
 
-def prediction_interval_coverage(xr_preds, actual_runs, level=0.80, r=6.0):
-    """Fraction of actual outcomes inside the predicted interval from the NB distribution.
+def prediction_interval_coverage(histograms, actual_runs, level=0.80):
+    """Equal-tail coverage of the persisted PMF; its last bin is 20+ runs.
 
-    For each xR (expected runs), compute the [lower, upper] bounds of the NB
-    distribution that contain `level` probability mass. Then check what fraction
-    of actual runs fall inside.
+    Missing legacy PMFs are excluded explicitly, never approximated from means.
     """
-    xr = np.asarray(xr_preds, dtype=float)
-    actual = np.asarray(actual_runs, dtype=float)
-    mask = ~(np.isnan(xr) | np.isnan(actual))
-    xr, actual = xr[mask], actual[mask]
-    if len(xr) == 0:
-        return np.nan
-
-    alpha = (1 - level) / 2
-    inside = 0
-    for mu, y in zip(xr, actual):
-        mu = max(mu, 0.5)
-        p = r / (r + mu)
-        lo = nbinom.ppf(alpha, r, p)
-        hi = nbinom.ppf(1 - alpha, r, p)
-        if lo <= y <= hi:
-            inside += 1
-    return round(inside / len(xr), 4)
+    covered = []
+    for histogram, actual in zip(histograms, actual_runs, strict=True):
+        if not isinstance(histogram, (list, tuple, np.ndarray)):
+            continue
+        mass = np.asarray(histogram, dtype=float)
+        if mass.shape != (21,) or not np.isfinite(mass).all() or (mass < 0).any() or mass.sum() <= 0:
+            raise ValueError("Invalid frozen run distribution")
+        if not np.isfinite(actual):
+            continue
+        cdf = np.cumsum(mass / mass.sum())
+        alpha = (1 - level) / 2
+        lo, hi = np.searchsorted(cdf, [alpha, 1 - alpha])
+        covered.append(lo <= min(actual, 20) <= hi)
+    return round(float(np.mean(covered)), 4) if covered else np.nan
 
 
-def probabilistic_summary(probs, outcomes, xr_preds=None, actual_runs=None):
-    """All probabilistic metrics in one dict."""
+def probabilistic_summary(probs, outcomes, *, histograms=None, actual_runs=None):
+    """Probability metrics, with coverage restricted to recoverable frozen PMFs."""
+    histograms = histograms if histograms is not None else [None] * len(probs)
     result = {
         "brier_score": brier_score(probs, outcomes),
         "log_loss": log_loss(probs, outcomes),
         "sharpness": sharpness(probs),
+        "interval_coverage_predictions": sum(
+            isinstance(h, (list, tuple, np.ndarray)) and np.isfinite(actual)
+            for h, actual in zip(histograms, actual_runs, strict=True)
+        ) if actual_runs is not None else 0,
     }
-    if xr_preds is not None and actual_runs is not None:
-        result["interval_coverage_50"] = prediction_interval_coverage(xr_preds, actual_runs, level=0.50)
-        result["interval_coverage_80"] = prediction_interval_coverage(xr_preds, actual_runs, level=0.80)
-        result["interval_coverage_90"] = prediction_interval_coverage(xr_preds, actual_runs, level=0.90)
+    for percent in (50, 80, 90):
+        result[f"interval_coverage_{percent}"] = (
+            prediction_interval_coverage(histograms, actual_runs, level=percent / 100)
+            if actual_runs is not None else np.nan
+        )
     return result
 
 

@@ -227,7 +227,7 @@ def simulate_game(
 
         # ---- pitcher swap (vectorized rule check on per-pitcher counters) ----
         # pull thresholds depend on the pitching role, including a confirmed bulk arm
-        # vectorized version of should_pull_starter
+        # Starter exit uses sampled workload and the live fatigue limits.
         def pull_mask(p_idx, p_outs, p_runs, p_pa, limits, pitcher_roles):
             starter_in = pitcher_roles[p_idx] == 0
             starter_pull = starter_in & (

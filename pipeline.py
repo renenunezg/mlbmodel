@@ -26,11 +26,6 @@ from backend.log import setup_logging
 log = logging.getLogger(__name__)
 
 
-def _timed(label, fn):
-    t0 = time.time()
-    result = fn()
-    log.info(f"[{time.time() - t0:.1f}s] {label}")
-    return result
 
 
 def _batch_upsert_games(conn, games_df):
@@ -157,6 +152,10 @@ def upsert_probable_starters(starters: pd.DataFrame) -> int:
     starters = starters.drop_duplicates(subset=["game_pk", "team"], keep="last")
     with engine.begin() as conn:
         for _, s in starters.iterrows():
+            if pd.isna(s["pitcher_name"]) or not s["pitcher_name"]:
+                conn.execute(text("DELETE FROM probable_starters WHERE game_pk = :g AND team = :t"),
+                             {"g": int(s["game_pk"]), "t": s["team"]})
+                continue
             conn.execute(
                 text("""
                     INSERT INTO probable_starters (game_pk, team, pitcher_name, pitcher_id, handedness, is_home)

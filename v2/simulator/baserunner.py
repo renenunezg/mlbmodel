@@ -187,15 +187,8 @@ def _build_flat_lookup(
 
 def load_advancement_table(tables_dir: Path = TABLES_DIR) -> AdvancementTable:
     df = pd.read_parquet(tables_dir / "advancement.parquet")
-    if "table_version" not in df or not df["table_version"].eq(TABLE_VERSION).all():
-        if tables_dir != TABLES_DIR:
-            raise ValueError("Stale advancement table; rebuild with python -m v2.simulator.build_advancement_table")
-        import subprocess
-        import sys
-        subprocess.run([sys.executable, "-m", "v2.simulator.build_advancement_table",
-                        "--years", "2024", "2025"], check=True,
-                       cwd=Path(__file__).resolve().parents[2])
-        df = pd.read_parquet(tables_dir / "advancement.parquet")
+    if df.empty or "table_version" not in df or not df["table_version"].eq(TABLE_VERSION).all():
+        raise ValueError("Stale advancement table; explicitly run python -m v2.simulator.build_advancement_table before scoring")
     if not legal_transitions(df).all():
         raise ValueError("Advancement table contains impossible runner/outs transitions")
     df["subtype_idx"] = df["subtype_key"].map(SUBTYPE_TO_IDX).astype(np.int64)
@@ -215,7 +208,7 @@ def load_advancement_table(tables_dir: Path = TABLES_DIR) -> AdvancementTable:
 
 def load_out_subtype_table(tables_dir: Path = TABLES_DIR) -> OutSubtypeTable:
     df = pd.read_parquet(tables_dir / "out_subtype.parquet")
-    if "table_version" not in df or not df["table_version"].eq(TABLE_VERSION).all():
+    if df.empty or "table_version" not in df or not df["table_version"].eq(TABLE_VERSION).all():
         raise ValueError("Stale out-subtype table; rebuild the simulator tables together")
     df["subtype_idx"] = df["subtype_key"].map(SUBTYPE_TO_IDX).astype(np.int64)
     n_keys = N_STATES * N_OUTS * N_BQ * N_PQ

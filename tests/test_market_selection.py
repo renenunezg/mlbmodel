@@ -4,7 +4,7 @@ import pytest
 
 from v2.market_model.features import build_feature_frame
 from v2.market_model.residual import prepare_games
-from v2.markets.writer import _best_moneyline, _best_runline, build_game_rows
+from v2.markets.writer import build_game_rows
 
 
 def _package(*offers):
@@ -13,50 +13,6 @@ def _package(*offers):
 
 def _fresh(offer):
     return {**offer, "scraped_at": (pd.Timestamp.now(tz="UTC") - pd.Timedelta(seconds=10)).isoformat()} if offer else None
-
-
-def test_moneyline_uses_best_available_price():
-    odds = _package(
-        {"book": "draftkings", "moneyline": -125},
-        {"book": "fanduel", "moneyline": -115},
-        {"book": "betmgm", "moneyline": -120},
-    )
-
-    selected = _best_moneyline(odds, win_prob=0.6)
-
-    assert selected["book"] == "fanduel"
-    assert selected["moneyline"] == -115
-
-
-def test_runline_uses_best_price_at_one_and_a_half():
-    odds = _package(
-        {"book": "draftkings", "spread": -1.5, "spread_odds": -110},
-        {"book": "fanduel", "spread": -1.5, "spread_odds": 100},
-        {"book": "betmgm", "spread": -2.5, "spread_odds": 180},
-    )
-    team_runs = np.array([2, 3, 4, 5])
-    opponent_runs = np.array([1, 4, 3, 2])
-
-    selected, p_cover = _best_runline(odds, team_runs, opponent_runs, home=True)
-
-    assert selected["book"] == "fanduel"
-    assert selected["spread"] == -1.5
-    assert selected["spread_odds"] == 100
-    # raw sim cover = 0.25; home gets the +0.09 logit home-field shift
-    assert p_cover == pytest.approx(0.2673, abs=1e-4)
-    _, p_cover_away = _best_runline(odds, team_runs, opponent_runs, home=False)
-    assert p_cover_away == pytest.approx(0.2336, abs=1e-4)
-
-    opposite = _package(
-        {"book": "draftkings", "spread": 1.5, "spread_odds": -110},
-        {"book": "fanduel", "spread": 1.5, "spread_odds": -120},
-    )
-    selected, p_cover = _best_runline(odds, team_runs, opponent_runs, home=True, opponent_odds=opposite)
-    assert selected["book"] == "fanduel"
-    assert p_cover == pytest.approx((0.5 + 0.5 / (0.5 + 120 / 220)) / 2)
-    # Changing the simulator cannot reintroduce an unsupported residual edge.
-    _, alternative = _best_runline(odds, team_runs + 10, opponent_runs, home=True, opponent_odds=opposite)
-    assert alternative == p_cover
 
 
 def test_fallback_lineup_suppresses_market_flags(monkeypatch):
@@ -89,7 +45,10 @@ def test_fallback_lineup_suppresses_market_flags(monkeypatch):
     }
     monkeypatch.setattr("v2.markets.ev.MONEYLINE_ENABLED", True)
     monkeypatch.setattr("v2.markets.ev.RUNLINE_ENABLED", True)
-    live_home, _ = build_game_rows(**kwargs, lineups_live=True)
+    shopping = _package(_fresh(odds),
+                        _fresh({**odds, "book": "fanduel", "moneyline": -160, "spread_odds": 110}),
+                        _fresh({**odds, "book": "betmgm", "spread": -2.5, "spread_odds": 180, "moneyline": -170}))
+    live_home, _ = build_game_rows(**{**kwargs, "home_odds": shopping}, lineups_live=True)
     fallback_home, fallback_away = build_game_rows(**kwargs, lineups_live=False)
 
     assert live_home["ev_flag"] == "LAD"

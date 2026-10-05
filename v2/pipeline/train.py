@@ -3,7 +3,7 @@
 Usage:
     python -m v2.pipeline.train --mode full [--archive]
 
---archive moves the current posteriors to posteriors/archive/{date}/ before
+--archive copies the current posteriors to posteriors/archive/{date}/ before
 refitting so the prior trace can be restored if something goes wrong.
 """
 from __future__ import annotations

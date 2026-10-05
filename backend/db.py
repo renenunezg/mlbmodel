@@ -34,3 +34,15 @@ def _block_unauthorized_writes(conn, cursor, statement, parameters, context, exe
             "Re-run with MLBMODEL_DB_WRITES=1 to mutate production intentionally. "
             "CI runs are allowed automatically."
         )
+
+
+@event.listens_for(engine, "connect")
+def _configure_read_only_session(dbapi_connection, connection_record):
+    # Server enforcement also covers commented SQL, writable CTEs and batches.
+    autocommit = dbapi_connection.autocommit
+    dbapi_connection.autocommit = True
+    try:
+        with dbapi_connection.cursor() as cursor:
+            cursor.execute("SET default_transaction_read_only = " + ("off" if writes_allowed() else "on"))
+    finally:
+        dbapi_connection.autocommit = autocommit

@@ -30,21 +30,6 @@ def _schedule_status(game: dict) -> str:
     return status.get("abstractGameState", "Scheduled")
 
 
-def _fetch_pitcher_handedness(pitcher_id: int) -> str | None:
-    if pitcher_id in _handedness_cache:
-        return _handedness_cache[pitcher_id]
-
-    try:
-        resp = requests.get(f"{BASE_URL}/people/{pitcher_id}", timeout=5)
-        resp.raise_for_status()
-        person = resp.json().get("people", [{}])[0]
-        hand = person.get("pitchHand", {}).get("code")
-        if hand:
-            _handedness_cache[pitcher_id] = hand
-        return hand
-    except Exception as e:
-        log.warning(f"Handedness fetch failed for pitcher {pitcher_id}: {e}")
-        return None
 
 
 def _batch_fetch_handedness(pitcher_ids: list[int]) -> dict[int, str]:
@@ -229,15 +214,15 @@ def fetch_probable_starters(game_date: date = None, days_ahead: int = 7) -> pd.D
                 team_data = game.get("teams", {}).get(side, {})
                 pitcher = team_data.get("probablePitcher", {})
 
-                if pitcher.get("fullName"):
-                    rows.append({
-                        "game_pk": game_pk,
-                        "game_date": gd,
-                        "team": normalize_team(team_data.get("team", {}).get("abbreviation", "")),
-                        "pitcher_name": pitcher["fullName"],
-                        "pitcher_id": pitcher.get("id"),
-                        "is_home": is_home,
-                    })
+                team = normalize_team(team_data.get("team", {}).get("abbreviation", ""))
+                if team not in TEAM_ID_BY_CODE:
+                    continue
+                rows.append({
+                    "game_pk": game_pk, "game_date": gd, "team": team,
+                    "pitcher_name": pitcher.get("fullName"),
+                    "pitcher_id": pitcher.get("id") if pitcher.get("fullName") else None,
+                    "is_home": is_home,
+                })
 
     df = pd.DataFrame(rows)
 

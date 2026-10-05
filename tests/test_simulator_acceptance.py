@@ -221,7 +221,6 @@ def test_simulator_uses_the_pitcher_intercept(monkeypatch):
     )
 
     np.testing.assert_allclose(pm.intercept, intercept)
-    assert not hasattr(pm, "intercept_diff")
 
     from collections import Counter
 

@@ -26,7 +26,7 @@ jobs:
         with:
           python-version: "3.13"
       - name: Install live publisher dependencies
-        run: pip install numpy pandas requests SQLAlchemy==2.0.54 psycopg2-binary python-dotenv
+        run: pip install -c constraints.txt numpy pandas requests SQLAlchemy psycopg2-binary python-dotenv
       - name: Download validated probability artifact
         run: |
           mkdir -p models

@@ -1,0 +1,40 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -c constraints.txt -r requirements.txt -r v2/requirements.txt pytest==9.0.3
+      - run: pip install --no-deps -e .
+      - name: Prepare isolated database roles
+        env:
+          PGPASSWORD: postgres
+        run: >-
+          psql -X -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1
+          -c 'create role anon; create role authenticated; create role service_role;'
+      - name: Offline and database acceptance
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+          MLB_TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+        run: pytest -q tests

@@ -80,6 +80,7 @@ def test_training_readers_exclude_postseason_and_wrong_year_cache_rows(monkeypat
     assert write_posterior_summaries._load_window_pa(date(2027, 1, 1), date(2027, 1, 15)).empty
 
 
+@pytest.mark.expensive
 def test_batter_model_recovers_platoon_direction():
     pa, truth = synth_batter_pa(n_batters=40, pa_per_cell_mean=150, seed=42)
     idata, _, _ = batter_skill.fit(
@@ -94,6 +95,7 @@ def test_batter_model_recovers_platoon_direction():
     assert np.corrcoef(truth["platoon"][:, 0], beta_platoon[:, 0])[0, 1] > 0.3
 
 
+@pytest.mark.expensive
 def test_pitcher_model_recovers_role_widths():
     # Preserve legitimate two-way pitching while removing position-player innings.
     frame = pd.DataFrame({"batter": [660271] * 60 + [123] * 60 + [999] * 2,
@@ -116,6 +118,7 @@ def test_pitcher_model_recovers_role_widths():
     assert sigma_pitcher[0].mean() > sigma_pitcher[1].mean()
 
 
+@pytest.mark.expensive
 def test_park_model_recovers_synthetic_signal():
     rng = np.random.default_rng(0)
     true_log_pf = np.array([0.10, -0.05, 0.0, -0.07, 0.04, -0.06])

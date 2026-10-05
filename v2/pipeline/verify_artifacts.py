@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import platform
 from datetime import date
+from importlib.metadata import version
 
 import numpy as np
 import pandas as pd
@@ -53,6 +56,11 @@ def verify_artifacts() -> dict:
     files.append(TABLES_DIR / "gb_quartiles.parquet")
     return {
         "model_version": "sim-v3", "training_window": window,
+        "code_revision": os.getenv("GITHUB_SHA"),
+        "runtime": {"python": platform.python_version(), **{
+            package: version(package) for package in ("numpy", "pandas", "scipy", "pymc", "xarray", "SQLAlchemy")
+        }},
+        "constraints_sha256": hashlib.sha256((POSTERIORS_DIR.parents[2] / "constraints.txt").read_bytes()).hexdigest(),
         "diagnostics": {name: diagnostics[name] for name in ("batter", "pitcher", "park")},
         "sha256": {str(path.relative_to(POSTERIORS_DIR.parents[2])):
                    hashlib.file_digest(path.open("rb"), "sha256").hexdigest() for path in files},

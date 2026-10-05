@@ -23,16 +23,6 @@ PULL_RUNS_HARD = 6          # 6+ runs → pull regardless of IP
 PULL_PA_PROXY = 24          # ~95 pitches @ ~3.95 pitches/PA
 
 
-def should_pull_starter(outs: int, runs_allowed: int, pa_count: int) -> bool:
-    if outs >= PULL_OUTS_HARD:
-        return True
-    if runs_allowed >= PULL_RUNS_HARD:
-        return True
-    if outs >= PULL_OUTS_RUNS and runs_allowed >= 4:
-        return True
-    if pa_count >= PULL_PA_PROXY:
-        return True
-    return False
 
 
 @dataclass
@@ -40,7 +30,6 @@ class BullpenQueue:
     """Per-side queue of pitcher_ids: starter first, then relievers in order."""
     starter: int
     relievers: list[int]
-    pulled_idx: int = 0  # 0 = starter still in; 1 = first reliever in; ...
     starter_role: int = 0
     workloads: dict[int, tuple[int, ...]] = field(default_factory=dict)
     roles: dict[int, int] = field(default_factory=dict)
@@ -55,18 +44,7 @@ class BullpenQueue:
         return self.workloads.get(pitcher_id, (3,))
 
 
-    def current(self) -> int:
-        if self.pulled_idx == 0:
-            return self.starter
-        ridx = self.pulled_idx - 1
-        if ridx < len(self.relievers):
-            return self.relievers[ridx]
-        # ran out of relievers, recycle the last reliever (rare in real games)
-        return self.relievers[-1] if self.relievers else self.starter
 
-    def advance(self) -> int:
-        self.pulled_idx += 1
-        return self.current()
 
 
 @dataclass

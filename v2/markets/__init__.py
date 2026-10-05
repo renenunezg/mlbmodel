@@ -11,10 +11,9 @@ from v2.markets.ev import (
 )
 from v2.markets.probs import market_probs, runs_percentiles
 from v2.markets.writer import (
-    append_season,
     build_game_rows,
     posterior_age_days,
-    write_daily,
+    publish_forecasts,
 )
 
 __all__ = [
@@ -30,7 +29,6 @@ __all__ = [
     "our_odds_from_prob",
     "rl_confidence",
     "build_game_rows",
-    "write_daily",
-    "append_season",
+    "publish_forecasts",
     "posterior_age_days",
 ]

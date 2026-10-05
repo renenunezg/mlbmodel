@@ -36,7 +36,7 @@ jobs:
           restore-keys: sim-v3-bundle-${{ runner.os }}-
           fail-on-cache-miss: true
       - name: Install model dependencies
-        run: pip install -r requirements.txt -r v2/requirements.txt && pip install -e .
+        run: pip install -c constraints.txt -r requirements.txt -r v2/requirements.txt && pip install --no-deps -e .
       - name: Verify production artifacts
         run: python -m v2.pipeline.verify_artifacts
       - name: Compute postseason forecast
