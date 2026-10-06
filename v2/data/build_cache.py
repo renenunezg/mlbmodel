@@ -84,6 +84,12 @@ def fetch_year(year: int, force: bool = False) -> pd.DataFrame:
     new_df = regular_season_pitches(new_df, year)
 
     if not cached.empty:
+        # pybaseball parses game_date only under some pandas versions, so a
+        # cache written by another environment can hold strings where a fresh
+        # fetch holds timestamps. Mixed values cannot be written to parquet.
+        for frame in (cached, new_df):
+            if "game_date" in frame:
+                frame["game_date"] = pd.to_datetime(frame["game_date"])
         df = pd.concat([cached, new_df], ignore_index=True).drop_duplicates(
             subset=DEDUPE_COLS, keep="last"
         )
