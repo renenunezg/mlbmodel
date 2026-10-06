@@ -154,7 +154,7 @@ def probabilistic_summary(probs, outcomes, *, histograms=None, actual_runs=None)
         "log_loss": log_loss(probs, outcomes),
         "sharpness": sharpness(probs),
         "interval_coverage_predictions": sum(
-            isinstance(h, (list, tuple, np.ndarray)) and np.isfinite(actual)
+            isinstance(h, (list, tuple, np.ndarray)) and bool(np.isfinite(actual))
             for h, actual in zip(histograms, actual_runs, strict=True)
         ) if actual_runs is not None else 0,
     }
