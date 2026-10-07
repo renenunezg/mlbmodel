@@ -33,6 +33,7 @@ def test_publication_and_evaluation_recovery(monkeypatch):
         for path in (root / "backend/sql/baseline/2026_10_05.sql",
                      root / "backend/sql/interval_coverage_population.sql",
                      root / "backend/sql/live_evaluation_reconciliation.sql",
+                     root / "backend/sql/20261007171918_mlb_live_evaluation_completion.sql",
                      root / "backend/sql/history_record_bounds.sql"):
             subprocess.run(["psql", "-X", local_url.render_as_string(hide_password=False),
                             "-v", "ON_ERROR_STOP=1", "-f", str(path)],
@@ -127,6 +128,54 @@ def test_publication_and_evaluation_recovery(monkeypatch):
             conn.execute(text("UPDATE model_evaluation SET evaluation_state = 'canonical', total_predictions = 3"))
             conn.execute(statement, {"started": started, "rows": json.dumps(values)})
             assert conn.execute(text("SELECT total_predictions FROM model_evaluation")).scalars().all() == [3]*4
+        # Completion is separate from Final status and atomic with all windows.
+        completion_day = day + pd.Timedelta(days=2)
+        with db.begin() as conn:
+            conn.execute(text("""INSERT INTO games
+                (game_pk, game_date, home_team, away_team, home_score, away_score, status)
+                VALUES (2, :day, 'BOS', 'NYY', 4, 2, 'Final')"""), {"day": completion_day})
+            assert conn.execute(text("SELECT input_version FROM mlb.live_evaluation_status(2)")).scalar_one() is None
+            conn.execute(text("""INSERT INTO model_outputs_season
+                (game_pk, date, team, expected_runs, win_prob)
+                VALUES (2, :day, 'BOS', 4, 0.6)"""), {"day": completion_day})
+            version, completed = conn.execute(text("SELECT * FROM mlb.live_evaluation_status(2)")).one()
+            assert version and completed is None
+            completed_rows = [{**r, "date": str(completion_day)} for r in values]
+            complete = text("""SELECT mlb.complete_live_evaluation(
+                2, :version, clock_timestamp(), CAST(:rows AS jsonb))""")
+            args = {"version": version, "rows": json.dumps(completed_rows)}
+            conn.execute(text("""CREATE FUNCTION mlb.fail_completion() RETURNS trigger
+                LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'completion unavailable'; END $$"""))
+            conn.execute(text("""CREATE TRIGGER fail_completion BEFORE INSERT
+                ON mlb.live_evaluation_completions FOR EACH ROW EXECUTE FUNCTION mlb.fail_completion()"""))
+            with pytest.raises(DBAPIError, match="completion unavailable"), conn.begin_nested():
+                conn.execute(complete, args)
+            assert conn.execute(text("SELECT count(*) FROM model_evaluation WHERE date=:day"), {"day": completion_day}).scalar_one() == 0
+            assert conn.execute(text("SELECT count(*) FROM mlb.live_evaluation_completions")).scalar_one() == 0
+            conn.execute(text("DROP TRIGGER fail_completion ON mlb.live_evaluation_completions"))
+            conn.execute(text("DROP FUNCTION mlb.fail_completion()"))
+            conn.execute(complete, args)
+            assert conn.execute(text("SELECT eval_date FROM mlb.live_evaluation_status(2)")).scalar_one() == completion_day
+            duplicate_args = {**args, "rows": json.dumps([{**r, "total_predictions": 99} for r in completed_rows])}
+            conn.execute(complete, duplicate_args)
+            assert conn.execute(text("SELECT total_predictions FROM model_evaluation WHERE date=:day"), {"day": completion_day}).scalars().all() == [2]*4
+            conn.execute(text("UPDATE games SET updated_at=clock_timestamp() WHERE game_pk=2"))
+            assert conn.execute(text("SELECT eval_date FROM mlb.live_evaluation_status(2)")).scalar_one() == completion_day
+            conn.execute(text("UPDATE games SET home_score=5 WHERE game_pk=2"))
+            assert conn.execute(text("SELECT eval_date FROM mlb.live_evaluation_status(2)")).scalar_one() is None
+            with pytest.raises(DBAPIError, match="inputs changed"), conn.begin_nested():
+                conn.execute(complete, args)
+            args["version"] = conn.execute(text("SELECT input_version FROM mlb.live_evaluation_status(2)")).scalar_one()
+            conn.execute(complete, args)
+            conn.execute(text("UPDATE model_outputs_season SET win_prob=0.7 WHERE game_pk=2"))
+            assert conn.execute(text("SELECT eval_date FROM mlb.live_evaluation_status(2)")).scalar_one() is None
+            for role in ("anon", "authenticated"):
+                assert not conn.execute(text("SELECT has_function_privilege(:role, 'mlb.complete_live_evaluation(integer,text,timestamptz,jsonb)', 'EXECUTE')"), {"role": role}).scalar_one()
+                assert not conn.execute(text("SELECT has_table_privilege(:role, 'mlb.live_evaluation_completions', 'SELECT')"), {"role": role}).scalar_one()
+            # Keep the canonical fixture below independent of these extra games.
+            conn.execute(text("DELETE FROM model_outputs_season WHERE game_pk=2"))
+            conn.execute(text("DELETE FROM games WHERE game_pk=2"))
+            conn.execute(text("DELETE FROM model_evaluation WHERE date=:day"), {"day": completion_day})
         from backend import evaluate_model
         from backend.metrics import financial_summary, probabilistic_summary
         monkeypatch.setattr(evaluate_model, "engine", db)
