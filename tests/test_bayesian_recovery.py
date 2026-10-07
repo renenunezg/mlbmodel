@@ -59,7 +59,8 @@ def test_training_readers_exclude_postseason_and_wrong_year_cache_rows(monkeypat
     monkeypatch.setattr(build_cache, "_fetch_statcast", fetch)
     cached = build_cache.fetch_year(2026)
     assert fetched[0][0] == "2026-09-27"  # A 2027 contaminant cannot advance this cursor.
-    pd.testing.assert_frame_equal(cached.reset_index(drop=True), regular.reset_index(drop=True))
+    expected = regular.assign(game_date=pd.to_datetime(regular.game_date))
+    pd.testing.assert_frame_equal(cached.reset_index(drop=True), expected.reset_index(drop=True))
     assert pd.read_parquet(tmp_path / "statcast_2026.parquet").game_type.eq("R").all()
     with pytest.raises(ValueError, match="lacks game_type"):
         pa_dataset.transform_pitch_frame(mixed.drop(columns="game_type"))
