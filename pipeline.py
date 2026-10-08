@@ -14,7 +14,6 @@ from backend.data.fangraphs import fetch_bullpen_stats, fetch_pitcher_stats, fet
 from backend.data.mlb_api import fetch_probable_starters, fetch_schedule
 from backend.data.odds_api import (
     DEFAULT_BOOKS,
-    ODDS_REFRESH_AGE,
     fetch_odds,
     latest_quota_state,
 )
@@ -338,7 +337,7 @@ def fetch_and_load_odds(
     upcoming_game_pks = tuple(game_pks)
 
     if optional:
-        cutoff = now - ODDS_REFRESH_AGE
+        cutoff = now - timedelta(hours=3)
         if _has_recent_stored_odds(game_pks, cutoff):
             log.info("Skipping optional Odds API refresh: fresh odds already persisted for this window")
             return 0

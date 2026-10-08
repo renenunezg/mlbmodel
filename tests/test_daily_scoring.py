@@ -293,7 +293,6 @@ def test_postseason_schedule_to_scoring(monkeypatch, tmp_path):
     monkeypatch.setattr(refresh_lineups, "_fetch_scheduled_games", lambda *_: refresh_games)
     monkeypatch.setattr(refresh_lineups, "_starter_map", lambda *_: {2: (10, 20)})
     monkeypatch.setattr(refresh_lineups, "upsert_probable_starters", lambda *_: None)
-    monkeypatch.setattr(refresh_lineups, "fetch_and_load_odds", lambda *_args, **_kwargs: 0)
     monkeypatch.setattr(refresh_lineups, "fetch_lineup", lambda *_: live_lineup)
     monkeypatch.setattr("backend.data.weather.fetch_weather", lambda *_: None)
     refreshed = Mock()
@@ -306,81 +305,6 @@ def test_postseason_schedule_to_scoring(monkeypatch, tmp_path):
     refresh_lineups.main()
     assert refreshed.call_args.kwargs["game_pks"] == [2]
     assert refreshed.call_args.kwargs["update_season"] is True
-
-    # Reproduce the live regression through provider parsing, refresh dispatch,
-    # simulation, and both output writers, with no production writes.
-    import pipeline
-    from backend.data import odds_api
-
-    for team in boxscore.json.return_value["teams"].values():
-        team["bullpen"].append(205)
-    response = _odds_response(397)
-    event = response.json.return_value[0]
-    event.update(home_team="Boston Red Sox", away_team="New York Yankees",
-                 commence_time="2030-10-01T23:00:00Z")
-    for market in event["bookmakers"][0]["markets"]:
-        for outcome in market["outcomes"]:
-            outcome["name"] = {"Los Angeles Dodgers": "Boston Red Sox",
-                               "San Diego Padres": "New York Yankees"}.get(outcome["name"], outcome["name"])
-    # MLB and Odds API share requests; retain each provider's response.
-    provider_get = Mock(return_value=response)
-    monkeypatch.setattr(odds_api.requests, "get", lambda url, **kwargs:
-                        provider_get(url, **kwargs) if url.startswith(odds_api.ODDS_API_BASE) else boxscore)
-    monkeypatch.setenv("ODDS_API_KEY", "test-key")
-    monkeypatch.setenv("ODDS_API_STATE_PATH", str(tmp_path / "odds-state.json"))
-    monkeypatch.setattr(pipeline, "_upcoming_games", lambda *_: refresh_games)
-    recent = Mock(return_value=False)
-    monkeypatch.setattr(pipeline, "_has_recent_stored_odds", recent)
-    persisted = [pd.DataFrame(columns=["game_pk", "team"])]
-    monkeypatch.setattr(pipeline, "_replace_odds", lambda frame: persisted.__setitem__(0, frame.copy()))
-    monkeypatch.setattr(refresh_lineups, "fetch_and_load_odds", pipeline.fetch_and_load_odds)
-    monkeypatch.setattr(refresh_lineups, "fetch_odds", lambda *_: persisted[0])
-    monkeypatch.setattr(score_games, "fetch_odds", lambda *_: persisted[0])
-    monkeypatch.setattr(refresh_lineups, "score", score_games.score)
-    monkeypatch.setattr("sys.argv", ["refresh_lineups", "--date", "2030-10-01", "--n-sims", "600"])
-
-    def check_written(priced):
-        rows = daily_writer.call_args.args[0]
-        assert {r["game_pk"] for r in rows} == {2}
-        assert all(pd.notna(r["moneyline"]) == priced for r in rows)
-        assert all(pd.notna(r["total"]) == priced for r in rows)
-        refresh_games.at[refresh_games.index[0], "prediction_context"] = json.loads(json.dumps(rows[0]["prediction_context"]))
-        daily_writer.reset_mock()
-
-    refresh_lineups.main()  # Missing odds arrive without a lineup change.
-    assert provider_get.call_count == 1
-    check_written(True)
-    recent.return_value = True
-    refresh_lineups.main()  # Fresh, unchanged offers consume no quota or rescore.
-    assert provider_get.call_count == 1
-    daily_writer.assert_not_called()
-
-    # A price update already ingested by another path must also trigger scoring.
-    persisted[0].loc[persisted[0].team == "BOS", "moneyline"] = -135
-    refresh_lineups.main()
-    check_written(True)
-
-    persisted[0]["scraped_at"] = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=3)
-    recent.return_value = False
-    refresh_lineups.main()  # Aging quotes are replaced before scoring.
-    assert provider_get.call_count == 2
-    check_written(True)
-
-    # Reserve exhaustion expires displayed prices once, then stays stable.
-    persisted[0]["scraped_at"] = pd.Timestamp.now(tz="UTC") - pd.Timedelta(hours=3)
-    odds_api._write_state({"x-requests-remaining": 52, "x-requests-last": 3})
-    refresh_lineups.main()
-    assert provider_get.call_count == 2
-    check_written(False)
-    refresh_lineups.main()
-    daily_writer.assert_not_called()
-
-    # Provider failure must not block a changed lineup or revive stale prices.
-    odds_api._write_state({"x-requests-remaining": 397, "x-requests-last": 3})
-    provider_get.side_effect = refresh_lineups.RequestException("provider unavailable")
-    refresh_games["stored_hash"] = "changed-lineup"
-    refresh_lineups.main()
-    check_written(False)
 
     # A prior year's playoff workloads cannot create next season's pitching roles.
     rollover = bullpen.queues_from_workload(
@@ -532,7 +456,7 @@ def test_odds_refresh_routes_and_quota_contract(monkeypatch, tmp_path):
     run_daily("--optional-odds-refresh")
     assert provider_get.call_count == 1
     cutoff = fresh_odds.call_args.args[1]
-    assert pd.Timedelta(minutes=39) < pd.Timestamp.now(tz="UTC") - cutoff < pd.Timedelta(minutes=41)
+    assert pd.Timedelta(minutes=179) < pd.Timestamp.now(tz="UTC") - cutoff < pd.Timedelta(minutes=181)
 
     run_daily()
     assert provider_get.call_count == 2

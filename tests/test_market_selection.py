@@ -116,13 +116,20 @@ def test_fallback_lineup_suppresses_market_flags(monkeypatch):
 
     # Stale, future, missing, and malformed timestamps never become anchors.
     now = pd.Timestamp.now(tz="UTC")
-    for stamp in (now - pd.Timedelta(hours=2), now + pd.Timedelta(hours=1), None, "invalid"):
+    for stamp in (now - pd.Timedelta(hours=25), now + pd.Timedelta(hours=1), None, "invalid"):
         rejected = build_game_rows(**{**joint_kwargs,
             "home_odds": {**home_offer, "scraped_at": stamp},
             "away_odds": {**away_offer, "scraped_at": stamp}})
         assert rejected[0]["prediction_context"]["market_home_win_prob"] is None
         assert len(rejected[0]["prediction_context"]["joint_adjustment"]["targets"]) == 1
         assert all(row["ev_flag"] == row["run_line_ev_flag"] == "No Play" for row in rejected)
+    # The day's single odds pull must survive a re-score hours later (2026-10-08 regression).
+    aged = now - pd.Timedelta(hours=8)
+    kept = build_game_rows(**{**joint_kwargs,
+        "home_odds": {**home_offer, "scraped_at": aged},
+        "away_odds": {**away_offer, "scraped_at": aged}})
+    assert kept[0]["prediction_context"]["market_home_win_prob"] is not None
+    assert all(row["moneyline"] is not None for row in kept)
 
     # Run-line and total pairs remain usable without any moneyline prices.
     independent = build_game_rows(**{**joint_kwargs,

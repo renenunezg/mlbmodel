@@ -1,9 +1,9 @@
-"""Pregame refresh: re-score changed pitchers, lineups, bullpens, and book offers.
+"""Pregame refresh: re-score changed pitchers, lineups, and bullpens.
 
 Re-fetches probable starters (a starter announced after the morning run otherwise
 never lands in the DB until tomorrow) and reads model_outputs.lineup_hash to detect
-lineup changes. Refresh missing or aging odds within the quota reserve and
-re-score when the usable book offers change, including quote expiry. Rewrites both
+lineup changes. Never calls the Odds API: a re-score reuses the quotes stored by
+the daily pipeline's single pull. Rewrites both
 model_outputs and model_outputs_season so the historical record matches the last
 pre-game score. The unstarted-game filter in _fetch_scheduled_games freezes rows at
 first pitch, so evaluation reflects the closest-to-first-pitch prediction.
@@ -20,16 +20,14 @@ from dataclasses import asdict
 from datetime import date
 
 import pandas as pd
-from requests import RequestException
 from sqlalchemy import text
 
 from backend.data.game_types import POSTSEASON_GAME_TYPES
 from backend.data.mlb_api import fetch_lineup, fetch_probable_starters
 from backend.db import engine
 from backend.log import setup_logging
-from pipeline import fetch_and_load_odds, upsert_probable_starters
-from v2.markets.joint import fresh_odds, market_snapshot
-from v2.pipeline.score_games import fetch_odds, lineup_hash, score
+from pipeline import upsert_probable_starters
+from v2.pipeline.score_games import lineup_hash, score
 from v2.simulator.bullpen import LiveQueueContext, build_queues_live
 
 log = logging.getLogger(__name__)
@@ -47,7 +45,7 @@ def _fetch_scheduled_games(date_str: str) -> pd.DataFrame:
     underway its prediction is frozen - refresh can never rewrite it.
     """
     q = text("""
-        SELECT g.game_pk, g.game_type, g.home_team, g.away_team, g.start_time,
+        SELECT g.game_pk, g.game_type, g.home_team, g.away_team,
                COALESCE(o.lineup_hash, '') AS stored_hash,
                to_jsonb(o)->'prediction_context' AS prediction_context
         FROM games g
@@ -93,15 +91,6 @@ def main() -> None:
         log.info(f"no unstarted games on {args.date}")
         return
 
-    try:
-        fetch_and_load_odds(args.date, optional=True)
-    except RequestException as exc:
-        # Preserve lineup updates during provider outages; stale offers still
-        # fail closed in both change detection and the scoring writer.
-        # Provider exception URLs can contain the API key.
-        log.warning("Odds refresh failed (%s); continuing with stored pregame quotes", type(exc).__name__)
-    odds = fetch_odds(games.game_pk.astype(int).tolist())
-
     before = _starter_map(args.date)
     upsert_probable_starters(fetch_probable_starters(game_date=date.fromisoformat(args.date), days_ahead=0))
     after = _starter_map(args.date)
@@ -113,19 +102,10 @@ def main() -> None:
     ]
     queues = build_queues_live(date.fromisoformat(args.date), queue_contexts) if queue_contexts else {}
     changed = set()
-    now = pd.Timestamp.now(tz="UTC")
     for row in games.itertuples(index=False):
         gp = int(row.game_pk)
-        stored = row.prediction_context if isinstance(row.prediction_context, dict) else {}
-        packages = [
-            fresh_odds({"offers": odds.loc[
-                (odds.game_pk == gp) & (odds.team == team)
-            ].to_dict("records")}, as_of=now, start_time=row.start_time)
-            for team in (row.home_team, row.away_team)
-        ]
-        if market_snapshot(*packages) != stored.get("market_offers"):
-            changed.add(gp)
         if row.game_type in POSTSEASON_GAME_TYPES:
+            stored = row.prediction_context if isinstance(row.prediction_context, dict) else {}
             for side in ("home", "away"):
                 queue = queues.get((gp, side))
                 if queue is not None and json.loads(json.dumps(asdict(queue))) != stored.get(f"{side}_queue"):
@@ -141,11 +121,11 @@ def main() -> None:
             changed.add(gp)
 
     if not changed:
-        log.info(f"no starter, lineup, playoff bullpen, or odds changes on {args.date}")
+        log.info(f"no starter, lineup, or playoff bullpen changes on {args.date}")
         return
 
     changed = sorted(changed)
-    log.info(f"{len(changed)} games changed (starter/lineup/playoff bullpen/odds): {changed}")
+    log.info(f"{len(changed)} games changed (starter/lineup/playoff bullpen): {changed}")
     # Weather updates as first pitch approaches; refresh it for the re-scored games.
     from backend.data.weather import fetch_weather
     for gp in changed:

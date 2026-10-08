@@ -21,8 +21,8 @@ from v2.markets.probs import anchor_home_prob, consensus_cover_prob, consensus_h
 
 VERSION = "joint-entropy-v1"
 TOTALS_MODEL_WEIGHT = 0.5
-# Operational guards, not accuracy claims. A missed refresh must not turn an
-# old quote into a new model opinion or concentrate forecasts on rare samples.
+# Operational guards, not accuracy claims. A prior day's quote must not become
+# a new model opinion, and forecasts must not concentrate on rare samples.
 MIN_EFFECTIVE_SAMPLE_FRACTION = 0.5
 MAX_SAMPLE_WEIGHT_RATIO = 5.0
 TARGET_TOLERANCE = 1e-6

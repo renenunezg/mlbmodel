@@ -23,9 +23,9 @@ SPORT = "baseball_mlb"
 DEFAULT_BOOKS = ("draftkings", "fanduel", "betmgm")
 DEFAULT_STATE_PATH = Path("cache/odds_api_state.json")
 MARKETS = ("h2h", "spreads", "totals")
-MAX_QUOTE_AGE = timedelta(hours=1)
-# Leave one refresh cycle for scoring before quotes expire.
-ODDS_REFRESH_AGE = MAX_QUOTE_AGE - timedelta(minutes=20)
+# Odds are pulled once per day, so a quote stays usable until first pitch.
+# Anything older than a day predates today's pull.
+MAX_QUOTE_AGE = timedelta(hours=24)
 
 # Map The Odds API team names to our abbreviations
 ODDS_TEAM_MAP = {
