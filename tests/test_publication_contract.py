@@ -218,3 +218,102 @@ def test_publication_and_evaluation_recovery(monkeypatch):
         with admin.connect() as conn:
             conn.execute(text(f'DROP DATABASE "{name}"'))
         admin.dispose()
+
+
+@pytest.mark.database
+def test_betting_headline_preserves_canonical_ledger():
+    value = os.getenv("MLB_TEST_DATABASE_URL")
+    if not value:
+        pytest.skip("requires a disposable local PostgreSQL admin database")
+    url = make_url(value)
+    assert url.host in ("127.0.0.1", "localhost")
+    name = "mlb_headline_" + uuid.uuid4().hex
+    admin = create_engine(url, isolation_level="AUTOCOMMIT")
+    with admin.connect() as conn:
+        conn.execute(text(f'CREATE DATABASE "{name}"'))
+    local_url = url.set(database=name)
+    db = create_engine(local_url)
+    try:
+        with db.begin() as conn:
+            conn.execute(text("""CREATE FUNCTION public.site_revalidate() RETURNS trigger
+                LANGUAGE plpgsql AS $$ BEGIN RETURN NULL; END $$"""))
+        root = Path(__file__).parents[1]
+        for path in (root / "backend/sql/baseline/2026_10_05.sql",
+                     root / "backend/sql/betting_headline.sql"):
+            subprocess.run(["psql", "-X", local_url.render_as_string(hide_password=False),
+                            "-v", "ON_ERROR_STOP=1", "-f", str(path)],
+                           check=True, capture_output=True)
+        with db.begin() as conn:
+            assert conn.execute(text("SELECT * FROM mlb.betting_headline()")).all() == []
+            # Both archive eras, duplicate source rows at cutover, ties, pending,
+            # cancelled (void), missing scores and a rescheduled date mismatch.
+            conn.execute(text("""INSERT INTO mlb.games
+                (game_pk,game_date,home_team,away_team,home_score,away_score,status)
+                SELECT n, CASE WHEN n=1 THEN '2026-05-11'::date ELSE '2026-05-12'::date END,
+                  'BOS','NYY',CASE WHEN n=6 THEN NULL ELSE 4 END,
+                  CASE WHEN n=3 THEN 4 ELSE 2 END,
+                  CASE n WHEN 4 THEN 'Scheduled' WHEN 5 THEN 'Cancelled' ELSE 'Final' END
+                FROM generate_series(1,9) n"""))
+            for table in ("model_outputs_season", "model_outputs_season_v1_archive"):
+                conn.execute(text(f"""INSERT INTO mlb.{table}
+                    (game_pk,date,team,ev_flag,run_line_ev_flag,total_play,
+                     win_prob,p_cover,p_over,p_under,moneyline,spread,spread_odds,
+                     total,total_over_odds,total_under_odds,
+                     kelly_quarter_ml,kelly_quarter_rl,kelly_quarter_total)
+                    SELECT game_pk, game_date + CASE WHEN game_pk=7 THEN 1 ELSE 0 END,
+                      team, CASE WHEN game_pk=8 THEN 'No Play' ELSE team END,
+                      CASE WHEN game_pk=8 THEN 'No Play' ELSE team END,
+                      CASE WHEN game_pk=8 THEN 'No Play' ELSE 'Over' END,
+                      CASE WHEN game_pk=9 THEN .51 ELSE .75 END,
+                      CASE WHEN game_pk=9 THEN .51 ELSE .75 END,
+                      CASE WHEN game_pk=9 THEN .51 ELSE .75 END, .75,
+                      100,-1.5,100,6,100,100,.1,.2,.3
+                    FROM mlb.games CROSS JOIN (VALUES ('BOS'),('NYY')) t(team)"""))
+            # Current outputs never replace the frozen season population.
+            conn.execute(text("""INSERT INTO mlb.model_outputs (game_pk,date,team,win_prob)
+                VALUES (2,'2026-05-12','BOS',.01)"""))
+            def compare():
+                ledger = conn.execute(text("""SELECT * FROM mlb.bet_ledger_v
+                    ORDER BY date,game_pk,bet_type,team""")).mappings().all()
+                expected = {}
+                for row in ledger:
+                    item = expected.setdefault(row['bet_type'], dict(
+                        bet_type=row['bet_type'], wins=0, losses=0, pushes=0,
+                        total_stake=0., total_payout=0.))
+                    item['wins'] += int(row['won'])
+                    item['pushes'] += int(row['push'])
+                    item['losses'] += 1-int(row['won'])-int(row['push'])
+                    item['total_stake'] += float(row['stake'])
+                    item['total_payout'] += float(row['payout'])
+                actual = conn.execute(text("SELECT * FROM mlb.betting_headline()")).mappings().all()
+                assert {r['bet_type']: dict(r) for r in actual} == expected
+                return ledger, expected
+            ledger, before = compare()
+            assert {r['game_pk'] for r in ledger} == {1,2,3}
+            assert len(ledger) == 15  # Two sides of ML/RL, one total per game.
+            assert before['total']['pushes'] == 2
+            assert before['ml']['losses'] == 4  # Existing tie semantics preserved.
+            frozen = conn.execute(text("SELECT row_to_json(t) FROM mlb.model_outputs_season t ORDER BY game_pk,team")).scalars().all()
+            conn.execute(text("UPDATE mlb.games SET home_score=1 WHERE game_pk=2"))
+            _, corrected = compare()
+            assert corrected != before
+            assert corrected['total']['pushes'] == 1
+            assert conn.execute(text("SELECT row_to_json(t) FROM mlb.model_outputs_season t ORDER BY game_pk,team")).scalars().all() == frozen
+            conn.execute(text("UPDATE mlb.model_outputs_season SET run_line_ev_flag='No Play', total_play='No Play'"))
+            conn.execute(text("UPDATE mlb.model_outputs_season_v1_archive SET run_line_ev_flag='No Play', total_play='No Play'"))
+            _, selected = compare()
+            assert set(selected) == {'ml'}
+            assert not conn.execute(text("SELECT prosecdef FROM pg_proc WHERE oid='mlb.betting_headline()'::regprocedure")).scalar_one()
+            for role in ('anon', 'authenticated', 'service_role'):
+                conn.execute(text(f'SET LOCAL ROLE {role}'))
+                ledger, visible = compare()
+                if role in ('anon', 'authenticated'):
+                    assert set(visible) == {'ml'}
+                # A local service_role may lack Supabase's BYPASSRLS attribute.
+                # The invoker function must always match that caller's ledger.
+                conn.execute(text('RESET ROLE'))
+    finally:
+        db.dispose()
+        with admin.connect() as conn:
+            conn.execute(text(f'DROP DATABASE "{name}"'))
+        admin.dispose()
