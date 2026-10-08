@@ -490,7 +490,7 @@ def test_odds_refresh_routes_and_quota_contract(monkeypatch, tmp_path):
                 {"homeAway": "away", "team": {"displayName": "San Diego Padres"}},
             ],
             "odds": [{
-                "provider": {"name": "DraftKings"},
+                "provider": {"id": "100", "name": "Draft Kings"},
                 "moneyline": {"home": quote("-120"), "away": quote("EVEN")},
                 "pointSpread": {"home": quote("+140", "-1.5"), "away": quote("-165", "+1.5")},
                 "total": {"over": quote("-112", "o8.5"), "under": quote("-108", "u8.5")},

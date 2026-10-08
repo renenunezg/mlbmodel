@@ -16,8 +16,9 @@ from backend.data.odds_api import ODDS_TEAM_MAP
 log = logging.getLogger(__name__)
 
 ESPN_SCOREBOARD = "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard"
-# ESPN names the sportsbook; map it to the book keys the odds table already uses.
-ESPN_BOOKS = {"DraftKings": "draftkings"}
+# ESPN's provider id is stable while its display name is not ("DraftKings" and
+# "Draft Kings" both appear). Map the id to the book key the odds table uses.
+ESPN_BOOKS = {"100": "draftkings"}
 
 
 def _price(quote: dict) -> int | None:
@@ -59,10 +60,10 @@ def fetch_espn_odds(target_date: date) -> pd.DataFrame:
             for c in competition["competitors"]
         }
         for odds in competition.get("odds") or []:
-            provider = odds.get("provider", {}).get("name")
-            book = ESPN_BOOKS.get(provider)
+            provider = odds.get("provider", {})
+            book = ESPN_BOOKS.get(str(provider.get("id")))
             if book is None:
-                log.warning(f"Skipping ESPN odds from unmapped provider {provider!r}")
+                log.warning(f"Skipping ESPN odds from unmapped provider {provider.get('name')!r}")
                 continue
             total = odds.get("total", {})
             over = total.get("over", {}).get("close", {})
