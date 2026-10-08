@@ -477,6 +477,40 @@ def test_odds_refresh_routes_and_quota_contract(monkeypatch, tmp_path):
     assert stored[0]["moneyline"].tolist() == [-145, 125]
     assert stored[0]["total"].tolist() == [8.5, 8.5]
 
+    # The ESPN fallback keeps the odds-table contract and spends no credits.
+    def quote(odds, line=None):
+        return {"close": {"odds": odds, **({"line": line} if line else {})}}
+
+    espn = Mock()
+    espn.json.return_value = {"events": [{
+        "id": "401", "date": "2026-08-27T02:10Z", "status": {"type": {"state": "pre"}},
+        "competitions": [{
+            "competitors": [
+                {"homeAway": "home", "team": {"displayName": "Los Angeles Dodgers"}},
+                {"homeAway": "away", "team": {"displayName": "San Diego Padres"}},
+            ],
+            "odds": [{
+                "provider": {"name": "DraftKings"},
+                "moneyline": {"home": quote("-120"), "away": quote("EVEN")},
+                "pointSpread": {"home": quote("+140", "-1.5"), "away": quote("-165", "+1.5")},
+                "total": {"over": quote("-112", "o8.5"), "under": quote("-108", "u8.5")},
+            }],
+        }],
+    }]}
+    espn_get = Mock(return_value=espn)
+    monkeypatch.setattr(odds_api.requests, "get", espn_get)
+    monkeypatch.setenv("ODDS_SOURCE", "espn")
+    run_daily()
+    assert espn_get.call_args.kwargs["params"] == {"dates": "20260827"}
+    assert provider_get.call_count == 2
+    espn_rows = stored[-1]
+    assert set(espn_rows["book"]) == {"draftkings"}
+    assert espn_rows["team"].tolist() == ["LAD", "SDP"]
+    assert espn_rows["moneyline"].tolist() == [-120, 100]
+    assert espn_rows["spread"].tolist() == [-1.5, 1.5]
+    assert espn_rows["spread_odds"].tolist() == [140, -165]
+    assert espn_rows[["total", "total_over_odds", "total_under_odds"]].values.tolist() == [[8.5, -112, -108]] * 2
+
 
 def test_no_game_route_makes_no_provider_request(monkeypatch, tmp_path):
     import pipeline

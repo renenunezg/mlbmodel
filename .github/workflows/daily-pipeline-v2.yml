@@ -67,6 +67,7 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          ODDS_SOURCE: ${{ vars.ODDS_SOURCE || 'odds_api' }}
           PYTHONPATH: "."
         run: python -m v2.pipeline.daily_run
 

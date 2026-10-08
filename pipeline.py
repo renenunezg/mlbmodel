@@ -10,6 +10,7 @@ import pandas as pd
 from sqlalchemy import text
 
 from backend.data.bullpen_daily import update_bullpen_daily
+from backend.data.espn_odds import fetch_espn_odds
 from backend.data.fangraphs import fetch_bullpen_stats, fetch_pitcher_stats, fetch_team_batting
 from backend.data.mlb_api import fetch_probable_starters, fetch_schedule
 from backend.data.odds_api import (
@@ -316,12 +317,21 @@ def _reserve_blocks_optional_refresh() -> bool:
     return False
 
 
+def _odds_source() -> str:
+    # Fallback switch: ODDS_SOURCE=espn when The Odds API quota is exhausted.
+    source = os.getenv("ODDS_SOURCE", "odds_api")
+    if source not in ("odds_api", "espn"):
+        raise ValueError(f"ODDS_SOURCE must be 'odds_api' or 'espn', got {source!r}")
+    return source
+
+
 def fetch_and_load_odds(
     target_date: date | str | None = None,
     *,
     optional: bool = False,
 ) -> int:
     """Load odds for one schedule-backed date, skipping safe duplicates."""
+    source = _odds_source()
     if target_date is None:
         target_date = date.today()
     elif isinstance(target_date, str):
@@ -341,10 +351,11 @@ def fetch_and_load_odds(
         if _has_recent_stored_odds(game_pks, cutoff):
             log.info("Skipping optional Odds API refresh: fresh odds already persisted for this window")
             return 0
-        if _reserve_blocks_optional_refresh():
+        # Only The Odds API has a credit reserve to protect.
+        if source == "odds_api" and _reserve_blocks_optional_refresh():
             return 0
 
-    odds = fetch_odds(upcoming_game_pks)
+    odds = fetch_espn_odds(target_date) if source == "espn" else fetch_odds(upcoming_game_pks)
     if odds.empty:
         log.info("No odds data from API")
         return 0
@@ -393,7 +404,7 @@ def fetch_and_load_odds(
     insert_df = insert_df.drop_duplicates(subset=key_cols, keep="last")
 
     _replace_odds(insert_df)
-    log.info(f"{len(insert_df)} odds rows for {insert_df['game_pk'].nunique()} games")
+    log.info(f"{len(insert_df)} odds rows for {insert_df['game_pk'].nunique()} games from {source}")
     return len(insert_df)
 
 

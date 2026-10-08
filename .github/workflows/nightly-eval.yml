@@ -105,6 +105,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
           ODDS_API_RESERVE_CREDITS: ${{ vars.ODDS_API_RESERVE_CREDITS || '50' }}
+          ODDS_SOURCE: ${{ vars.ODDS_SOURCE || 'odds_api' }}
           PYTHONPATH: "."
         run: python -m v2.pipeline.daily_run ${{ github.event_name == 'schedule' && '--optional-odds-refresh' || '' }}
 
