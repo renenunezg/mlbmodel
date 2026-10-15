@@ -1,0 +1,22 @@
+name: Export isolated analysis source data
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/cache/restore@v4
+        with:
+          path: cache
+          key: statcast-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: statcast-${{ runner.os }}-
+          fail-on-cache-miss: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: regular-season-source-for-isolated-analysis
+          path: cache/statcast_*.parquet
+          if-no-files-found: error
+          retention-days: 1
