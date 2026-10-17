@@ -2,6 +2,7 @@
 import pandas as pd
 import pytest
 
+from v2.players import inputs as inputs_mod
 from v2.players import score
 from v2.players.model import ValueModel
 from v2.players.pricing import PriceModel
@@ -73,9 +74,6 @@ def test_pending_free_agent_rows():
 
 
 # Fix pass after review.
-from v2.players import inputs as inputs_mod
-
-
 def test_window_counts_stay_in_plate_appearance_units():
     counts = {2026: pd.DataFrame([{"player_id": 1, "role": "bat", "K": 5, "BB": 2, "HBP": 0, "1B": 4, "2B": 1, "3B": 0, "HR": 1, "OUT": 7, "season": 2026}])}
     wc = inputs_mod.window_counts(counts, {2026: 5.0, 2025: 4.0, 2024: 3.0})
