@@ -17,13 +17,11 @@ log = logging.getLogger(__name__)
 CACHE_DIR = Path(__file__).resolve().parents[2] / "cache" / "players"
 USER_AGENT = "Mozilla/5.0"
 TIMEOUT_SECONDS = 60
-# Bat tracking exists from 2024; earlier seasons return an empty frame.
-BAT_TRACKING_FIRST_SEASON = 2024
 
 _SAVANT = "https://baseballsavant.mlb.com/leaderboard/"
 BOARDS: dict[str, str] = {
     "oaa": _SAVANT + "outs_above_average?type=Fielder&startYear={season}&endYear={season}"
-    "&split=yes&team=&range=year&min=q&pos=&roles=&viz=hide&csv=true",
+    "&split=yes&team=&range=year&min=1&pos=&roles=&viz=hide&csv=true",
     "arm_strength": _SAVANT + "arm-strength?type=player&year={season}&csv=true",
     "catcher_blocking": _SAVANT + "catcher-blocking?game_type=All&n=q&season_end={season}"
     "&season_start={season}&split=no&team=&type=Cat&with_team=0&csv=true",
@@ -33,13 +31,12 @@ BOARDS: dict[str, str] = {
     "baserunning": _SAVANT + "baserunning-run-value?game_type=All&season_start={season}"
     "&season_end={season}&csv=true",
     "sprint_speed": _SAVANT + "sprint_speed?year={season}&position=&team=&min=10&csv=true",
-    "bat_tracking": _SAVANT + "bat-tracking?year={season}&csv=true",
     "pitch_arsenal_stats": _SAVANT + "pitch-arsenal-stats?type=pitcher&pitchType=&year={season}"
     "&team=&min=10&csv=true",
     "expected_statistics_batter": _SAVANT + "expected_statistics?type=batter&year={season}"
-    "&position=&team=&min=q&csv=true",
+    "&position=&team=&min=1&csv=true",
     "expected_statistics_pitcher": _SAVANT + "expected_statistics?type=pitcher&year={season}"
-    "&position=&team=&min=q&csv=true",
+    "&position=&team=&min=1&csv=true",
 }
 # Boards that name the player id column something other than player_id.
 _ID_COLUMNS = ("player_id", "id", "pitcher", "entity_id")
@@ -77,8 +74,6 @@ def load_board(board: str, season: int, *, refresh: bool = False) -> pd.DataFram
     """Return one Savant leaderboard for a season, fetching it once and caching the CSV."""
     if board not in BOARDS:
         raise ValueError(f"Unknown Savant board {board!r}; known: {sorted(BOARDS)}")
-    if board == "bat_tracking" and season < BAT_TRACKING_FIRST_SEASON:
-        return pd.DataFrame({"player_id": pd.Series(dtype="int64"), "season": pd.Series(dtype="int64")})
     path = _cache_path(board, season)
     if path.exists() and not refresh:
         text = path.read_text(encoding="utf-8")
