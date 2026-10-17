@@ -107,7 +107,8 @@ def _playing_time(counts_by_season: dict[int, pd.DataFrame], weights: dict[int, 
 def _contract_years(rows: pd.DataFrame) -> list[value.ContractYear]:
     return [
         value.ContractYear(int(r.season), str(r.salary_kind), None if pd.isna(r.salary_musd) else float(r.salary_musd),
-                           None if pd.isna(r.option_musd) else float(r.option_musd), (r.option_kind if isinstance(r.option_kind, str) else "team"))
+                           None if pd.isna(r.option_musd) else float(r.option_musd), (r.option_kind if isinstance(r.option_kind, str) else "team"),
+                           r.declined_to if isinstance(getattr(r, "declined_to", None), str) else None)
         for r in rows.sort_values("season").itertuples()
     ]
 
@@ -185,7 +186,9 @@ def assemble_values(
     for pid in pop.index:
         g = str(group[pid])
         status = pop.at[pid, "status"]
-        years = list(range(next_season, next_season + 10))
+        rows = by_player.get(pid)
+        last_season = max(next_season, int(rows["season"].max())) if rows is not None and len(rows) else next_season
+        years = list(range(next_season, last_season + 1))
         base = float(full_runs[pid]) if pd.notna(full_runs[pid]) else np.nan
         war_by_season, ages = {}, {}
         for y in years:
@@ -198,7 +201,6 @@ def assemble_values(
                     shift *= RELIEVER_INNINGS / STARTER_INNINGS
             # A player projected below replacement is replaced: WAR floors at zero, as in the draws.
             war_by_season[y] = max(0.0, (base + shift) * float(scale[pid]) / rpw) if pd.notna(base) else np.nan
-        rows = by_player.get(pid)
         contract_status, service_time, fa_year = "unknown", np.nan, None
         if rows is not None and len(rows):
             contract = _contract_years(rows)
@@ -251,7 +253,7 @@ def assemble_values(
         current_salary = None
         if rows is not None and len(rows):
             cur = rows[rows["season"] == next_season]
-            if len(cur) and pd.notna(cur["salary_musd"].iloc[0]):
+            if len(cur) and cur["salary_kind"].iloc[0] == "guaranteed" and pd.notna(cur["salary_musd"].iloc[0]):
                 current_salary = float(cur["salary_musd"].iloc[0])
             elif len(cur) and cur["salary_kind"].iloc[0] == "pre_arb":
                 current_salary = league_minimum(next_season)

@@ -5,6 +5,7 @@ Every quantity has a documented fallback that the fit report names when used.
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 import numpy as np
@@ -96,11 +97,16 @@ def fit_price_per_win(signings: pd.DataFrame, projected_war: pd.DataFrame) -> Pr
     return PriceModel(slope, se, inflation, n, f"fit_{int(data['first_season'].min())}_{int(data['first_season'].max())}")
 
 
-def arbitration_year(service_time: float) -> int:
-    """1 to 4 from service time before the season; a Super Two (under 3.000) counts as year 1."""
+def arbitration_start(service_time: float, service_season: int, arbitration_seasons: Iterable[int]) -> float:
+    """Use an explicit early arbitration marker to preserve all four Super Two tiers."""
+    return 2.0 if any(2.0 <= service_time + season - service_season < 3.0 for season in arbitration_seasons) else ARBITRATION_SERVICE
+
+
+def arbitration_year(service_time: float, first_service: float = ARBITRATION_SERVICE) -> int:
+    """1 to 4 from service before the season and the schedule's arbitration start."""
     if service_time != service_time:
         return 1
-    return int(max(1, min(4, np.floor(service_time - ARBITRATION_SERVICE) + 1)))
+    return int(max(1, min(4, np.floor(service_time - first_service) + 1)))
 
 
 def fit_arbitration_fractions(contracts: pd.DataFrame, projected_war: pd.DataFrame, price: PriceModel, season: int) -> dict[int, float]:
@@ -112,7 +118,12 @@ def fit_arbitration_fractions(contracts: pd.DataFrame, projected_war: pd.DataFra
                     & (contracts["how_acquired"] != "Free Agency")]
     data = arb.merge(projected_war[["player_id", "war"]], on="player_id", how="inner")
     data = data[data["war"] > 0.5]
-    data["arb_year"] = data["service_time"].apply(arbitration_year)
+    starts = {
+        pid: arbitration_start(float(g["service_time"].iloc[0]), int(g["season"].min()),
+                               g.loc[g["salary_kind"].eq("arbitration") | g.get("declined_to", pd.Series(index=g.index, dtype=object)).eq("arbitration"), "season"])
+        for pid, g in contracts.groupby("player_id")
+    }
+    data["arb_year"] = [arbitration_year(r.service_time, starts[r.player_id]) for r in data.itertuples()]
     data["fraction"] = data["salary_musd"] / (data["war"] * price.price_musd)
     out = dict(FALLBACK_ARB_FRACTIONS)
     for year, g in data.groupby("arb_year"):

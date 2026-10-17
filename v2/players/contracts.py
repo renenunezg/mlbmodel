@@ -44,7 +44,6 @@ MAX_UNMATCHED_SHARE = 0.02
 # A page shows only as many columns as its longest contract, so a cheap player's
 # arbitration and free-agent seasons may fall past the last column and are then
 # extended from his service time (arbitration at 3.000, free agency at 6.000).
-CONTRACT_COLUMNS = [f"contract_y{i}" for i in range(10)]
 ARBITRATION_SERVICE = 3.0
 FREE_AGENT_SERVICE = 6.0
 
@@ -232,9 +231,11 @@ def parse_team_page(html: str, season: int | None = None) -> pd.DataFrame:
             contract_total = float(summary.group(2)) / (1000.0 if summary.group(3) == "K" else 1.0)
             contract_start = 2000 + int(summary.group(4))
         parsed = []
-        for offset, column in enumerate(CONTRACT_COLUMNS):
-            if column not in cells:
-                break
+        offsets = sorted(int(column.removeprefix("contract_y")) for column in cells if re.fullmatch(r"contract_y\d+", column))
+        if offsets != list(range(len(offsets))):
+            raise ValueError(f"Missing contract season column for {player_name}")
+        for offset in offsets:
+            column = f"contract_y{offset}"
             parsed.append((season + offset, *_parse_cell(cells[column])))
         parsed = _extend_schedule(parsed, service_time, season)
         fa_year = next((yr for yr, kind, *_ in parsed if kind == "free_agent"), None)

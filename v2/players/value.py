@@ -2,16 +2,17 @@
 
 Pre-arbitration seasons pay the league minimum, arbitration seasons a fitted
 share of market value, guaranteed seasons their salary. A club option is
-exercised when the projected value exceeds its price, otherwise the buyout is
+exercised when keeping the player is worth more than declining it, including
+the avoided buyout and any retained arbitration rights. Otherwise the buyout is
 paid for a season the player does not play; a player option is exercised when
-the salary exceeds his market value. Control ends at free agency or a declined
-option. Each season's surplus is discounted for distance.
+the salary exceeds his market value. Control ends at free agency, including an
+option declined into free agency. Each season's surplus is discounted for distance.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from v2.players.pricing import PriceModel, arbitration_year, league_minimum
+from v2.players.pricing import PriceModel, arbitration_start, arbitration_year, league_minimum
 
 DISCOUNT_PER_YEAR = 0.08
 PLAYER_OPTIONS = {"player"}
@@ -64,6 +65,8 @@ def project_outlook(
     by_season = {c.season: c for c in contract}
     base_service = service_time if service_time == service_time else 0.0
     service_season = first_season if service_season is None else service_season
+    first_arb_service = arbitration_start(base_service, service_season,
+                                        (c.season for c in contract if c.salary_kind == "arbitration" or c.declined_to == "arbitration"))
     prior_salary = None
     for season in sorted(s for s in by_season if s >= first_season):
         c = by_season[season]
@@ -80,12 +83,15 @@ def project_outlook(
             control = False
             continue
         kind = c.salary_kind
+        buyout_paid = 0.0
+        if kind == "arbitration" or (kind == "buyout" and c.declined_to == "arbitration"):
+            estimate = arb_fractions.get(arbitration_year(service_before, first_arb_service), arb_fractions[1]) * value
+            floor = max(league_minimum(season), ARBITRATION_PRIOR_SALARY_FLOOR * prior_salary if prior_salary else 0.0)
+            arbitration_salary = max(estimate, floor)
         if kind == "pre_arb":
             salary = league_minimum(season)
         elif kind == "arbitration":
-            estimate = arb_fractions.get(arbitration_year(service_before), arb_fractions[1]) * value
-            floor = max(league_minimum(season), ARBITRATION_PRIOR_SALARY_FLOOR * prior_salary if prior_salary else 0.0)
-            salary = max(estimate, floor)
+            salary = arbitration_salary
         elif kind == "buyout":
             option_price = float(c.option_musd or 0.0)
             buyout = float(c.salary_musd or 0.0)
@@ -94,15 +100,16 @@ def project_outlook(
                 exercised = False
             elif option_kind in PLAYER_OPTIONS:
                 exercised = option_price > value
+            elif c.declined_to == "arbitration":
+                exercised = option_price <= arbitration_salary + buyout
             else:
-                exercised = value > option_price
+                exercised = value - option_price >= -buyout
             if exercised:
                 salary, kind = option_price, "option"
             elif c.declined_to == "arbitration":
                 # Declined into arbitration: the team keeps him at an arbitration salary.
-                estimate = arb_fractions.get(arbitration_year(service_before), arb_fractions[1]) * value
-                floor = max(league_minimum(season), ARBITRATION_PRIOR_SALARY_FLOOR * prior_salary if prior_salary else 0.0)
-                salary, kind = max(estimate, floor), "arbitration"
+                salary, kind = arbitration_salary + buyout, "arbitration"
+                buyout_paid = buyout
             else:
                 # The buyout is paid for a season he does not play for the team.
                 salary, kind, war, value, control = buyout, "buyout", 0.0, 0.0, False
@@ -111,7 +118,7 @@ def project_outlook(
             kind = "guaranteed"
         surplus = (value - salary) * (1.0 - discount) ** years_ahead
         out.append(Outlook(season, ages.get(season, 0), war, salary, kind, surplus, control, value))
-        prior_salary = salary
+        prior_salary = salary - buyout_paid
     return out
 
 

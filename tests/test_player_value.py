@@ -4,6 +4,7 @@ import pytest
 
 from v2.players import bio, score
 from v2.players import inputs as inputs_mod
+from v2.players.contracts import parse_team_page
 from v2.players.model import ValueModel
 from v2.players.pricing import PriceModel
 from v2.players.value import ContractYear, market_value, project_outlook, trade_value
@@ -24,6 +25,9 @@ def test_outlook_prices_arbitration_and_option():
     assert out[1].salary_musd == 15.0 and out[1].in_control                   # 20 > 15: option exercised
     assert out[2].in_control is False
     assert trade_value(out) == pytest.approx((30 - 7.5) + (20 - 15) * 0.92)
+    # A buyout makes exercise preferable even when the option has negative surplus.
+    out = project_outlook({2027: 1.4}, {2027: 29}, [ContractYear(2027, "buyout", 2.0, 15.0)], PRICE, ARB, 7.0, 2027)
+    assert out[0].salary_kind == "option" and trade_value(out) == pytest.approx(-1.0)
 
 
 def test_declined_option_ends_control():
@@ -109,6 +113,12 @@ def test_arbitration_year_counts_seasons_since_the_page():
     contract = [ContractYear(2026, "guaranteed", 3.48, None), ContractYear(2027, "arbitration", None, None), ContractYear(2028, "free_agent", None, None)]
     out = project_outlook({2027: 3.0}, {2027: 26}, contract, PRICE, ARB, service_time=3.0, first_season=2027, service_season=2026)
     assert out[0].salary_kind == "arbitration" and out[0].salary_musd == pytest.approx(0.40 * 30.0)
+    contract = [ContractYear(s, "arbitration", None, None) for s in range(2026, 2030)]
+    out = project_outlook(dict.fromkeys(range(2026, 2030), 3.0), {}, contract, PRICE, ARB, 2.144, 2026)
+    assert [o.salary_musd for o in out] == pytest.approx([7.5, 12.0, 18.0, 21.0])
+    # Starting a projection after the first arb year must not reset its tier.
+    out = project_outlook({2027: 3.0}, {}, contract, PRICE, ARB, 2.144, 2027, service_season=2026)
+    assert out[0].salary_musd == pytest.approx(12.0)
 
 
 def test_arbitration_estimate_never_falls_below_prior_salary_floor():
@@ -125,8 +135,41 @@ def test_mutual_option_defaults_to_the_buyout():
 
 def test_declined_option_to_arbitration_keeps_control():
     contract = [ContractYear(2027, "buyout", 0.5, 15.0, "team", "arbitration"), ContractYear(2028, "arbitration", None, None), ContractYear(2029, "free_agent", None, None)]
-    out = project_outlook({2027: 0.5, 2028: 0.5}, {2027: 27, 2028: 28}, contract, PRICE, ARB, 4.0, 2027, service_season=2026)
+    out = project_outlook({2027: 0.5, 2028: 0.1}, {2027: 27, 2028: 28}, contract, PRICE, ARB, 4.0, 2027, service_season=2026)
     assert out[0].salary_kind == "arbitration" and out[0].in_control and out[1].in_control
+    assert out[0].salary_musd == pytest.approx(3.5)  # third-year arb plus the buyout
+    assert out[1].salary_musd == pytest.approx(2.4)  # prior salary floor excludes the one-time buyout
+    rows = pd.DataFrame([
+        {"player_id": 1, "season": c.season, "salary_kind": c.salary_kind, "salary_musd": c.salary_musd,
+         "option_musd": c.option_musd, "option_kind": c.option_kind, "declined_to": c.declined_to,
+         "service_time": 5.0, "fa_year": 2029, "how_acquired": "Traded"}
+        for c in contract
+    ])
+    scored, _ = score.assemble_values(**one_hitter("forty_man", 600), contracts=rows, model=EMPTY, next_season=2027)
+    assert scored.iloc[0].control_years == 2
+    assert scored.iloc[0].salary_current_musd == scored.iloc[0].outlook[0]["salary_musd"]
+    assert scored.iloc[0].outlook[0]["salary_kind"] == "arbitration"
+    # Retained arbitration can be cheaper than exercising a positive-surplus option.
+    out = project_outlook({2027: 3.0}, {}, [ContractYear(2027, "buyout", 1.0, 15.0, "team", "arbitration")], PRICE, ARB, 3.0, 2027)
+    assert out[0].salary_kind == "arbitration" and out[0].salary_musd == pytest.approx(8.5)
+
+
+def test_long_contract_reaches_final_scored_season():
+    cells = "".join(f'<td data-stat="contract_y{i}">$10M</td>' for i in range(14))
+    html = (
+        '<table id="payroll"><thead><tr><th data-stat="contract_y0" aria-label="2026"></th></tr></thead><tbody><tr>'
+        '<th data-stat="player"><a href="/players/x/testpl01.shtml">Test Hitter</a></th>'
+        '<td data-stat="service_time">7.134</td><td data-stat="how_acquired">Free Agency</td>'
+        '<td data-stat="contract_summary">14 yrs/$140M (26-39)</td>' + cells + '</tr></tbody></table>'
+    )
+    contract = parse_team_page(html).assign(player_id=1)
+    draws = pd.DataFrame([[-1.0, 0.0, 1.0]], index=[1])
+    scored, _ = score.assemble_values(**one_hitter("forty_man", 600), contracts=contract, model=EMPTY, next_season=2027, draws=draws)
+    row = scored.iloc[0]
+    assert row.fa_year == 2040 and row.control_years == 13 and row.owed_through_control_musd == 130.0
+    final = next(o for o in row.outlook if o["season"] == 2039)
+    assert final["war"] == row.projected_war and final["war"] > 0
+    assert row.trade_value_low < row.trade_value_musd < row.trade_value_high
 
 
 def test_scored_season_is_the_latest_that_has_started():
