@@ -50,7 +50,7 @@ STATCAST_COLUMNS = [
     "game_pk", "game_date", "game_type", "batter", "pitcher", "stand", "p_throws", "events", "description",
     "zone", "pitch_type", "pitch_number", "type", "release_speed", "pfx_x", "pfx_z",
     "launch_speed", "launch_angle", "bb_type", "hc_x", "hc_y", "estimated_woba_using_speedangle", "bat_speed",
-    "woba_value", "woba_denom", "inning", "inning_topbot", "home_team", "away_team",
+    "woba_value", "woba_denom", "inning", "inning_topbot", "home_team", "away_team", "delta_home_win_exp",
 ]
 
 
@@ -110,6 +110,7 @@ INPUTS: dict[str, InputSpec] = {s.name: s for s in [
     InputSpec("workload.ip_per_outing", "pit", "workload", True, "statcast"),
     InputSpec("workload.pitches_per_outing", "pit", "workload", True, "statcast"),
     InputSpec("workload.outings_per_month", "pit", "workload", True, "statcast"),
+    InputSpec("workload.leverage", "pit", "workload", True, "statcast"),
 ]}
 LONG_COLUMNS = ["player_id", "season", "role", "input", "value", "sample"]
 
@@ -122,7 +123,7 @@ def _load(season: int) -> pd.DataFrame:
     for col in ("batter", "pitcher", "zone", "pitch_number", "launch_angle"):
         frame[col] = pd.to_numeric(frame[col], errors="coerce").astype("float64")
     for col in ("release_speed", "pfx_x", "pfx_z", "launch_speed", "hc_x", "hc_y",
-                "estimated_woba_using_speedangle", "woba_value", "woba_denom", "bat_speed"):
+                "estimated_woba_using_speedangle", "woba_value", "woba_denom", "bat_speed", "delta_home_win_exp"):
         frame[col] = pd.to_numeric(frame[col], errors="coerce").astype("float64")
     return frame
 
@@ -245,6 +246,9 @@ def _statcast_inputs(pitches: pd.DataFrame, season: int) -> pd.DataFrame:
     out.append(_rows("pitcher", per["outs"].mean() / 3.0, n_out, "workload.ip_per_outing", season))
     out.append(_rows("pitcher", per["pitches"].mean(), n_out, "workload.pitches_per_outing", season))
     out.append(_rows("pitcher", n_out / per["month"].nunique(), n_out, "workload.outings_per_month", season))
+    # Leverage: how much win probability moved per pitch, relative to the league pitch.
+    swing_wp = p["delta_home_win_exp"].abs()
+    out.append(_rows("pitcher", swing_wp.groupby(p["pitcher"]).mean() / swing_wp.mean(), n_pitches, "workload.leverage", season))
     return pd.concat(out, ignore_index=True)
 
 

@@ -21,7 +21,7 @@ TIMEOUT_SECONDS = 60
 _SAVANT = "https://baseballsavant.mlb.com/leaderboard/"
 BOARDS: dict[str, str] = {
     "oaa": _SAVANT + "outs_above_average?type=Fielder&startYear={season}&endYear={season}"
-    "&split=yes&team=&range=year&min=1&pos=&roles=&viz=hide&csv=true",
+    "&split=yes&team=&range=year&min=1&pos={pos}&roles=&viz=hide&csv=true",
     "arm_strength": _SAVANT + "arm-strength?type=player&year={season}&csv=true",
     "catcher_blocking": _SAVANT + "catcher-blocking?game_type=All&n=q&season_end={season}"
     "&season_start={season}&split=no&team=&type=Cat&with_team=0&csv=true",
@@ -42,8 +42,9 @@ BOARDS: dict[str, str] = {
 _ID_COLUMNS = ("player_id", "id", "pitcher", "entity_id")
 
 
-def _cache_path(board: str, season: int) -> Path:
-    return CACHE_DIR / f"savant_{board}_{season}.csv"
+def _cache_path(board: str, season: int, pos: str) -> Path:
+    suffix = f"_{pos.lower()}" if pos else ""
+    return CACHE_DIR / f"savant_{board}_{season}{suffix}.csv"
 
 
 def _fetch(url: str) -> str:
@@ -70,15 +71,19 @@ def _normalize(frame: pd.DataFrame, season: int) -> pd.DataFrame:
     return frame
 
 
-def load_board(board: str, season: int, *, refresh: bool = False) -> pd.DataFrame:
-    """Return one Savant leaderboard for a season, fetching it once and caching the CSV."""
+def load_board(board: str, season: int, *, pos: str = "", refresh: bool = False) -> pd.DataFrame:
+    """Return one Savant leaderboard for a season, fetching it once and caching the CSV.
+
+    ``pos`` restricts the OAA board to one position (SS, 2B, ...), which is how a
+    player who played two positions gets a row for each.
+    """
     if board not in BOARDS:
         raise ValueError(f"Unknown Savant board {board!r}; known: {sorted(BOARDS)}")
-    path = _cache_path(board, season)
+    path = _cache_path(board, season, pos)
     if path.exists() and not refresh:
         text = path.read_text(encoding="utf-8")
     else:
-        text = _fetch(BOARDS[board].format(season=season))
+        text = _fetch(BOARDS[board].format(season=season, pos=pos))
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
         log.info(f"savant: cached {board} {season} ({len(text):,} bytes)")
