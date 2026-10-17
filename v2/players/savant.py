@@ -1,0 +1,90 @@
+"""Baseball Savant leaderboard CSVs, one request per board per season, cached.
+
+Every frame comes back with an int64 ``player_id`` column and a ``season``
+column so the consumers never care which name the board itself used.
+"""
+from __future__ import annotations
+
+import io
+import logging
+from pathlib import Path
+
+import pandas as pd
+import requests
+
+log = logging.getLogger(__name__)
+
+CACHE_DIR = Path(__file__).resolve().parents[2] / "cache" / "players"
+USER_AGENT = "Mozilla/5.0"
+TIMEOUT_SECONDS = 60
+# Bat tracking exists from 2024; earlier seasons return an empty frame.
+BAT_TRACKING_FIRST_SEASON = 2024
+
+_SAVANT = "https://baseballsavant.mlb.com/leaderboard/"
+BOARDS: dict[str, str] = {
+    "oaa": _SAVANT + "outs_above_average?type=Fielder&startYear={season}&endYear={season}"
+    "&split=yes&team=&range=year&min=q&pos=&roles=&viz=hide&csv=true",
+    "arm_strength": _SAVANT + "arm-strength?type=player&year={season}&csv=true",
+    "catcher_blocking": _SAVANT + "catcher-blocking?game_type=All&n=q&season_end={season}"
+    "&season_start={season}&split=no&team=&type=Cat&with_team=0&csv=true",
+    "catcher_throwing": _SAVANT + "catcher-throwing?game_type=All&n=q&season_end={season}"
+    "&season_start={season}&split=no&team=&type=Cat&with_team=0&csv=true",
+    "catcher_framing": _SAVANT + "catcher-framing?year={season}&team=&min=q&csv=true",
+    "baserunning": _SAVANT + "baserunning-run-value?game_type=All&season_start={season}"
+    "&season_end={season}&csv=true",
+    "sprint_speed": _SAVANT + "sprint_speed?year={season}&position=&team=&min=10&csv=true",
+    "bat_tracking": _SAVANT + "bat-tracking?year={season}&csv=true",
+    "pitch_arsenal_stats": _SAVANT + "pitch-arsenal-stats?type=pitcher&pitchType=&year={season}"
+    "&team=&min=10&csv=true",
+    "expected_statistics_batter": _SAVANT + "expected_statistics?type=batter&year={season}"
+    "&position=&team=&min=q&csv=true",
+    "expected_statistics_pitcher": _SAVANT + "expected_statistics?type=pitcher&year={season}"
+    "&position=&team=&min=q&csv=true",
+}
+# Boards that name the player id column something other than player_id.
+_ID_COLUMNS = ("player_id", "id", "pitcher", "entity_id")
+
+
+def _cache_path(board: str, season: int) -> Path:
+    return CACHE_DIR / f"savant_{board}_{season}.csv"
+
+
+def _fetch(url: str) -> str:
+    response = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT_SECONDS)
+    response.raise_for_status()
+    body = response.content.decode("utf-8-sig")
+    if body.lstrip().startswith("<"):
+        raise RuntimeError(f"Savant returned HTML instead of CSV for {url}")
+    return body
+
+
+def _normalize(frame: pd.DataFrame, season: int) -> pd.DataFrame:
+    frame = frame.rename(columns=lambda c: c.strip().lstrip("﻿").strip('"'))
+    for name in _ID_COLUMNS:
+        if name in frame.columns:
+            frame = frame.rename(columns={name: "player_id"})
+            break
+    else:
+        raise RuntimeError(f"Savant board has no player id column: {list(frame.columns)[:8]}")
+    frame["player_id"] = pd.to_numeric(frame["player_id"], errors="coerce")
+    frame = frame.dropna(subset=["player_id"])
+    frame["player_id"] = frame["player_id"].astype("int64")
+    frame["season"] = season
+    return frame
+
+
+def load_board(board: str, season: int, *, refresh: bool = False) -> pd.DataFrame:
+    """Return one Savant leaderboard for a season, fetching it once and caching the CSV."""
+    if board not in BOARDS:
+        raise ValueError(f"Unknown Savant board {board!r}; known: {sorted(BOARDS)}")
+    if board == "bat_tracking" and season < BAT_TRACKING_FIRST_SEASON:
+        return pd.DataFrame({"player_id": pd.Series(dtype="int64"), "season": pd.Series(dtype="int64")})
+    path = _cache_path(board, season)
+    if path.exists() and not refresh:
+        text = path.read_text(encoding="utf-8")
+    else:
+        text = _fetch(BOARDS[board].format(season=season))
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        log.info(f"savant: cached {board} {season} ({len(text):,} bytes)")
+    return _normalize(pd.read_csv(io.StringIO(text)), season)
