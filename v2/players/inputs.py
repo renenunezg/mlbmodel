@@ -385,7 +385,7 @@ def shrunk_rates(counts: pd.DataFrame, group_of: pd.Series, strength: float) -> 
     cols = list(OUTCOMES)
     frame = counts[["player_id", "role", *cols]].copy()
     frame["group"] = frame["player_id"].map(group_of)
-    frame["group"] = frame["group"].fillna(np.where(frame["role"].eq("pit"), "RP", "DH"))
+    frame["group"] = frame["group"].fillna(pd.Series(np.where(frame["role"].eq("pit"), "RP", "DH"), index=frame.index))
     totals = frame.groupby("group")[cols].sum()
     prior = totals.div(totals.sum(axis=1), axis=0)
     n = frame[cols].sum(axis=1)
