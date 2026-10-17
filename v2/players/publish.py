@@ -29,6 +29,8 @@ TRAIT_COLUMNS = [
 ]
 JSON_COLUMNS = {"outlook", "tip", "inputs"}
 ARRAY_COLUMNS = {"secondary_positions"}
+# Integer columns arrive as floats when a frame has gaps; Postgres rejects "108.0" for an integer.
+INT_COLUMNS = {"player_id", "team_id", "age", "season", "fa_year", "control_years", "sample"}
 
 
 # A publish must look like a population, not a filtered slice.
@@ -51,6 +53,8 @@ def _records(frame: pd.DataFrame, columns: list[str]) -> list[dict]:
                 rec[key] = val.item()
             else:
                 rec[key] = val
+            if key in INT_COLUMNS and isinstance(rec[key], float):
+                rec[key] = int(rec[key])
         out.append(rec)
     return out
 
