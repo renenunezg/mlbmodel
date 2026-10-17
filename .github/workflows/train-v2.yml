@@ -47,6 +47,18 @@ jobs:
           PYTHONPATH: "."
         run: python -m v2.data.build_cache --years $(seq 2024 "$(date -u +%Y)")
 
+      - name: Refresh player contracts (Mondays)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PYTHONPATH: "."
+        run: if [ "$(date -u +%u)" = "1" ]; then python -m v2.players.contracts --season "$(date -u +%Y)"; fi
+
+      - name: Score player values
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PYTHONPATH: "."
+        run: python -m v2.players.score --as-of "$(date -u +%F)"
+
       - name: Train v2 models
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
