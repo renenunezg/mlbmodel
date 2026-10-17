@@ -46,23 +46,18 @@ def league_minimum(season: int) -> float:
 def free_agent_signings(contracts: pd.DataFrame, current_season: int) -> pd.DataFrame:
     """One row per free-agent contract from the last offseasons: player_id, first_season, aav_musd, years.
 
-    A contract is a run of guaranteed seasons for a player acquired by free agency whose
-    first guaranteed season is within FREE_AGENT_OFFSEASONS of the current season.
+    The contract summary on the page gives the length, total value, and first season, so a
+    deal signed two winters ago is dated to its own first season, not the page's.
     """
-    c = contracts[(contracts["how_acquired"] == "Free Agency") & (contracts["salary_kind"].isin(["guaranteed", "buyout"]))]
-    c = c.sort_values(["player_id", "season"])
-    rows = []
-    for player_id, g in c.groupby("player_id"):
-        guaranteed = g[g["salary_kind"] == "guaranteed"]
-        if guaranteed.empty:
-            continue
-        first = int(guaranteed["season"].min())
-        if first < current_season - FREE_AGENT_OFFSEASONS + 1 or first > current_season:
-            continue
-        buyouts = g.loc[g["salary_kind"] == "buyout", "salary_musd"].fillna(0).sum()
-        total = guaranteed["salary_musd"].fillna(0).sum() + buyouts
-        rows.append({"player_id": int(player_id), "first_season": first, "years": len(guaranteed), "aav_musd": total / len(guaranteed)})
-    return pd.DataFrame(rows, columns=["player_id", "first_season", "years", "aav_musd"])
+    c = contracts[(contracts["how_acquired"] == "Free Agency") & contracts["contract_start"].notna() & contracts["contract_years"].notna()]
+    c = c.drop_duplicates("player_id")
+    c = c[c["contract_start"].between(current_season - FREE_AGENT_OFFSEASONS + 1, current_season)]
+    c = c[c["contract_total_musd"].notna() & (c["contract_years"] > 0)]
+    return pd.DataFrame({
+        "player_id": c["player_id"].astype("int64").to_numpy(), "first_season": c["contract_start"].astype("int64").to_numpy(),
+        "years": c["contract_years"].astype("int64").to_numpy(),
+        "aav_musd": (c["contract_total_musd"].astype("float64") / c["contract_years"].astype("float64")).to_numpy(dtype="float64"),
+    })
 
 
 def fit_price_per_win(signings: pd.DataFrame, projected_war: pd.DataFrame) -> PriceModel:
@@ -74,7 +69,7 @@ def fit_price_per_win(signings: pd.DataFrame, projected_war: pd.DataFrame) -> Pr
     60 contracts or when a free-intercept fit's intercept is negative beyond two standard errors.
     """
     data = signings.merge(projected_war, on=["player_id", "first_season"], how="inner")
-    data = data[data["war"] > 0]
+    data = data[data["war"] > 0].astype({"war": "float64", "aav_musd": "float64"})
     n = len(data)
     if n < MIN_FREE_AGENT_CONTRACTS:
         log.info(f"price per win: {n} contracts, using the fallback")

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import io
 import logging
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -47,13 +48,16 @@ def _cache_path(board: str, season: int, pos: str) -> Path:
     return CACHE_DIR / f"savant_{board}_{season}{suffix}.csv"
 
 
-def _fetch(url: str) -> str:
-    response = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT_SECONDS)
-    response.raise_for_status()
-    body = response.content.decode("utf-8-sig")
-    if body.lstrip().startswith("<"):
-        raise RuntimeError(f"Savant returned HTML instead of CSV for {url}")
-    return body
+def _fetch(url: str, attempts: int = 3) -> str:
+    for attempt in range(1, attempts + 1):
+        response = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=TIMEOUT_SECONDS)
+        response.raise_for_status()
+        body = response.content.decode("utf-8-sig")
+        if not body.lstrip().startswith("<"):
+            return body
+        if attempt < attempts:
+            time.sleep(2.0 * attempt)
+    raise RuntimeError(f"Savant returned HTML instead of CSV for {url}")
 
 
 def _normalize(frame: pd.DataFrame, season: int) -> pd.DataFrame:

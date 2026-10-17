@@ -34,8 +34,12 @@ MIN_INNINGS_AT_POSITION = 200.0
 INNINGS_PER_150_GAMES = 1350.0
 # Outs above average to runs, the ratio Savant's own runs-prevented column uses.
 RUNS_PER_OAA = 0.875
-# The conventional replacement offset for reference: minus 20 runs per 600 PA.
-CONVENTIONAL_REPLACEMENT_RUNS = -20.0
+# Replacement level in use: the conventional offsets, minus 20 runs per 600 PA for
+# hitters (on top of the positional scale), minus 18 per 180 IP for starters, minus 5
+# per 65 IP for relievers. The measured fringe is reported beside them; it is biased
+# upward because the fringe players who kept playing are the ones who produced.
+CONVENTIONAL_REPLACEMENT = {"hitter": -20.0, "SP": -18.0, "RP": -5.0}
+CONVENTIONAL_REPLACEMENT_RUNS = CONVENTIONAL_REPLACEMENT["hitter"]
 # The pool a team can get without a trade: players outside these ranks by playing time.
 REPLACEMENT_RANK = {"hitter": 30, "SP": 150, "RP": 210}
 # Reliever leverage multiplier bounds.

@@ -1,0 +1,442 @@
+"""Nightly scoring: Grade, Trade value, Impact, and explained traits for the population.
+
+Reads the stored model, computes the window of inputs, and assembles the two
+published frames. Skips every write when the inputs are unchanged.
+
+Usage:
+    python -m v2.players.score --as-of 2026-10-16 [--no-write] [--force] [--model PATH] [--player ID ...]
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import logging
+from datetime import date
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+from backend.db import writes_allowed
+from backend.log import setup_logging
+from v2.data.pa_dataset import OUTCOMES
+from v2.players import aging, bio, features, inputs, value
+from v2.players.contracts import estimated_schedule, load_contracts
+from v2.players.model import ValueModel, load_latest_from_db
+from v2.players.pricing import league_minimum
+from v2.players.runs import FULL_SEASON_PA, RELIEVER_INNINGS, RUNS_PER_OAA, STARTER_INNINGS
+
+log = logging.getLogger(__name__)
+
+CACHE_DIR = Path(__file__).resolve().parents[2] / "cache" / "players"
+LAST_SCORED = CACHE_DIR / "last_scored.json"
+WINDOW_SEASONS = 3
+DRAWS = 30
+# Playing-time shrinkage: pseudo-sample toward the group norm, and the norms.
+PLAYING_TIME_K = 300.0
+PLAYING_TIME_NORM = {"hitter": 450.0, "SP": 150.0 * 4.37, "RP": 60.0 * 4.37}  # PA or batters faced
+SEASON_DAYS = 186.0
+MAX_IL_REDUCTION = 0.5
+HEADSHOT = "https://img.mlbstatic.com/mlb-photos/image/upload/w_213,q_auto:best/v1/people/{player_id}/headshot/67/current"
+FADED_FREE_AGENT_SEASONS = 2
+CATCHER_RUN_INPUTS = ("reliability.framing_runs", "reliability.blocking_runs", "arm.cs_above_average")
+
+
+def next_season(as_of: date, season: int) -> int:
+    _, end = bio.season_dates(season)
+    return season if as_of <= end else season + 1
+
+
+def window_weights_by_season(model: ValueModel, last_season: int) -> dict[int, float]:
+    return {last_season - back: w for back, w in model.window_weights.items()}
+
+
+def fingerprint(as_of: date, population: pd.DataFrame, contracts: pd.DataFrame, model: ValueModel, seasons: list[int]) -> str:
+    parts = [model.model_version, model.fitted_at]
+    for season in seasons:
+        path = inputs.STATCAST_DIR / f"statcast_{season}.parquet"
+        parts.append(str(pd.read_parquet(path, columns=["game_date"])["game_date"].max()) if path.exists() else "none")
+    parts.append(str(contracts["fetched_at"].max()) if "fetched_at" in contracts and len(contracts) else "no-contracts")
+    parts.extend(f"{r.player_id}:{r.status}:{r.team}" for r in population.sort_values("player_id").itertuples())
+    return hashlib.sha256("|".join(parts).encode()).hexdigest()
+
+
+def _playing_time(counts_by_season: dict[int, pd.DataFrame], weights: dict[int, float], groups: pd.Series, il: pd.DataFrame) -> pd.DataFrame:
+    """Projected PA (hitters) or batters faced (pitchers) for a full season, one row per player-role."""
+    parts = []
+    for season, frame in counts_by_season.items():
+        w = weights.get(season, 0.0)
+        if w <= 0:
+            continue
+        f = frame[["player_id", "role"]].copy()
+        f["n"] = frame[list(OUTCOMES)].sum(axis=1)
+        f["w"] = w
+        parts.append(f)
+    stacked = pd.concat(parts, ignore_index=True)
+    stacked["wn"] = stacked["w"] * stacked["n"]
+    agg = stacked.groupby(["player_id", "role"]).agg(wn=("wn", "sum"), w=("w", "sum")).reset_index()
+    agg["raw"] = agg["wn"] / agg["w"]
+    group = agg["player_id"].map(groups)
+    norm_key = np.where(agg["role"].eq("pit"), group.fillna("RP"), "hitter")
+    norm = pd.Series([PLAYING_TIME_NORM.get(k, PLAYING_TIME_NORM["hitter"]) for k in norm_key], index=agg.index)
+    agg["pa"] = (agg["raw"] * agg["wn"] + norm * PLAYING_TIME_K) / (agg["wn"] + PLAYING_TIME_K)
+    if not il.empty:
+        il_total = il.groupby("player_id")["il_days"].sum()
+        reduction = (agg["player_id"].map(il_total).fillna(0) / (WINDOW_SEASONS * SEASON_DAYS)).clip(upper=MAX_IL_REDUCTION)
+        agg["pa"] = agg["pa"] * (1 - reduction)
+    return agg[["player_id", "role", "pa"]]
+
+
+def _contract_years(rows: pd.DataFrame) -> list[value.ContractYear]:
+    return [
+        value.ContractYear(int(r.season), str(r.salary_kind), None if pd.isna(r.salary_musd) else float(r.salary_musd),
+                           None if pd.isna(r.option_musd) else float(r.option_musd), (r.option_kind if isinstance(r.option_kind, str) else "team"))
+        for r in rows.sort_values("season").itertuples()
+    ]
+
+
+def assemble_values(
+    population: pd.DataFrame, groups: pd.DataFrame, rates: pd.DataFrame, inputs: pd.DataFrame, il_days: pd.DataFrame,
+    playing_time: pd.DataFrame, contracts: pd.DataFrame, model: ValueModel, next_season: int,
+    actual: pd.DataFrame | None = None, draws: np.ndarray | None = None, as_of: date | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """From already-computed frames to the player_values and player_traits frames."""
+    pop = population.merge(groups, on="player_id", how="left")
+    pop["position_group"] = pop["position_group"].fillna(pop["listed_position"].map(lambda p: "SP" if p in ("P", "SP", "TWP") else ("RP" if p == "RP" else p))).fillna("DH")
+    pop = pop.set_index("player_id")
+    group = pop["position_group"]
+    pool = pd.Series(features.pool_of(group), index=pop.index)
+
+    # Inputs, z-scores, composites.
+    values_wide, samples_wide = features.wide_inputs(inputs) if not inputs.empty else (pd.DataFrame(index=pop.index), pd.DataFrame(index=pop.index))
+    values_wide = values_wide.reindex(pop.index)
+    samples_wide = samples_wide.reindex(pop.index)
+    z = features.oriented_z(values_wide, pool) if not values_wide.empty else values_wide
+    pct = features.input_percentiles(values_wide, group) if not values_wide.empty else values_wide
+    composites, coverage = features.trait_composites(z, pool, model)
+
+    # Shrunk runs and the projection.
+    role_series = pd.Series(np.where(group.isin(features.PITCHER_GROUPS), "pit", "bat"), index=pop.index)
+    rates_pop = features.role_rows(rates[rates["role"].isin(["bat", "pit"])], group)
+    shrunk = features.shrunk_runs(rates_pop, model, group) if not rates_pop.empty else pd.Series(dtype="float64")
+    shrunk = shrunk.reindex(pop.index)
+    sample = rates_pop.set_index("player_id")["n"] if not rates_pop.empty else pd.Series(dtype="float64")
+    sample = sample.reindex(pop.index).fillna(0.0)
+    design = features.grade_features(composites, shrunk, pool)
+    projected = features.project_runs(design, group, model)
+    has_fit = bool(model.grade_weights)
+    if not has_fit:
+        projected = shrunk  # no fitted weights: the shrunk runs stand in
+    gradeable = sample >= features.MIN_GRADE_SAMPLE
+    pos_adj = group.map(model.positional_adjustment).fillna(0.0).where(role_series.eq("bat"), 0.0)
+    replacement = group.map(model.replacement).fillna(0.0)
+    full_runs = projected + pos_adj - replacement  # per 600 PA or per 180/65 IP
+    grade_raw = full_runs.where(gradeable)
+    grade = features.to_grade_scale(grade_raw, group)
+    k_grade = pd.Series([model.reliability_k.get(f"grade_{p}", 0.0) for p in np.where(group.isin(features.PITCHER_GROUPS), group, "hitter")], index=pop.index)
+    band = features.reliability_band(sample, k_grade.astype(float).fillna(0.0))
+
+    # Playing time and WAR by season.
+    pt = features.role_rows(playing_time, group).set_index("player_id")["pa"].reindex(pop.index)
+    pt = pt.fillna(pd.Series([PLAYING_TIME_NORM["RP"] if g == "RP" else PLAYING_TIME_NORM["SP"] if g == "SP" else PLAYING_TIME_NORM["hitter"] for g in group], index=pop.index))
+    per_unit = pd.Series(np.where(role_series.eq("bat"), FULL_SEASON_PA, np.where(group.eq("SP"), STARTER_INNINGS, RELIEVER_INNINGS) * model.pa_per_ip), index=pop.index)
+    scale = pt / per_unit
+    rpw = model.runs_per_win
+    age_next = pop["age"].astype("float64")
+    curve_name = pd.Series(np.where(role_series.eq("bat"), "bat_runs_600", "pitch_runs_180"), index=pop.index)
+    price = model.price_model()
+    contracts = contracts.copy() if contracts is not None else pd.DataFrame()
+    by_player = {pid: g for pid, g in contracts.groupby("player_id")} if len(contracts) else {}
+    out_rows, trait_rows = [], []
+    curves = model.age_curves
+    for pid in pop.index:
+        g = str(group[pid])
+        status = pop.at[pid, "status"]
+        years = list(range(next_season, next_season + 10))
+        base = float(full_runs[pid]) if pd.notna(full_runs[pid]) else np.nan
+        war_by_season, ages = {}, {}
+        for y in years:
+            a = int(age_next[pid]) + (y - next_season) if pd.notna(age_next[pid]) else 27
+            ages[y] = a
+            shift = 0.0
+            if curves and curve_name[pid] in curves and pd.notna(age_next[pid]):
+                shift = aging.apply(0.0, curve_name[pid], int(age_next[pid]), a, curves)
+                if g == "RP":
+                    shift *= RELIEVER_INNINGS / STARTER_INNINGS
+            war_by_season[y] = (base + shift) * float(scale[pid]) / rpw if pd.notna(base) else np.nan
+        rows = by_player.get(pid)
+        contract_status, service_time, fa_year = "unknown", np.nan, None
+        if rows is not None and len(rows):
+            contract = _contract_years(rows)
+            service_time = float(rows["service_time"].iloc[0]) if pd.notna(rows["service_time"].iloc[0]) else np.nan
+            fa_year = int(rows["fa_year"].dropna().iloc[0]) if rows["fa_year"].notna().any() else None
+            contract_status = "estimated" if (rows["how_acquired"] == "estimated").all() else "contract"
+            if fa_year is not None and fa_year <= next_season:
+                # Free agency arrives before the next season: no control years, a market value.
+                contract = [value.ContractYear(next_season, "free_agent", None, None)]
+                contract_status = "free_agent"
+        elif status == "free_agent":
+            contract = [value.ContractYear(next_season, "free_agent", None, None)]
+            contract_status = "free_agent"
+        else:
+            contract = []
+        if status == "free_agent":
+            contract = [value.ContractYear(next_season, "free_agent", None, None)]
+            contract_status = "free_agent"
+        war_known = {y: (0.0 if pd.isna(w) else w) for y, w in war_by_season.items()}
+        graded = bool(gradeable[pid]) and pd.notna(grade[pid])
+        if not graded:
+            contract = []  # no projection, no dollar figures
+        outlook = value.project_outlook(war_known, ages, contract, price, model.arb_fractions, service_time, next_season) if contract else []
+        control_years = sum(1 for o in outlook if o.in_control)
+        tv = value.trade_value(outlook) if outlook else np.nan
+        mv = value.market_value(outlook) if outlook else np.nan
+        if pd.isna(base) or contract_status == "unknown" or not graded:
+            tv = np.nan
+        # Draws for the range.
+        tv_low = tv_high = np.nan
+        if draws is not None and pid in draws.index and pd.notna(tv):
+            d = draws.loc[pid]
+            tv_draws = []
+            for delta in d:
+                shift = float(delta) * float(scale[pid]) / rpw
+                war_d = {y: max(0.0, war_known[y] + shift) for y in years}
+                tv_draws.append(value.trade_value(value.project_outlook(war_d, ages, contract, price, model.arb_fractions, service_time, next_season)))
+            tv_low, tv_high = float(np.percentile(tv_draws, 10)), float(np.percentile(tv_draws, 90))
+        shown = [o for o in outlook if o.in_control or o.salary_kind == "buyout"]
+        faded = [o for o in outlook if not (o.in_control or o.salary_kind == "buyout")][:FADED_FREE_AGENT_SEASONS]
+        outlook_json = [
+            {"season": o.season, "age": o.age, "war": round(o.war, 2), "salary_musd": round(o.salary_musd, 2), "salary_kind": o.salary_kind,
+             "surplus_musd": round(o.surplus_musd, 1), "in_control": o.in_control}
+            for o in shown + faded
+        ]
+        owed = float(sum(o.salary_musd for o in shown))
+        # Next season's salary: the contract figure, else the estimated arbitration or minimum from the outlook.
+        current_salary = None
+        if rows is not None and len(rows):
+            cur = rows[rows["season"] == next_season]
+            if len(cur) and pd.notna(cur["salary_musd"].iloc[0]):
+                current_salary = float(cur["salary_musd"].iloc[0])
+            elif len(cur) and cur["salary_kind"].iloc[0] == "pre_arb":
+                current_salary = league_minimum(next_season)
+        if current_salary is None and outlook and outlook[0].season == next_season and outlook[0].in_control:
+            current_salary = round(outlook[0].salary_musd, 2)
+        impact_war = impact_runs = np.nan
+        if actual is not None and pid in actual.index:
+            impact_runs = float(actual.at[pid, "runs"])
+            impact_war = impact_runs / rpw
+        tip = {
+            "projected_runs": None if pd.isna(projected[pid]) else round(float(projected[pid]), 1),
+            "positional_adjustment": round(float(pos_adj[pid]), 1), "replacement_runs": round(float(replacement[pid]), 1),
+            "playing_time": round(float(pt[pid]), 0), "runs_per_win": round(rpw, 2), "price_per_win_musd": round(price.price_musd, 2),
+            "price_source": price.source, "inflation": round(price.inflation, 3), "discount": value.DISCOUNT_PER_YEAR,
+            "sample": round(float(sample[pid]), 0), "shrunk_runs": None if pd.isna(shrunk[pid]) else round(float(shrunk[pid]), 1),
+        }
+        out_rows.append({
+            "player_id": int(pid), "player_name": pop.at[pid, "player_name"], "team": pop.at[pid, "team"],
+            "team_id": None if pd.isna(pop.at[pid, "team_id"]) else int(pop.at[pid, "team_id"]), "level": "mlb",
+            "position_group": g, "secondary_positions": list(pop.at[pid, "secondary_positions"]) if isinstance(pop.at[pid, "secondary_positions"], list) else [],
+            "age": None if pd.isna(age_next[pid]) else int(age_next[pid]), "bats": pop.at[pid, "bats"], "throws": pop.at[pid, "throws"],
+            "status": status, "as_of": as_of, "model_version": model.model_version, "season": next_season,
+            "grade": round(float(grade[pid]), 1) if graded else None,
+            "grade_low": round(float(max(20.0, grade[pid] - band[pid])), 1) if graded else None,
+            "grade_high": round(float(min(80.0, grade[pid] + band[pid])), 1) if graded else None,
+            "grade_percentile": None, "grade_reason": None if graded else "insufficient_sample",
+            "projected_war": None if not graded or pd.isna(war_by_season.get(next_season, np.nan)) else round(float(war_by_season[next_season]), 2),
+            "trade_value_musd": None if pd.isna(tv) else round(float(tv), 1),
+            "trade_value_low": None if pd.isna(tv_low) else round(tv_low, 1), "trade_value_high": None if pd.isna(tv_high) else round(tv_high, 1),
+            "market_value_musd": None if pd.isna(mv) or not graded else round(float(mv), 1),
+            "impact_war": None if pd.isna(impact_war) else round(impact_war, 2), "impact_runs": None if pd.isna(impact_runs) else round(impact_runs, 1),
+            "playing_time": round(float(pt[pid]), 0),
+            "service_time": None if pd.isna(service_time) else service_time, "contract_status": contract_status, "fa_year": fa_year,
+            "control_years": int(control_years), "salary_current_musd": current_salary, "owed_through_control_musd": round(owed, 2),
+            "outlook": outlook_json, "tip": tip, "headshot_url": HEADSHOT.format(player_id=int(pid)),
+        })
+        # Traits.
+        for trait, spec in features.TRAITS.items():
+            if spec.pool != pool[pid]:
+                continue
+            comp = composites.at[pid, trait] if trait in composites.columns else np.nan
+            tw = [(r["input"], float(r["weight"]), r["status"]) for r in model.trait_weights if r["pool"] == spec.pool and r["trait"] == trait]
+            inputs_json = []
+            trait_sample = 0.0
+            for name, w, _status in tw:
+                v = values_wide.at[pid, name] if name in values_wide.columns else np.nan
+                if pd.isna(v):
+                    continue
+                inputs_json.append([name, round(w, 3), round(float(v), 4), round(float(pct.at[pid, name]), 1) if name in pct.columns and pd.notna(pct.at[pid, name]) else None])
+                trait_sample = max(trait_sample, float(samples_wide.at[pid, name]) if name in samples_wide.columns and pd.notna(samples_wide.at[pid, name]) else 0.0)
+            kind = "physical" if len(tw) == 1 and features.INPUT_KIND.get(tw[0][0]) == "physical" else "measured"
+            trait_rows.append({
+                "player_id": int(pid), "trait": trait, "panel": spec.panel, "value": None if pd.isna(comp) else round(float(comp), 4),
+                "in_grade": bool(any(w > 0 for _, w, _ in tw)), "kind": kind, "sample": int(trait_sample), "inputs": inputs_json,
+                "as_of": as_of, "model_version": model.model_version,
+            })
+    values_frame = pd.DataFrame(out_rows)
+    traits_frame = pd.DataFrame(trait_rows)
+    if not traits_frame.empty:
+        comp_series = traits_frame.set_index(["player_id", "trait"])["value"]
+        grp = traits_frame["player_id"].map(group)
+        scaled = features.to_grade_scale(comp_series.reset_index(drop=True), grp)
+        traits_frame["grade"] = scaled.round(1).values
+        traits_frame["percentile"] = (comp_series.reset_index(drop=True).groupby(grp).rank(pct=True) * 100).round(1).values
+        k_trait = traits_frame["trait"].map(lambda t: model.reliability_k.get(t, 0.0)).astype(float)
+        tb = features.reliability_band(traits_frame["sample"].astype(float), k_trait.values)
+        traits_frame["grade_low"] = (traits_frame["grade"] - tb).clip(lower=20).round(1)
+        traits_frame["grade_high"] = (traits_frame["grade"] + tb).clip(upper=80).round(1)
+        traits_frame.loc[traits_frame["value"].isna(), ["grade", "grade_low", "grade_high", "percentile"]] = None
+    if not values_frame.empty:
+        values_frame["grade_percentile"] = (values_frame["grade"].groupby(values_frame["position_group"]).rank(pct=True) * 100).round(1)
+    return values_frame, traits_frame
+
+
+def _actual_runs(season: int, model: ValueModel, groups: pd.Series, lev: pd.Series) -> pd.DataFrame:
+    """This season's runs above replacement from actual outcomes, fielding, and running, per player."""
+    counts = inputs.outcome_counts(season)
+    board = inputs.season_inputs(season).pivot_table(index="player_id", columns="input", values="value", aggfunc="first")
+    counts = features.role_rows(counts, groups).set_index("player_id")
+    w = np.array([model.linear_weights[k] for k in OUTCOMES])
+    c = counts[list(OUTCOMES)].to_numpy(float)
+    n = c.sum(axis=1)
+    total = c @ w
+    group = pd.Series(counts.index.map(groups), index=counts.index)
+    group = group.fillna(pd.Series(np.where(counts["role"].eq("pit"), "RP", "DH"), index=counts.index))
+    is_bat = counts["role"].eq("bat").to_numpy()
+
+    def col(name: str) -> np.ndarray:
+        return board[name].reindex(counts.index).fillna(0.0).to_numpy(float) if name in board.columns else np.zeros(len(counts))
+
+    catcher = group.eq("C").to_numpy()
+    fld = RUNS_PER_OAA * col("range.oaa_per_600") + np.where(catcher, col("reliability.framing_runs") + col("reliability.blocking_runs") + 0.2 * col("arm.cs_above_average"), 0.0)
+    run = col("baserunning.runs")
+    pos = group.map(model.positional_adjustment).fillna(0.0).to_numpy(float) * n / FULL_SEASON_PA
+    repl = group.map(model.replacement).fillna(0.0).to_numpy(float)
+    hitter = total + fld + run + pos - repl * n / FULL_SEASON_PA
+    innings = np.where(group.eq("SP"), STARTER_INNINGS, RELIEVER_INNINGS)
+    mult = np.where(group.eq("SP"), 1.0, lev.reindex(counts.index).fillna(1.0).clip(0.5, 2.0).to_numpy(float))
+    pitcher = -total * mult - repl * (n / model.pa_per_ip) / innings
+    out = pd.DataFrame({
+        "runs": np.where(is_bat, hitter, pitcher), "batting": np.where(is_bat, total, 0.0),
+        "fielding": np.where(is_bat, fld, 0.0), "running": np.where(is_bat, run, 0.0), "n": n,
+    }, index=counts.index)
+    return out[out["n"] > 0]
+
+
+def gather(as_of: date, model: ValueModel, season: int | None = None) -> dict:
+    """Everything assemble_values needs, from the caches, the API, and the contracts table."""
+    season = season or as_of.year
+    nxt = next_season(as_of, season)
+    model.validate(nxt)
+    seasons = [season - b for b in range(WINDOW_SEASONS)]
+    weights = window_weights_by_season(model, season)
+    population = bio.population(season, as_of)
+    pos = bio.positions([s for s in seasons if (inputs.STATCAST_DIR / f"statcast_{s}.parquet").exists()])
+    groups = bio.primary_position(pos, weights)
+    frames = {s: inputs.season_inputs(s, refresh=(s == season)) for s in seasons if (inputs.STATCAST_DIR / f"statcast_{s}.parquet").exists()}
+    counts = {s: inputs.outcome_counts(s) for s in frames}
+    if season in counts:
+        counts[season] = inputs.outcome_counts(season) if (CACHE_DIR / f"outcomes_{season}.parquet").exists() else counts[season]
+    win = inputs.window(frames, weights)
+    wc = inputs.window_counts(counts, weights)
+    group_of = groups.set_index("player_id")["position_group"]
+    rates = inputs.shrunk_rates(wc, group_of, model.shrink_strength)
+    il = bio.il_days(seasons, as_of)
+    pt = _playing_time(counts, weights, group_of, il)
+    contracts = load_contracts(season)
+    # Players Baseball-Reference does not list yet (this year's debuts) get an
+    # estimated pre-arbitration schedule from their debut date.
+    _, season_end = bio.season_dates(season)
+    listed = set(contracts["player_id"])
+    extra = [
+        estimated_schedule(int(r.player_id), r.mlb_debut, season, season_end)
+        for r in population.itertuples() if r.player_id not in listed and r.status != "free_agent"
+    ]
+    extra = [e for e in extra if len(e)]
+    if extra:
+        contracts = pd.concat([contracts, *extra], ignore_index=True)
+    lev = win[win["input"] == "workload.leverage"].set_index("player_id")["value"]
+    actual = _actual_runs(season, model, group_of, lev)
+    # Draws of outcome rates, as run deltas against the shrunk point estimate, one row per player.
+    wc_role = features.role_rows(wc, group_of).reset_index(drop=True)
+    draws = features.dirichlet_draws(wc_role, group_of, model.shrink_strength, DRAWS)
+    lw = np.array([model.linear_weights[k] for k in OUTCOMES])
+    point = rates.set_index(["player_id", "role"]).reindex(pd.MultiIndex.from_frame(wc_role[["player_id", "role"]]))
+    base = point[list(OUTCOMES)].to_numpy(float) @ lw
+    per = draws @ lw - base[:, None]
+    is_bat = wc_role["role"].eq("bat").to_numpy()
+    innings = np.where(wc_role["player_id"].map(group_of).eq("SP"), STARTER_INNINGS, RELIEVER_INNINGS)
+    scale_draw = np.where(is_bat, FULL_SEASON_PA, -model.pa_per_ip * innings)
+    draw_frame = pd.DataFrame(per * scale_draw[:, None], index=wc_role["player_id"].to_numpy())
+    return {
+        "population": population, "groups": groups, "rates": rates, "inputs": win, "il_days": il, "playing_time": pt,
+        "contracts": contracts, "model": model, "next_season": nxt, "actual": actual, "draws": draw_frame, "as_of": as_of,
+        "seasons": seasons,
+    }
+
+
+def score(as_of: date, model: ValueModel, *, write: bool, force: bool = False, players: list[int] | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
+    data = gather(as_of, model)
+    seasons = data.pop("seasons")
+    fp = fingerprint(as_of, data["population"], data["contracts"], model, seasons)
+    if write and not force and LAST_SCORED.exists():
+        last = json.loads(LAST_SCORED.read_text())
+        if last.get("fingerprint") == fp:
+            log.info(f"inputs unchanged since {last.get('as_of')}; skipping write")
+            return pd.DataFrame(), pd.DataFrame()
+    values_frame, traits_frame = assemble_values(**data)
+    if players:
+        values_frame = values_frame[values_frame["player_id"].isin(players)]
+        traits_frame = traits_frame[traits_frame["player_id"].isin(players)]
+    if write:
+        from v2.players.publish import publish
+
+        publish(values_frame, traits_frame)
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        LAST_SCORED.write_text(json.dumps({"fingerprint": fp, "as_of": str(as_of)}))
+    return values_frame, traits_frame
+
+
+def _spot_checks(values_frame: pd.DataFrame) -> None:
+    v = values_frame
+    pre_arb = v[(v["contract_status"] == "contract") & (v["salary_current_musd"].fillna(99) < 1.0) & v["trade_value_musd"].notna()]
+    if not pre_arb.empty:
+        r = pre_arb.sort_values("trade_value_musd").iloc[-1]
+        log.info(f"spot: largest pre-arb trade value: {r.player_name} ({r.position_group}, {r.team}) grade {r.grade} value ${r.trade_value_musd}M")
+    long = v[(v["control_years"] >= 3) & v["trade_value_musd"].notna()]
+    if not long.empty:
+        r = long.sort_values("trade_value_musd").iloc[0]
+        log.info(f"spot: most negative with 3+ years: {r.player_name} ({r.position_group}, {r.team}) grade {r.grade} value ${r.trade_value_musd}M owed ${r.owed_through_control_musd}M")
+    fa = v[(v["contract_status"] == "free_agent") & v["grade"].notna()]
+    if not fa.empty:
+        r = fa.sort_values("grade").iloc[-1]
+        log.info(f"spot: strongest pending free agent: {r.player_name} ({r.position_group}) grade {r.grade} market ${r.market_value_musd}M")
+    log.info(f"rows: {len(v)} values, graded {v['grade'].notna().sum()}, free agents {(v['status'] == 'free_agent').sum()}, no contract {(v['contract_status'] == 'unknown').sum()}")
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Score player values from the stored model.")
+    ap.add_argument("--as-of", default=str(date.today()))
+    ap.add_argument("--no-write", action="store_true")
+    ap.add_argument("--force", action="store_true")
+    ap.add_argument("--model", type=Path, help="Local model JSON instead of the database row")
+    ap.add_argument("--player", type=int, nargs="*")
+    args = ap.parse_args()
+    as_of = date.fromisoformat(args.as_of)
+    model = ValueModel.load(args.model) if args.model else load_latest_from_db()
+    write = not args.no_write and writes_allowed()
+    values_frame, traits_frame = score(as_of, model, write=write, force=args.force, players=args.player)
+    if values_frame.empty:
+        return
+    _spot_checks(values_frame)
+    if args.player:
+        for r in values_frame.itertuples():
+            print(json.dumps(r._asdict(), default=str, indent=1))
+        print(traits_frame.to_string())
+    else:
+        print(f"{len(values_frame)} player_values rows, {len(traits_frame)} player_traits rows")
+
+
+if __name__ == "__main__":
+    setup_logging()
+    main()

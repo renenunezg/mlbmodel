@@ -143,7 +143,7 @@ def _rows(actor: str, values: pd.Series, sample: pd.Series, name: str, season: i
     spec = INPUTS[name]
     frame = pd.DataFrame({"player_id": values.index.astype("int64"), "value": values.values})
     frame["sample"] = sample.reindex(values.index).fillna(0).values
-    frame = frame.dropna(subset=["value"])
+    frame = frame[np.isfinite(frame["value"].astype("float64"))]
     frame["season"], frame["role"], frame["input"] = season, spec.role, name
     return frame[LONG_COLUMNS]
 
@@ -211,9 +211,9 @@ def _statcast_inputs(pitches: pd.DataFrame, season: int) -> pd.DataFrame:
     out.append(_rows("batter", _rate(fb["pulled"].sum(), fb.size()), fb.size(), "bbq.pulled_fb_rate", season))
     out.extend(_batted_ball_inputs(bip, "batter", {"barrel": "power.barrel_rate", "xwobacon": "bbq.xwobacon", "gb": "bbq.gb_rate"}, season))
     paw = p[p["pa_end"] & p["woba_denom"].notna()]
-    overall = paw.groupby("batter")["woba_value"].sum() / paw.groupby("batter")["woba_denom"].sum()
+    overall = _rate(paw.groupby("batter")["woba_value"].sum(), paw.groupby("batter")["woba_denom"].sum())
     lhp = paw[paw["p_throws"].eq("L")].groupby("batter")
-    vs_lhp = lhp["woba_value"].sum() / lhp["woba_denom"].sum()
+    vs_lhp = _rate(lhp["woba_value"].sum(), lhp["woba_denom"].sum())
     out.append(_rows("batter", (vs_lhp - overall.reindex(vs_lhp.index)), lhp.size(), "platoon.vs_lhp_delta", season))
 
     # Pitchers.

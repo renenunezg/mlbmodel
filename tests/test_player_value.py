@@ -1,6 +1,9 @@
 """Trade value arithmetic and the scoring guards that keep wrong dollar figures off the site."""
+import pandas as pd
 import pytest
 
+from v2.players import score
+from v2.players.model import ValueModel
 from v2.players.pricing import PriceModel
 from v2.players.value import ContractYear, market_value, project_outlook, trade_value
 
@@ -32,3 +35,38 @@ def test_declined_option_ends_control():
 def test_free_agent_has_market_value_only():
     out = project_outlook({2027: 4.0}, {2027: 30}, [ContractYear(2027, "free_agent", None, None)], PRICE, ARB, 7.0, 2027)
     assert trade_value(out) == 0.0 and market_value(out) == 40.0
+
+
+# Scoring guards.
+EMPTY = ValueModel.empty(dev_seasons=[2021, 2022, 2023, 2024], holdout_pair=(2025, 2026))
+NO_CONTRACTS = pd.DataFrame(columns=["player_id", "season", "salary_kind", "salary_musd", "option_musd", "option_kind", "service_time", "fa_year", "how_acquired"])
+
+
+def one_hitter(status: str, pa: float) -> dict:
+    population = pd.DataFrame([{
+        "player_id": 1, "player_name": "Test Hitter", "team": "NYY" if status != "free_agent" else "", "team_id": 147,
+        "status": status, "age": 28, "bats": "R", "throws": "R", "birth_date": "1998-06-30", "listed_position": "2B",
+    }])
+    groups = pd.DataFrame([{"player_id": 1, "position_group": "2B", "secondary_positions": []}])
+    rates = pd.DataFrame([{"player_id": 1, "role": "bat", "group": "2B", "n": pa,
+                           "K": 0.22, "BB": 0.08, "HBP": 0.01, "1B": 0.15, "2B": 0.045, "3B": 0.004, "HR": 0.03, "OUT": 0.461}])
+    inputs = pd.DataFrame([{"player_id": 1, "season": 2026, "role": "bat", "input": "contact.k_rate", "value": 0.22, "sample": pa}])
+    return {"population": population, "groups": groups, "rates": rates, "inputs": inputs, "il_days": pd.DataFrame(columns=["player_id", "season", "il_days"]),
+            "playing_time": pd.DataFrame([{"player_id": 1, "role": "bat", "pa": pa}])}
+
+
+def test_model_refuses_its_own_development_season():
+    with pytest.raises(ValueError, match="trained on"):
+        EMPTY.validate(2024)
+    EMPTY.validate(2027)
+
+
+def test_insufficient_sample_has_no_grade():
+    values, _ = score.assemble_values(**one_hitter("forty_man", pa=20), contracts=NO_CONTRACTS, model=EMPTY, next_season=2027)
+    assert values.grade.isna().all() and (values.grade_reason == "insufficient_sample").all()
+    assert values.trade_value_musd.isna().all()
+
+
+def test_pending_free_agent_rows():
+    values, _ = score.assemble_values(**one_hitter("free_agent", pa=600), contracts=NO_CONTRACTS, model=EMPTY, next_season=2027)
+    assert (values.control_years == 0).all() and (values.trade_value_musd == 0).all() and values.market_value_musd.notna().all()

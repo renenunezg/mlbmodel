@@ -14,6 +14,7 @@ def test_parse_guaranteed_row():
     assert list(judge.season) == [2026, 2027, 2028, 2029, 2030, 2031, 2032]
     assert judge.salary_kind.tolist()[:6] == ["guaranteed"] * 6 and judge.salary_kind.iloc[6] == "free_agent"
     assert judge.salary_musd.iloc[0] == 40.0 and judge.fa_year.iloc[0] == 2032
+    assert judge.contract_start.iloc[0] == 2023 and judge.contract_years.iloc[0] == 9 and judge.contract_total_musd.iloc[0] == 360.0
 
 
 def test_parse_arbitration_and_pre_arb():
@@ -30,3 +31,9 @@ def test_parse_buyout_marks_option():
     stanton = rows[(rows.player_name == "Giancarlo Stanton") & (rows.season == 2028)].iloc[0]
     assert stanton.salary_kind == "buyout" and stanton.salary_musd == 10.0 and stanton.option_musd == 25.0
     assert stanton.option_kind == "team"
+
+
+def test_money_cells_in_thousands():
+    from v2.players.contracts import _money_musd
+
+    assert _money_musd("$750k") == 0.75 and _money_musd("$750,000") == 0.75 and _money_musd("$0") == 0.0

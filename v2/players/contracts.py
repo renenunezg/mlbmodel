@@ -15,7 +15,7 @@ import argparse
 import logging
 import re
 import time
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -67,18 +67,27 @@ assert set(BBREF_TEAMS) == set(TEAM_ID_BY_CODE)
 CONTRACT_FRAME_COLUMNS = [
     "bbref_id", "player_name", "season", "salary_musd", "salary_kind", "option_musd",
     "option_kind", "service_time", "how_acquired", "fa_year",
+    "contract_start", "contract_years", "contract_total_musd",
 ]
+# "9 yrs/$360M (23-31)" or "1 yr/$2M (26)": length, total value, first and last season.
+_SUMMARY = re.compile(r"(\d+)\s*yrs?/\$([\d.]+)([MK]?)\s*\((\d{2})(?:-(\d{2}))?\)")
 
-_MONEY = re.compile(r"\$([\d.]+)\s*([MK]?)")
+_MONEY = re.compile(r"\$([\d,.]+)\s*([MKmk]?)")
 _OPTION_KIND = re.compile(r"(team|club|player|mutual|vesting)", re.IGNORECASE)
 
 
 def _money_musd(text_value: str) -> float | None:
+    """Dollar text to millions: "$40M", "$750K", "$750,000", "$0"."""
     match = _MONEY.search(text_value)
     if not match:
         return None
-    amount = float(match.group(1))
-    return amount / 1000.0 if match.group(2) == "K" else amount
+    amount = float(match.group(1).replace(",", ""))
+    suffix = match.group(2).upper()
+    if suffix == "K":
+        return amount / 1000.0
+    if suffix == "M":
+        return amount
+    return amount / 1_000_000.0 if amount >= 1000 else amount
 
 
 def _franchise(team_abbr: str) -> str:
@@ -194,6 +203,12 @@ def parse_team_page(html: str, season: int) -> pd.DataFrame:
         player_name = _cell_text(name_cell).rstrip("*#+ ").strip()
         service_time = float(_cell_text(cells["service_time"]) or "nan") if "service_time" in cells else float("nan")
         how_acquired = _cell_text(cells["how_acquired"]) if "how_acquired" in cells else ""
+        summary = _SUMMARY.search(_cell_text(cells["contract_summary"])) if "contract_summary" in cells else None
+        contract_start = contract_years = contract_total = None
+        if summary:
+            contract_years = int(summary.group(1))
+            contract_total = float(summary.group(2)) / (1000.0 if summary.group(3) == "K" else 1.0)
+            contract_start = 2000 + int(summary.group(4))
         parsed = []
         for offset, column in enumerate(CONTRACT_COLUMNS):
             if column not in cells:
@@ -207,11 +222,14 @@ def parse_team_page(html: str, season: int) -> pd.DataFrame:
                 "salary_musd": salary, "salary_kind": kind, "option_musd": option,
                 "option_kind": option_kind, "service_time": service_time,
                 "how_acquired": how_acquired, "fa_year": fa_year,
+                "contract_start": contract_start, "contract_years": contract_years, "contract_total_musd": contract_total,
             })
             if kind == "free_agent":
                 break
     frame = pd.DataFrame(rows, columns=CONTRACT_FRAME_COLUMNS)
     frame["fa_year"] = frame["fa_year"].astype("Int64")
+    frame["contract_start"] = frame["contract_start"].astype("Int64")
+    frame["contract_years"] = frame["contract_years"].astype("Int64")
     return frame
 
 
@@ -261,10 +279,11 @@ def publish_contracts(frame: pd.DataFrame) -> None:
     """Replace the contracts table with this fetch, in one transaction."""
     columns = [
         "player_id", "season", "salary_musd", "salary_kind", "option_musd", "option_kind",
-        "service_time", "how_acquired", "fa_year", "team", "player_name", "source_url",
+        "service_time", "how_acquired", "fa_year", "contract_start", "contract_years", "contract_total_musd",
+        "team", "player_name", "source_url",
     ]
     payload = frame[columns].astype(object).where(frame[columns].notna(), None)
-    fetched_at = datetime.utcnow()
+    fetched_at = datetime.now(UTC)
     records = [dict(zip(columns, row, strict=True), fetched_at=fetched_at) for row in payload.itertuples(index=False)]
     insert = text(
         "INSERT INTO player_contracts (" + ", ".join(columns) + ", fetched_at, updated_at) VALUES ("
@@ -274,6 +293,46 @@ def publish_contracts(frame: pd.DataFrame) -> None:
         conn.execute(text("DELETE FROM player_contracts"))
         conn.execute(insert, records)
     log.info(f"contracts: published {len(records)} rows")
+
+
+def estimated_schedule(player_id: int, mlb_debut: str | None, season: int, season_end: date) -> pd.DataFrame:
+    """Pre-arbitration schedule for a 40-man player Baseball-Reference does not list yet.
+
+    Service time is estimated from the debut date: a full year for each completed
+    season after the debut season, and the debut season's share of its 172-day year.
+    """
+    if not mlb_debut:
+        return pd.DataFrame(columns=CONTRACT_FRAME_COLUMNS)
+    debut = date.fromisoformat(str(mlb_debut)[:10])
+    first_end = date(debut.year, season_end.month, season_end.day)
+    partial = min(1.0, max(0.0, (first_end - debut).days / 172.0))
+    completed = max(0, min(season, season_end.year) - debut.year)
+    service = min(partial + completed, FREE_AGENT_SERVICE) if debut.year < season else 0.0
+    next_season = season + 1 if season_end <= date.today() else season
+    schedule = _extend_schedule([], service, next_season)
+    rows = [{
+        "bbref_id": "", "player_name": "", "season": yr, "salary_musd": salary, "salary_kind": kind,
+        "option_musd": option, "option_kind": option_kind, "service_time": round(service, 3),
+        "how_acquired": "estimated", "fa_year": None, "contract_start": None, "contract_years": None, "contract_total_musd": None,
+    } for yr, kind, salary, option, option_kind in schedule]
+    frame = pd.DataFrame(rows, columns=CONTRACT_FRAME_COLUMNS)
+    frame["fa_year"] = next((yr for yr, kind, *_ in schedule if kind == "free_agent"), None)
+    frame["player_id"] = player_id
+    return frame
+
+
+def load_contracts(season: int) -> pd.DataFrame:
+    """The contracts table, or the weekly page cache when the table is not there yet."""
+    try:
+        with engine.connect() as conn:
+            frame = pd.read_sql("SELECT * FROM player_contracts", conn)
+        if len(frame):
+            return frame
+    except Exception as exc:  # the table may not exist before the first migration
+        log.warning(f"contracts table unavailable ({type(exc).__name__}); parsing cached pages")
+    frame, _ = build_contracts(season)
+    frame["fetched_at"] = datetime.now(UTC)
+    return frame
 
 
 def main() -> None:
