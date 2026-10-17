@@ -1,0 +1,2348 @@
+{
+  "first_season": 2023,
+  "selection": "Every numerically reported one-year agreement in the annual filing-deadline tracker; extensions, option contracts, unresolved hearings and unresolved identities remain excluded. No filtering on production or model error.",
+  "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+  "contracts": [
+    {
+      "player_id": 660271,
+      "name": "Shohei Ohtani",
+      "first_season": 2023,
+      "service_time": 5.0,
+      "service_notation": "5.000",
+      "salary_musd": 30.0,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/10/angels-shohei-ohtani-avoid-arbitration-with-one-year-30mm-contract-for-2023.html"
+      ]
+    },
+    {
+      "player_id": 656288,
+      "name": "Griffin Canning",
+      "first_season": 2023,
+      "service_time": 3.436046511627907,
+      "service_notation": "3.075",
+      "salary_musd": 0.85,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613947347821809664"
+      ]
+    },
+    {
+      "player_id": 642545,
+      "name": "Jaime Barria",
+      "first_season": 2023,
+      "service_time": 3.203488372093023,
+      "service_notation": "3.035",
+      "salary_musd": 1.05,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JeffFletcherOCR/status/1613969284572807168"
+      ]
+    },
+    {
+      "player_id": 665120,
+      "name": "Jared Walsh",
+      "first_season": 2023,
+      "service_time": 3.058139534883721,
+      "service_notation": "3.010",
+      "salary_musd": 2.65,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613960340932263943"
+      ]
+    },
+    {
+      "player_id": 621493,
+      "name": "Taylor Ward",
+      "first_season": 2023,
+      "service_time": 2.953488372093023,
+      "service_notation": "2.164",
+      "salary_musd": 2.75,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613959580685303812"
+      ]
+    },
+    {
+      "player_id": 663776,
+      "name": "Patrick Sandoval",
+      "first_season": 2023,
+      "service_time": 2.866279069767442,
+      "service_notation": "2.149",
+      "salary_musd": 2.75,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JeffFletcherOCR/status/1613960753744314368"
+      ]
+    },
+    {
+      "player_id": 664208,
+      "name": "Phil Maton",
+      "first_season": 2023,
+      "service_time": 5.273255813953488,
+      "service_notation": "5.047",
+      "salary_musd": 2.55,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Chandler_Rome/status/1613962521635065856"
+      ]
+    },
+    {
+      "player_id": 592773,
+      "name": "Ryne Stanek",
+      "first_season": 2023,
+      "service_time": 5.22093023255814,
+      "service_notation": "5.038",
+      "salary_musd": 3.6,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Chandler_Rome/status/1614002020653875201"
+      ]
+    },
+    {
+      "player_id": 664285,
+      "name": "Framber Valdez",
+      "first_season": 2023,
+      "service_time": 3.947674418604651,
+      "service_notation": "3.163",
+      "salary_musd": 6.8,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Chandler_Rome/status/1614045928318504960"
+      ]
+    },
+    {
+      "player_id": 664353,
+      "name": "Jose Urquidy",
+      "first_season": 2023,
+      "service_time": 3.2848837209302326,
+      "service_notation": "3.049",
+      "salary_musd": 3.025,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Chandler_Rome/status/1613964790166163457"
+      ]
+    },
+    {
+      "player_id": 642130,
+      "name": "Blake Taylor",
+      "first_season": 2023,
+      "service_time": 3.0,
+      "service_notation": "3.000",
+      "salary_musd": 0.83,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Chandler_Rome/status/1613922948796092417"
+      ]
+    },
+    {
+      "player_id": 643289,
+      "name": "Mauricio Dubon",
+      "first_season": 2023,
+      "service_time": 2.941860465116279,
+      "service_notation": "2.162",
+      "salary_musd": 1.4,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/brianmctaggart/status/1613963732526276608"
+      ]
+    },
+    {
+      "player_id": 643393,
+      "name": "Tony Kemp",
+      "first_season": 2023,
+      "service_time": 5.569767441860465,
+      "service_notation": "5.098",
+      "salary_musd": 3.725,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/susanslusser/status/1613966876253769734"
+      ]
+    },
+    {
+      "player_id": 657656,
+      "name": "Ramon Laureano",
+      "first_season": 2023,
+      "service_time": 3.9593023255813953,
+      "service_notation": "3.165",
+      "salary_musd": 3.55,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/susanslusser/status/1613973036847210496"
+      ]
+    },
+    {
+      "player_id": 621112,
+      "name": "Paul Blackburn",
+      "first_season": 2023,
+      "service_time": 3.104651162790698,
+      "service_notation": "3.018",
+      "salary_musd": 1.9,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/susanslusser/status/1613972849928163329"
+      ]
+    },
+    {
+      "player_id": 643256,
+      "name": "Adam Cimber",
+      "first_season": 2023,
+      "service_time": 4.906976744186046,
+      "service_notation": "4.156",
+      "salary_musd": 3.15,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/bnicholsonsmith/status/1614018434706165780"
+      ]
+    },
+    {
+      "player_id": 670950,
+      "name": "Trevor Richards",
+      "first_season": 2023,
+      "service_time": 4.488372093023256,
+      "service_notation": "4.084",
+      "salary_musd": 1.5,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/bnicholsonsmith/status/1613948319713341440"
+      ]
+    },
+    {
+      "player_id": 643376,
+      "name": "Danny Jansen",
+      "first_season": 2023,
+      "service_time": 4.290697674418604,
+      "service_notation": "4.050",
+      "salary_musd": 3.5,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/bnicholsonsmith/status/1613944006559371266"
+      ]
+    },
+    {
+      "player_id": 641835,
+      "name": "Tim Mayza",
+      "first_season": 2023,
+      "service_time": 3.9069767441860463,
+      "service_notation": "3.156",
+      "salary_musd": 2.1,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/bnicholsonsmith/status/1613951831054454793"
+      ]
+    },
+    {
+      "player_id": 624415,
+      "name": "Cavan Biggio",
+      "first_season": 2023,
+      "service_time": 3.75,
+      "service_notation": "3.129",
+      "salary_musd": 2.8,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613974289429954571"
+      ]
+    },
+    {
+      "player_id": 663423,
+      "name": "Trent Thornton",
+      "first_season": 2023,
+      "service_time": 3.4244186046511627,
+      "service_notation": "3.073",
+      "salary_musd": 1.0,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/bnicholsonsmith/status/1613957978226401280"
+      ]
+    },
+    {
+      "player_id": 605447,
+      "name": "Jordan Romano",
+      "first_season": 2023,
+      "service_time": 3.296511627906977,
+      "service_notation": "3.051",
+      "salary_musd": 4.5375,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/ByRobertMurray/status/1613964074886234124"
+      ]
+    },
+    {
+      "player_id": 669289,
+      "name": "Santiago Espinal",
+      "first_season": 2023,
+      "service_time": 2.866279069767442,
+      "service_notation": "2.149",
+      "salary_musd": 2.1,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/bnicholsonsmith/status/1613958047294185475"
+      ]
+    },
+    {
+      "player_id": 662139,
+      "name": "Daulton Varsho",
+      "first_season": 2023,
+      "service_time": 2.744186046511628,
+      "service_notation": "2.128",
+      "salary_musd": 3.05,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613964875021025292"
+      ]
+    },
+    {
+      "player_id": 641729,
+      "name": "Joe Jimenez",
+      "first_season": 2023,
+      "service_time": 5.354651162790698,
+      "service_notation": "5.061",
+      "salary_musd": 2.765,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613959884197830658"
+      ]
+    },
+    {
+      "player_id": 621345,
+      "name": "A.J. Minter",
+      "first_season": 2023,
+      "service_time": 4.895348837209302,
+      "service_notation": "4.154",
+      "salary_musd": 4.2875,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Braves/status/1613953623158919173"
+      ]
+    },
+    {
+      "player_id": 647336,
+      "name": "Mike Soroka",
+      "first_season": 2023,
+      "service_time": 4.709302325581396,
+      "service_notation": "4.122",
+      "salary_musd": 2.8,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/11/players-avoiding-arbitration-11-18-22.html"
+      ]
+    },
+    {
+      "player_id": 476595,
+      "name": "Lucas Luetge",
+      "first_season": 2023,
+      "service_time": 4.087209302325581,
+      "service_notation": "4.015",
+      "salary_musd": 1.55,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613959691230380036"
+      ]
+    },
+    {
+      "player_id": 642701,
+      "name": "Dennis Santana",
+      "first_season": 2023,
+      "service_time": 3.552325581395349,
+      "service_notation": "3.095",
+      "salary_musd": 1.0,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Feinsand/status/1613936575334813697"
+      ]
+    },
+    {
+      "player_id": 605170,
+      "name": "Victor Caratini",
+      "first_season": 2023,
+      "service_time": 5.296511627906977,
+      "service_notation": "5.051",
+      "salary_musd": 2.8,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2023/01/brewers-avoid-arbitration-with-hoby-milner-victor-caratini.html"
+      ]
+    },
+    {
+      "player_id": 605540,
+      "name": "Brandon Woodruff",
+      "first_season": 2023,
+      "service_time": 4.936046511627907,
+      "service_notation": "4.161",
+      "salary_musd": 10.8,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2023/01/brewers-brandon-woodruff-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 456713,
+      "name": "Matt Bush",
+      "first_season": 2023,
+      "service_time": 4.767441860465116,
+      "service_notation": "4.132",
+      "salary_musd": 1.85,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/11/players-avoiding-arbitration-11-18-22.html"
+      ]
+    },
+    {
+      "player_id": 642715,
+      "name": "Willy Adames",
+      "first_season": 2023,
+      "service_time": 4.6104651162790695,
+      "service_notation": "4.105",
+      "salary_musd": 8.7,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/AdamMcCalvy/status/1613962693441978368"
+      ]
+    },
+    {
+      "player_id": 641778,
+      "name": "Eric Lauer",
+      "first_season": 2023,
+      "service_time": 4.191860465116279,
+      "service_notation": "4.033",
+      "salary_musd": 5.075,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/ByRobertMurray/status/1613962699292942337"
+      ]
+    },
+    {
+      "player_id": 605288,
+      "name": "Adrian Houser",
+      "first_season": 2023,
+      "service_time": 4.058139534883721,
+      "service_notation": "4.010",
+      "salary_musd": 3.6,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/11/players-avoiding-arbitration-11-18-22.html"
+      ]
+    },
+    {
+      "player_id": 642133,
+      "name": "Rowdy Tellez",
+      "first_season": 2023,
+      "service_time": 4.023255813953488,
+      "service_notation": "4.004",
+      "salary_musd": 4.95,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/ByRobertMurray/status/1613958949992005644"
+      ]
+    },
+    {
+      "player_id": 649966,
+      "name": "Luis Urias",
+      "first_season": 2023,
+      "service_time": 3.697674418604651,
+      "service_notation": "3.120",
+      "salary_musd": 4.7,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/AdamMcCalvy/status/1613963387930558468"
+      ]
+    },
+    {
+      "player_id": 571948,
+      "name": "Hoby Milner",
+      "first_season": 2023,
+      "service_time": 3.395348837209302,
+      "service_notation": "3.068",
+      "salary_musd": 1.025,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2023/01/brewers-avoid-arbitration-with-hoby-milner-victor-caratini.html"
+      ]
+    },
+    {
+      "player_id": 642207,
+      "name": "Devin Williams",
+      "first_season": 2023,
+      "service_time": 3.3255813953488373,
+      "service_notation": "3.056",
+      "salary_musd": 3.35,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/ByRobertMurray/status/1613963646576562177"
+      ]
+    },
+    {
+      "player_id": 670712,
+      "name": "Mike Brosseau",
+      "first_season": 2023,
+      "service_time": 3.1802325581395348,
+      "service_notation": "3.031",
+      "salary_musd": 1.4,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/12/brewers-mike-brosseau-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 669374,
+      "name": "Keston Hiura",
+      "first_season": 2023,
+      "service_time": 3.052325581395349,
+      "service_notation": "3.009",
+      "salary_musd": 2.2,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Feinsand/status/1613954332986056704"
+      ]
+    },
+    {
+      "player_id": 647351,
+      "name": "Abraham Toro",
+      "first_season": 2023,
+      "service_time": 2.866279069767442,
+      "service_notation": "2.149",
+      "salary_musd": 1.25,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/ByRobertMurray/status/1613972499745878016"
+      ]
+    },
+    {
+      "player_id": 656756,
+      "name": "Jordan Montgomery",
+      "first_season": 2023,
+      "service_time": 5.8895348837209305,
+      "service_notation": "5.153",
+      "salary_musd": 10.0,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2023/01/cardinals-jordan-montgomery-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 608717,
+      "name": "Chris Stratton",
+      "first_season": 2023,
+      "service_time": 5.5813953488372094,
+      "service_notation": "5.100",
+      "salary_musd": 2.8,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/11/players-avoiding-arbitration-11-17-22.html"
+      ]
+    },
+    {
+      "player_id": 656427,
+      "name": "Jack Flaherty",
+      "first_season": 2023,
+      "service_time": 5.034883720930233,
+      "service_notation": "5.006",
+      "salary_musd": 5.4,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/ByRobertMurray/status/1613946644126470146"
+      ]
+    },
+    {
+      "player_id": 663855,
+      "name": "Jordan Hicks",
+      "first_season": 2023,
+      "service_time": 5.0,
+      "service_notation": "5.000",
+      "salary_musd": 1.8375,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613961058552619008"
+      ]
+    },
+    {
+      "player_id": 641712,
+      "name": "Dakota Hudson",
+      "first_season": 2023,
+      "service_time": 4.3604651162790695,
+      "service_notation": "4.062",
+      "salary_musd": 2.65,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613953486051315746"
+      ]
+    },
+    {
+      "player_id": 641933,
+      "name": "Tyler O\u2019Neill",
+      "first_season": 2023,
+      "service_time": 4.343023255813954,
+      "service_notation": "4.059",
+      "salary_musd": 4.95,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/ByRobertMurray/status/1613959541116522496"
+      ]
+    },
+    {
+      "player_id": 669242,
+      "name": "Tommy Edman",
+      "first_season": 2023,
+      "service_time": 3.6627906976744184,
+      "service_notation": "3.114",
+      "salary_musd": 4.2,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/dgoold/status/1613981571245117441"
+      ]
+    },
+    {
+      "player_id": 668800,
+      "name": "Andrew Knizner",
+      "first_season": 2023,
+      "service_time": 3.1220930232558137,
+      "service_notation": "3.021",
+      "salary_musd": 1.1,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/dgoold/status/1613958898871930880"
+      ]
+    },
+    {
+      "player_id": 664023,
+      "name": "Ian Happ",
+      "first_season": 2023,
+      "service_time": 5.209302325581396,
+      "service_notation": "5.036",
+      "salary_musd": 10.85,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1614124463347351552"
+      ]
+    },
+    {
+      "player_id": 592858,
+      "name": "Rowan Wick",
+      "first_season": 2023,
+      "service_time": 3.6627906976744184,
+      "service_notation": "3.114",
+      "salary_musd": 1.55,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/11/players-avoiding-arbitration-11-18-22.html"
+      ]
+    },
+    {
+      "player_id": 663538,
+      "name": "Nico Hoerner",
+      "first_season": 2023,
+      "service_time": 3.0813953488372094,
+      "service_notation": "3.014",
+      "salary_musd": 2.525,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613968572698558464"
+      ]
+    },
+    {
+      "player_id": 676051,
+      "name": "Codi Heuer",
+      "first_season": 2023,
+      "service_time": 3.0,
+      "service_notation": "3.000",
+      "salary_musd": 0.785,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613960581135859718"
+      ]
+    },
+    {
+      "player_id": 663611,
+      "name": "Nick Madrigal",
+      "first_season": 2023,
+      "service_time": 2.953488372093023,
+      "service_notation": "2.164",
+      "salary_musd": 1.225,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613958912801386496"
+      ]
+    },
+    {
+      "player_id": 592716,
+      "name": "Adrian Sampson",
+      "first_season": 2023,
+      "service_time": 2.6802325581395348,
+      "service_notation": "2.117",
+      "salary_musd": 1.9,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/11/players-avoiding-arbitration-11-18-22.html"
+      ]
+    },
+    {
+      "player_id": 608348,
+      "name": "Carson Kelly",
+      "first_season": 2023,
+      "service_time": 4.936046511627907,
+      "service_notation": "4.161",
+      "salary_musd": 4.275,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/nickpiecoro/status/1613969968827367424"
+      ]
+    },
+    {
+      "player_id": 572233,
+      "name": "Christian Walker",
+      "first_season": 2023,
+      "service_time": 4.720930232558139,
+      "service_notation": "4.124",
+      "salary_musd": 6.5,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Feinsand/status/1613964363605626884"
+      ]
+    },
+    {
+      "player_id": 668678,
+      "name": "Zac Gallen",
+      "first_season": 2023,
+      "service_time": 3.5813953488372094,
+      "service_notation": "3.100",
+      "salary_musd": 5.6,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613967042888990730"
+      ]
+    },
+    {
+      "player_id": 642121,
+      "name": "Cole Sulser",
+      "first_season": 2023,
+      "service_time": 3.1627906976744184,
+      "service_notation": "3.028",
+      "salary_musd": 0.825,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://apnews.com/article/mlb-sports-new-york-chicago-cubs-baseball-9e227c95fd2923c8e15a0ce3d54c7f05"
+      ]
+    },
+    {
+      "player_id": 641786,
+      "name": "Kyle Lewis",
+      "first_season": 2023,
+      "service_time": 2.8488372093023253,
+      "service_notation": "2.146",
+      "salary_musd": 1.61,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/ZHBuchanan/status/1613946980425928704"
+      ]
+    },
+    {
+      "player_id": 628711,
+      "name": "Julio Urias",
+      "first_season": 2023,
+      "service_time": 5.680232558139535,
+      "service_notation": "5.117",
+      "salary_musd": 14.25,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2023/01/dodgers-julio-urias-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 621111,
+      "name": "Walker Buehler",
+      "first_season": 2023,
+      "service_time": 4.976744186046512,
+      "service_notation": "4.168",
+      "salary_musd": 8.025,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Feinsand/status/1613953714447945742"
+      ]
+    },
+    {
+      "player_id": 657571,
+      "name": "Caleb Ferguson",
+      "first_season": 2023,
+      "service_time": 4.511627906976744,
+      "service_notation": "4.088",
+      "salary_musd": 1.1,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/FabianArdaya/status/1613956762188808192"
+      ]
+    },
+    {
+      "player_id": 669257,
+      "name": "Will Smith",
+      "first_season": 2023,
+      "service_time": 3.5232558139534884,
+      "service_notation": "3.090",
+      "salary_musd": 5.25,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/juanctoribio/status/1613956337674891269"
+      ]
+    },
+    {
+      "player_id": 669160,
+      "name": "Dustin May",
+      "first_season": 2023,
+      "service_time": 3.3430232558139537,
+      "service_notation": "3.059",
+      "salary_musd": 1.675,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Jack_A_Harris/status/1613962551062327296"
+      ]
+    },
+    {
+      "player_id": 572204,
+      "name": "Trayce Thompson",
+      "first_season": 2023,
+      "service_time": 3.058139534883721,
+      "service_notation": "3.010",
+      "salary_musd": 1.45,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613959403018788865"
+      ]
+    },
+    {
+      "player_id": 660813,
+      "name": "Brusdar Graterol",
+      "first_season": 2023,
+      "service_time": 2.9709302325581395,
+      "service_notation": "2.167",
+      "salary_musd": 1.225,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Jack_A_Harris/status/1614015340966739969"
+      ]
+    },
+    {
+      "player_id": 623465,
+      "name": "Evan Phillips",
+      "first_season": 2023,
+      "service_time": 2.7906976744186047,
+      "service_notation": "2.136",
+      "salary_musd": 1.3,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Jack_A_Harris/status/1614048212654096385"
+      ]
+    },
+    {
+      "player_id": 518397,
+      "name": "Scott Alexander",
+      "first_season": 2023,
+      "service_time": 5.465116279069767,
+      "service_notation": "5.080",
+      "salary_musd": 1.15,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/11/players-avoiding-arbitration-11-17-22.html"
+      ]
+    },
+    {
+      "player_id": 605154,
+      "name": "John Brebbia",
+      "first_season": 2023,
+      "service_time": 5.453488372093023,
+      "service_notation": "5.078",
+      "salary_musd": 2.3,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613939237820272641"
+      ]
+    },
+    {
+      "player_id": 596001,
+      "name": "Jakob Junis",
+      "first_season": 2023,
+      "service_time": 5.011627906976744,
+      "service_notation": "5.002",
+      "salary_musd": 2.8,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Feinsand/status/1613954683877441536"
+      ]
+    },
+    {
+      "player_id": 596103,
+      "name": "Austin Slater",
+      "first_season": 2023,
+      "service_time": 4.854651162790698,
+      "service_notation": "4.147",
+      "salary_musd": 3.2,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/susanslusser/status/1613958439482585089"
+      ]
+    },
+    {
+      "player_id": 573262,
+      "name": "Mike Yastrzemski",
+      "first_season": 2023,
+      "service_time": 3.744186046511628,
+      "service_notation": "3.128",
+      "salary_musd": 6.1,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/11/players-avoiding-arbitration-11-18-22.html"
+      ]
+    },
+    {
+      "player_id": 657277,
+      "name": "Logan Webb",
+      "first_season": 2023,
+      "service_time": 3.255813953488372,
+      "service_notation": "3.044",
+      "salary_musd": 4.6,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/ByRobertMurray/status/1614033503179649025"
+      ]
+    },
+    {
+      "player_id": 664774,
+      "name": "LaMonte Wade Jr.",
+      "first_season": 2023,
+      "service_time": 3.203488372093023,
+      "service_notation": "3.035",
+      "salary_musd": 1.375,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/maddelucchi/status/1613989562069700609?s=20&t=O5xzx0ri2ohpNHYC-B2x4g"
+      ]
+    },
+    {
+      "player_id": 643511,
+      "name": "Tyler Rogers",
+      "first_season": 2023,
+      "service_time": 3.197674418604651,
+      "service_notation": "3.034",
+      "salary_musd": 1.675,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/susanslusser/status/1613972729484410903"
+      ]
+    },
+    {
+      "player_id": 642731,
+      "name": "Thairo Estrada",
+      "first_season": 2023,
+      "service_time": 2.9825581395348837,
+      "service_notation": "2.169",
+      "salary_musd": 2.25,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/susanslusser/status/1613967934233415680"
+      ]
+    },
+    {
+      "player_id": 642708,
+      "name": "Amed Rosario",
+      "first_season": 2023,
+      "service_time": 5.3604651162790695,
+      "service_notation": "5.062",
+      "salary_musd": 7.8,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/hoynsie/status/1614054433314295808"
+      ]
+    },
+    {
+      "player_id": 669456,
+      "name": "Shane Bieber",
+      "first_season": 2023,
+      "service_time": 4.563953488372093,
+      "service_notation": "4.097",
+      "salary_musd": 10.01,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2023/01/guardians-shane-bieber-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 615698,
+      "name": "Cal Quantrill",
+      "first_season": 2023,
+      "service_time": 3.7674418604651163,
+      "service_notation": "3.132",
+      "salary_musd": 5.55,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/ByRobertMurray/status/1613965942316212224"
+      ]
+    },
+    {
+      "player_id": 647304,
+      "name": "Josh Naylor",
+      "first_season": 2023,
+      "service_time": 3.738372093023256,
+      "service_notation": "3.127",
+      "salary_musd": 3.35,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613971981308657685"
+      ]
+    },
+    {
+      "player_id": 668676,
+      "name": "Zach Plesac",
+      "first_season": 2023,
+      "service_time": 3.5,
+      "service_notation": "3.086",
+      "salary_musd": 2.95,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/ByRobertMurray/status/1613901222116982785"
+      ]
+    },
+    {
+      "player_id": 650644,
+      "name": "Aaron Civale",
+      "first_season": 2023,
+      "service_time": 3.3372093023255816,
+      "service_notation": "3.058",
+      "salary_musd": 2.6,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Feinsand/status/1613964580987731971"
+      ]
+    },
+    {
+      "player_id": 621563,
+      "name": "Joey Wendle",
+      "first_season": 2023,
+      "service_time": 5.511627906976744,
+      "service_notation": "5.088",
+      "salary_musd": 6.0,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/CraigMish/status/1613949544663846918"
+      ]
+    },
+    {
+      "player_id": 643265,
+      "name": "Garrett Cooper",
+      "first_season": 2023,
+      "service_time": 5.308139534883721,
+      "service_notation": "5.053",
+      "salary_musd": 4.2,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/CraigMish/status/1613946286536888323"
+      ]
+    },
+    {
+      "player_id": 571670,
+      "name": "Dylan Floro",
+      "first_season": 2023,
+      "service_time": 5.308139534883721,
+      "service_notation": "5.053",
+      "salary_musd": 3.9,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/11/players-avoiding-arbitration-11-18-22.html"
+      ]
+    },
+    {
+      "player_id": 607732,
+      "name": "Jacob Stallings",
+      "first_season": 2023,
+      "service_time": 4.866279069767442,
+      "service_notation": "4.149",
+      "salary_musd": 3.35,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/CraigMish/status/1613996557770100752"
+      ]
+    },
+    {
+      "player_id": 641154,
+      "name": "Pablo Lopez",
+      "first_season": 2023,
+      "service_time": 4.540697674418604,
+      "service_notation": "4.093",
+      "salary_musd": 5.45,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/CraigMish/status/1613959143475548160"
+      ]
+    },
+    {
+      "player_id": 656945,
+      "name": "Tanner Scott",
+      "first_season": 2023,
+      "service_time": 4.343023255813954,
+      "service_notation": "4.059",
+      "salary_musd": 2.825,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613954072888971289"
+      ]
+    },
+    {
+      "player_id": 608596,
+      "name": "Tom Murphy",
+      "first_season": 2023,
+      "service_time": 5.534883720930233,
+      "service_notation": "5.092",
+      "salary_musd": 1.625,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Feinsand/status/1613986088573407234"
+      ]
+    },
+    {
+      "player_id": 623149,
+      "name": "Paul Sewald",
+      "first_season": 2023,
+      "service_time": 4.4186046511627906,
+      "service_notation": "4.072",
+      "salary_musd": 4.1,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Feinsand/status/1613960387115745284"
+      ]
+    },
+    {
+      "player_id": 664034,
+      "name": "Ty France",
+      "first_season": 2023,
+      "service_time": 3.5174418604651163,
+      "service_notation": "3.089",
+      "salary_musd": 4.1,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Feinsand/status/1613986088573407234"
+      ]
+    },
+    {
+      "player_id": 622098,
+      "name": "Drew Smith",
+      "first_season": 2023,
+      "service_time": 4.1976744186046515,
+      "service_notation": "4.034",
+      "salary_musd": 1.3,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1614079018327736321"
+      ]
+    },
+    {
+      "player_id": 624413,
+      "name": "Pete Alonso",
+      "first_season": 2023,
+      "service_time": 4.0,
+      "service_notation": "4.000",
+      "salary_musd": 14.5,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2023/01/mets-pete-alonso-avoid-arbitration-2.html"
+      ]
+    },
+    {
+      "player_id": 605218,
+      "name": "Carl Edwards Jr.",
+      "first_season": 2023,
+      "service_time": 5.982558139534884,
+      "service_notation": "5.169",
+      "salary_musd": 2.25,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/andrewcgolden/status/1613952925038149632"
+      ]
+    },
+    {
+      "player_id": 663432,
+      "name": "Tanner Rainey",
+      "first_season": 2023,
+      "service_time": 3.738372093023256,
+      "service_notation": "3.127",
+      "salary_musd": 1.5,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/12/nationals-tanner-rainey-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 644364,
+      "name": "Victor Arano",
+      "first_season": 2023,
+      "service_time": 3.1279069767441863,
+      "service_notation": "3.022",
+      "salary_musd": 0.925,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/andrewcgolden/status/1613969610444767245"
+      ]
+    },
+    {
+      "player_id": 657041,
+      "name": "Lane Thomas",
+      "first_season": 2023,
+      "service_time": 3.0813953488372094,
+      "service_notation": "3.014",
+      "salary_musd": 2.2,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/andrewcgolden/status/1614029303439659010"
+      ]
+    },
+    {
+      "player_id": 545121,
+      "name": "Ildemaro Vargas",
+      "first_season": 2023,
+      "service_time": 3.0406976744186047,
+      "service_notation": "3.007",
+      "salary_musd": 0.975,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/11/nationals-to-select-jackson-rutledge-matt-cronin-jeremy-de-la-rosa.html"
+      ]
+    },
+    {
+      "player_id": 640448,
+      "name": "Kyle Finnegan",
+      "first_season": 2023,
+      "service_time": 3.0,
+      "service_notation": "3.000",
+      "salary_musd": 2.325,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/andrewcgolden/status/1614017911588376625"
+      ]
+    },
+    {
+      "player_id": 623993,
+      "name": "Anthony Santander",
+      "first_season": 2023,
+      "service_time": 4.941860465116279,
+      "service_notation": "4.162",
+      "salary_musd": 7.4,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/danconnolly2016/status/1613958158279385090"
+      ]
+    },
+    {
+      "player_id": 656775,
+      "name": "Cedric Mullins",
+      "first_season": 2023,
+      "service_time": 3.453488372093023,
+      "service_notation": "3.078",
+      "salary_musd": 4.1,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/danconnolly2016/status/1613950731849011240"
+      ]
+    },
+    {
+      "player_id": 669720,
+      "name": "Austin Hays",
+      "first_season": 2023,
+      "service_time": 3.3313953488372094,
+      "service_notation": "3.057",
+      "salary_musd": 3.2,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/danconnolly2016/status/1613985642236547084"
+      ]
+    },
+    {
+      "player_id": 622253,
+      "name": "Dillon Tate",
+      "first_season": 2023,
+      "service_time": 3.2790697674418605,
+      "service_notation": "3.048",
+      "salary_musd": 1.5,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/afkostka/status/1613962286502232064"
+      ]
+    },
+    {
+      "player_id": 622761,
+      "name": "Jorge Mateo",
+      "first_season": 2023,
+      "service_time": 3.0,
+      "service_notation": "3.000",
+      "salary_musd": 2.0,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/danconnolly2016/status/1613978388267470874"
+      ]
+    },
+    {
+      "player_id": 623352,
+      "name": "Josh Hader",
+      "first_season": 2023,
+      "service_time": 5.6686046511627906,
+      "service_notation": "5.115",
+      "salary_musd": 14.1,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2023/01/padres-juan-soto-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 665742,
+      "name": "Juan Soto",
+      "first_season": 2023,
+      "service_time": 4.779069767441861,
+      "service_notation": "4.134",
+      "salary_musd": 23.0,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2023/01/padres-juan-soto-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 657612,
+      "name": "Tim Hill",
+      "first_season": 2023,
+      "service_time": 4.651162790697675,
+      "service_notation": "4.112",
+      "salary_musd": 1.85,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613960184661176320"
+      ]
+    },
+    {
+      "player_id": 620454,
+      "name": "Jose Castillo",
+      "first_season": 2023,
+      "service_time": 3.7267441860465116,
+      "service_notation": "3.125",
+      "salary_musd": 0.73,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://apnews.com/article/mlb-sports-new-york-chicago-cubs-baseball-9e227c95fd2923c8e15a0ce3d54c7f05"
+      ]
+    },
+    {
+      "player_id": 543592,
+      "name": "Austin Nola",
+      "first_season": 2023,
+      "service_time": 3.616279069767442,
+      "service_notation": "3.106",
+      "salary_musd": 2.35,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613976129919909888"
+      ]
+    },
+    {
+      "player_id": 663757,
+      "name": "Trent Grisham",
+      "first_season": 2023,
+      "service_time": 3.3488372093023258,
+      "service_notation": "3.060",
+      "salary_musd": 3.175,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613962414826848256"
+      ]
+    },
+    {
+      "player_id": 670970,
+      "name": "Adrian Morejon",
+      "first_season": 2023,
+      "service_time": 3.0755813953488373,
+      "service_notation": "3.013",
+      "salary_musd": 0.8,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/sdutKevinAcee/status/1613981003202326528"
+      ]
+    },
+    {
+      "player_id": 630105,
+      "name": "Jake Cronenworth",
+      "first_season": 2023,
+      "service_time": 3.0,
+      "service_notation": "3.000",
+      "salary_musd": 4.225,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/dennistlin/status/1613995704489488385"
+      ]
+    },
+    {
+      "player_id": 656555,
+      "name": "Rhys Hoskins",
+      "first_season": 2023,
+      "service_time": 5.308139534883721,
+      "service_notation": "5.053",
+      "salary_musd": 12.0,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2023/01/phillies-rhys-hoskins-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 595909,
+      "name": "Jake Cave",
+      "first_season": 2023,
+      "service_time": 3.796511627906977,
+      "service_notation": "3.137",
+      "salary_musd": 0.95,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/11/orioles-jake-cave-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 624133,
+      "name": "Ranger Suarez",
+      "first_season": 2023,
+      "service_time": 3.6511627906976747,
+      "service_notation": "3.112",
+      "salary_musd": 2.95,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613972522630021120"
+      ]
+    },
+    {
+      "player_id": 642397,
+      "name": "Gregory Soto",
+      "first_season": 2023,
+      "service_time": 3.5930232558139537,
+      "service_notation": "3.102",
+      "salary_musd": 3.925,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613961916694528014"
+      ]
+    },
+    {
+      "player_id": 656322,
+      "name": "Sam Coonrod",
+      "first_season": 2023,
+      "service_time": 3.453488372093023,
+      "service_notation": "3.078",
+      "salary_musd": 0.775,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/11/players-avoiding-arbitration-11-18-22.html"
+      ]
+    },
+    {
+      "player_id": 624641,
+      "name": "Edmundo Sosa",
+      "first_season": 2023,
+      "service_time": 2.813953488372093,
+      "service_notation": "2.140",
+      "salary_musd": 0.95,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/ScottLauber/status/1613980917848231936"
+      ]
+    },
+    {
+      "player_id": 596112,
+      "name": "Robert Stephenson",
+      "first_season": 2023,
+      "service_time": 5.284883720930233,
+      "service_notation": "5.049",
+      "salary_musd": 1.75,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JMackeyPG/status/1613972468703559681"
+      ]
+    },
+    {
+      "player_id": 609280,
+      "name": "Miguel Andujar",
+      "first_season": 2023,
+      "service_time": 4.011627906976744,
+      "service_notation": "4.002",
+      "salary_musd": 1.525,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/11/players-avoiding-arbitration-11-18-22.html"
+      ]
+    },
+    {
+      "player_id": 621249,
+      "name": "Duane Underwood Jr.",
+      "first_season": 2023,
+      "service_time": 3.255813953488372,
+      "service_notation": "3.044",
+      "salary_musd": 1.025,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JMackeyPG/status/1613987367383089152"
+      ]
+    },
+    {
+      "player_id": 656605,
+      "name": "Mitch Keller",
+      "first_season": 2023,
+      "service_time": 3.1511627906976742,
+      "service_notation": "3.026",
+      "salary_musd": 2.4375,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JMackeyPG/status/1613987367383089152"
+      ]
+    },
+    {
+      "player_id": 664141,
+      "name": "JT Brubaker",
+      "first_season": 2023,
+      "service_time": 3.0,
+      "service_notation": "3.000",
+      "salary_musd": 2.275,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JMackeyPG/status/1613960051471060994"
+      ]
+    },
+    {
+      "player_id": 656685,
+      "name": "Brett Martin",
+      "first_season": 2023,
+      "service_time": 3.8779069767441863,
+      "service_notation": "3.151",
+      "salary_musd": 1.275,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Evan_P_Grant/status/1613957940393742337"
+      ]
+    },
+    {
+      "player_id": 621368,
+      "name": "Taylor Hearn",
+      "first_season": 2023,
+      "service_time": 3.7267441860465116,
+      "service_notation": "3.125",
+      "salary_musd": 1.4625,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/ThreeTwoEephus/status/1614030123103301632"
+      ]
+    },
+    {
+      "player_id": 642546,
+      "name": "Jonathan Hernandez",
+      "first_season": 2023,
+      "service_time": 3.238372093023256,
+      "service_notation": "3.041",
+      "salary_musd": 0.995,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/ThreeTwoEephus/status/1614030123103301632"
+      ]
+    },
+    {
+      "player_id": 663993,
+      "name": "Nathaniel Lowe",
+      "first_season": 2023,
+      "service_time": 2.8430232558139537,
+      "service_notation": "2.145",
+      "salary_musd": 4.05,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/ThreeTwoEephus/status/1614030123103301632"
+      ]
+    },
+    {
+      "player_id": 630023,
+      "name": "Yonny Chirinos",
+      "first_season": 2023,
+      "service_time": 4.726744186046512,
+      "service_notation": "4.125",
+      "salary_musd": 1.275,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Feinsand/status/1614019264163491840"
+      ]
+    },
+    {
+      "player_id": 542888,
+      "name": "Shawn Armstrong",
+      "first_season": 2023,
+      "service_time": 4.656976744186046,
+      "service_notation": "4.113",
+      "salary_musd": 1.2,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Feinsand/status/1614019264163491840"
+      ]
+    },
+    {
+      "player_id": 656222,
+      "name": "Jalen Beeks",
+      "first_season": 2023,
+      "service_time": 4.406976744186046,
+      "service_notation": "4.070",
+      "salary_musd": 1.375,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613973133568114688"
+      ]
+    },
+    {
+      "player_id": 552640,
+      "name": "Andrew Kittredge",
+      "first_season": 2023,
+      "service_time": 4.406976744186046,
+      "service_notation": "4.070",
+      "salary_musd": 2.075,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613959329857835010"
+      ]
+    },
+    {
+      "player_id": 642336,
+      "name": "Francisco Mejia",
+      "first_season": 2023,
+      "service_time": 4.3604651162790695,
+      "service_notation": "4.062",
+      "salary_musd": 2.155,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613959978376744961"
+      ]
+    },
+    {
+      "player_id": 542194,
+      "name": "Christian Bethancourt",
+      "first_season": 2023,
+      "service_time": 3.2209302325581395,
+      "service_notation": "3.038",
+      "salary_musd": 1.35,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Feinsand/status/1614019264163491840"
+      ]
+    },
+    {
+      "player_id": 668227,
+      "name": "Randy Arozarena",
+      "first_season": 2023,
+      "service_time": 2.75,
+      "service_notation": "2.129",
+      "salary_musd": 4.15,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/TBTimes_Rays/status/1613970181511839758"
+      ]
+    },
+    {
+      "player_id": 518489,
+      "name": "Ryan Brasier",
+      "first_season": 2023,
+      "service_time": 5.633720930232558,
+      "service_notation": "5.109",
+      "salary_musd": 2.0,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/ChrisCotillo/status/1613963081461145607"
+      ]
+    },
+    {
+      "player_id": 601713,
+      "name": "Nick Pivetta",
+      "first_season": 2023,
+      "service_time": 4.965116279069767,
+      "service_notation": "4.166",
+      "salary_musd": 5.35,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/ChrisCotillo/status/1613962168466305026"
+      ]
+    },
+    {
+      "player_id": 657077,
+      "name": "Alex Verdugo",
+      "first_season": 2023,
+      "service_time": 4.453488372093023,
+      "service_notation": "4.078",
+      "salary_musd": 6.3,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/ChrisCotillo/status/1613960471647756288"
+      ]
+    },
+    {
+      "player_id": 608701,
+      "name": "Rob Refsnyder",
+      "first_season": 2023,
+      "service_time": 4.27906976744186,
+      "service_notation": "4.048",
+      "salary_musd": 1.2,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/11/red-sox-rob-refsnyder-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 624414,
+      "name": "Christian Arroyo",
+      "first_season": 2023,
+      "service_time": 4.209302325581396,
+      "service_notation": "4.036",
+      "salary_musd": 2.0,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/ChrisCotillo/status/1613968068387930175"
+      ]
+    },
+    {
+      "player_id": 657031,
+      "name": "Josh Taylor",
+      "first_season": 2023,
+      "service_time": 3.703488372093023,
+      "service_notation": "3.121",
+      "salary_musd": 1.025,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://fansided.com/2023/01/12/adam-duvall-yankees-chad-pinder/"
+      ]
+    },
+    {
+      "player_id": 624512,
+      "name": "Reese McGuire",
+      "first_season": 2023,
+      "service_time": 3.1569767441860463,
+      "service_notation": "3.027",
+      "salary_musd": 1.225,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/ByAndrewParker/status/1613950100291686408"
+      ]
+    },
+    {
+      "player_id": 571656,
+      "name": "Buck Farmer",
+      "first_season": 2023,
+      "service_time": 5.813953488372093,
+      "service_notation": "5.140",
+      "salary_musd": 1.75,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/11/players-avoiding-arbitration-11-17-22.html"
+      ]
+    },
+    {
+      "player_id": 570666,
+      "name": "Luis Cessa",
+      "first_season": 2023,
+      "service_time": 5.761627906976744,
+      "service_notation": "5.131",
+      "salary_musd": 2.65,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/m_sheldon/status/1614027564447563781"
+      ]
+    },
+    {
+      "player_id": 621028,
+      "name": "Kevin Newman",
+      "first_season": 2023,
+      "service_time": 4.267441860465116,
+      "service_notation": "4.046",
+      "salary_musd": 2.662,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/m_sheldon/status/1614027564447563781"
+      ]
+    },
+    {
+      "player_id": 608371,
+      "name": "Lucas Sims",
+      "first_season": 2023,
+      "service_time": 4.0813953488372094,
+      "service_notation": "4.014",
+      "salary_musd": 1.2675,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/m_sheldon/status/1614027564447563781"
+      ]
+    },
+    {
+      "player_id": 669222,
+      "name": "Nick Senzel",
+      "first_season": 2023,
+      "service_time": 3.8720930232558137,
+      "service_notation": "3.150",
+      "salary_musd": 1.95,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613962103039066117"
+      ]
+    },
+    {
+      "player_id": 643290,
+      "name": "Justin Dunn",
+      "first_season": 2023,
+      "service_time": 3.0930232558139537,
+      "service_notation": "3.016",
+      "salary_musd": 0.9,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613960435950301185"
+      ]
+    },
+    {
+      "player_id": 622088,
+      "name": "Tejay Antone",
+      "first_season": 2023,
+      "service_time": 3.0,
+      "service_notation": "3.000",
+      "salary_musd": 0.77,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/m_sheldon/status/1614027564447563781"
+      ]
+    },
+    {
+      "player_id": 608718,
+      "name": "Brent Suter",
+      "first_season": 2023,
+      "service_time": 5.936046511627907,
+      "service_notation": "5.161",
+      "salary_musd": 3.0,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/11/players-avoiding-arbitration-11-18-22.html"
+      ]
+    },
+    {
+      "player_id": 659275,
+      "name": "Dinelson Lamet",
+      "first_season": 2023,
+      "service_time": 5.406976744186046,
+      "service_notation": "5.070",
+      "salary_musd": 5.0,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/11/rockies-dinelson-lamet-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 596295,
+      "name": "Austin Gomber",
+      "first_season": 2023,
+      "service_time": 3.645348837209302,
+      "service_notation": "3.111",
+      "salary_musd": 1.65,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2023/01/rockies-austin-gomber-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 663898,
+      "name": "Brendan Rodgers",
+      "first_season": 2023,
+      "service_time": 3.436046511627907,
+      "service_notation": "3.075",
+      "salary_musd": 2.7,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613962254969606146"
+      ]
+    },
+    {
+      "player_id": 607237,
+      "name": "Amir Garrett",
+      "first_season": 2023,
+      "service_time": 5.575581395348837,
+      "service_notation": "5.099",
+      "salary_musd": 2.65,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Feinsand/status/1613961458827640832"
+      ]
+    },
+    {
+      "player_id": 609275,
+      "name": "Adalberto Mondesi",
+      "first_season": 2023,
+      "service_time": 5.511627906976744,
+      "service_notation": "5.088",
+      "salary_musd": 3.045,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/12/royals-adalberto-mondesi-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 641745,
+      "name": "Brad Keller",
+      "first_season": 2023,
+      "service_time": 5.0,
+      "service_notation": "5.000",
+      "salary_musd": 5.775,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/ByRobertMurray/status/1613935893634777088"
+      ]
+    },
+    {
+      "player_id": 605130,
+      "name": "Scott Barlow",
+      "first_season": 2023,
+      "service_time": 4.174418604651163,
+      "service_notation": "4.030",
+      "salary_musd": 5.3,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Feinsand/status/1613959503053205504"
+      ]
+    },
+    {
+      "player_id": 670032,
+      "name": "Nicky Lopez",
+      "first_season": 2023,
+      "service_time": 3.808139534883721,
+      "service_notation": "3.139",
+      "salary_musd": 3.7,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/anne__rogers/status/1613939261853822976"
+      ]
+    },
+    {
+      "player_id": 664199,
+      "name": "Taylor Clarke",
+      "first_season": 2023,
+      "service_time": 3.697674418604651,
+      "service_notation": "3.120",
+      "salary_musd": 1.15,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Feinsand/status/1614016915789303812"
+      ]
+    },
+    {
+      "player_id": 622251,
+      "name": "Josh Staumont",
+      "first_season": 2023,
+      "service_time": 3.4186046511627906,
+      "service_notation": "3.072",
+      "salary_musd": 1.025,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Feinsand/status/1613961557305884675"
+      ]
+    },
+    {
+      "player_id": 663460,
+      "name": "Kris Bubic",
+      "first_season": 2023,
+      "service_time": 2.7848837209302326,
+      "service_notation": "2.135",
+      "salary_musd": 2.2,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613960114355961860"
+      ]
+    },
+    {
+      "player_id": 542585,
+      "name": "Jose Cisnero",
+      "first_season": 2023,
+      "service_time": 5.116279069767442,
+      "service_notation": "5.020",
+      "salary_musd": 2.2875,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613967428005789707"
+      ]
+    },
+    {
+      "player_id": 640457,
+      "name": "Austin Meadows",
+      "first_season": 2023,
+      "service_time": 4.430232558139535,
+      "service_notation": "4.074",
+      "salary_musd": 4.3,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/11/players-avoiding-arbitration-11-18-22.html"
+      ]
+    },
+    {
+      "player_id": 641302,
+      "name": "Tyler Alexander",
+      "first_season": 2023,
+      "service_time": 3.3372093023255816,
+      "service_notation": "3.058",
+      "salary_musd": 1.875,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/11/players-avoiding-arbitration-11-18-22.html"
+      ]
+    },
+    {
+      "player_id": 641941,
+      "name": "Emilio Pagan",
+      "first_season": 2023,
+      "service_time": 5.529069767441861,
+      "service_notation": "5.091",
+      "salary_musd": 3.5,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/DWolfsonKSTP/status/1613959015536463874"
+      ]
+    },
+    {
+      "player_id": 641816,
+      "name": "Tyler Mahle",
+      "first_season": 2023,
+      "service_time": 5.104651162790698,
+      "service_notation": "5.018",
+      "salary_musd": 7.5,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/DWolfsonKSTP/status/1613961022531936256"
+      ]
+    },
+    {
+      "player_id": 573204,
+      "name": "Caleb Thielbar",
+      "first_season": 2023,
+      "service_time": 4.761627906976744,
+      "service_notation": "4.131",
+      "salary_musd": 2.4,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/DWolfsonKSTP/status/1613961022531936256"
+      ]
+    },
+    {
+      "player_id": 571657,
+      "name": "Kyle Farmer",
+      "first_season": 2023,
+      "service_time": 4.75,
+      "service_notation": "4.129",
+      "salary_musd": 5.585,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/ByRobertMurray/status/1613960476970594305"
+      ]
+    },
+    {
+      "player_id": 605347,
+      "name": "Jorge Lopez",
+      "first_season": 2023,
+      "service_time": 4.593023255813954,
+      "service_notation": "4.102",
+      "salary_musd": 3.525,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Feinsand/status/1613960059943272449"
+      ]
+    },
+    {
+      "player_id": 663978,
+      "name": "Chris Paddack",
+      "first_season": 2023,
+      "service_time": 4.0,
+      "service_notation": "4.000",
+      "salary_musd": 2.4,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613939067284062208"
+      ]
+    },
+    {
+      "player_id": 660896,
+      "name": "Jorge Alcala",
+      "first_season": 2023,
+      "service_time": 3.0813953488372094,
+      "service_notation": "3.014",
+      "salary_musd": 0.79,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/DWolfsonKSTP/status/1613941213815607297"
+      ]
+    },
+    {
+      "player_id": 664247,
+      "name": "Kyle Garlick",
+      "first_season": 2023,
+      "service_time": 2.947674418604651,
+      "service_notation": "2.163",
+      "salary_musd": 0.75,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/11/twins-kyle-garlick-avoid-arbitration.html",
+        "https://www.mlbtraderumors.com/2023/01/twins-designate-kyle-garlick-for-assignment.html"
+      ]
+    },
+    {
+      "player_id": 608337,
+      "name": "Lucas Giolito",
+      "first_season": 2023,
+      "service_time": 5.465116279069767,
+      "service_notation": "5.080",
+      "salary_musd": 10.4,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2023/01/white-sox-lucas-giolito-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 656302,
+      "name": "Dylan Cease",
+      "first_season": 2023,
+      "service_time": 3.5174418604651163,
+      "service_notation": "3.089",
+      "salary_musd": 5.7,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1613966946416078849"
+      ]
+    },
+    {
+      "player_id": 614179,
+      "name": "Jose Ruiz",
+      "first_season": 2023,
+      "service_time": 3.2790697674418605,
+      "service_notation": "3.048",
+      "salary_musd": 0.925,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/DanielAlvarezEE/status/1613930634317279232"
+      ]
+    },
+    {
+      "player_id": 656629,
+      "name": "Michael Kopech",
+      "first_season": 2023,
+      "service_time": 3.238372093023256,
+      "service_notation": "3.041",
+      "salary_musd": 2.05,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/ChrisCotillo/status/1613961825606828040"
+      ]
+    },
+    {
+      "player_id": 593423,
+      "name": "Frankie Montas",
+      "first_season": 2023,
+      "service_time": 5.087209302325581,
+      "service_notation": "5.015",
+      "salary_musd": 7.5,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1614077969663725568"
+      ]
+    },
+    {
+      "player_id": 643396,
+      "name": "Isiah Kiner-Falefa",
+      "first_season": 2023,
+      "service_time": 5.0,
+      "service_notation": "5.000",
+      "salary_musd": 6.0,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/11/yankees-isiah-kiner-falefa-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 642152,
+      "name": "Lou Trivino",
+      "first_season": 2023,
+      "service_time": 4.9476744186046515,
+      "service_notation": "4.163",
+      "salary_musd": 4.1,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2022/11/players-avoiding-arbitration-11-18-22.html"
+      ]
+    },
+    {
+      "player_id": 605280,
+      "name": "Clay Holmes",
+      "first_season": 2023,
+      "service_time": 4.180232558139535,
+      "service_notation": "4.031",
+      "salary_musd": 3.3,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Feinsand/status/1614116063855214592"
+      ]
+    },
+    {
+      "player_id": 543309,
+      "name": "Kyle Higashioka",
+      "first_season": 2023,
+      "service_time": 4.02906976744186,
+      "service_notation": "4.005",
+      "salary_musd": 1.4625,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1614095499786653696"
+      ]
+    },
+    {
+      "player_id": 641482,
+      "name": "Nestor Cortes",
+      "first_season": 2023,
+      "service_time": 3.546511627906977,
+      "service_notation": "3.094",
+      "salary_musd": 3.2,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/Feinsand/status/1614116407985295361"
+      ]
+    },
+    {
+      "player_id": 624431,
+      "name": "Jose Trevino",
+      "first_season": 2023,
+      "service_time": 3.366279069767442,
+      "service_notation": "3.063",
+      "salary_musd": 2.36,
+      "source": "https://www.mlbtraderumors.com/2023/01/2023-mlb-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://twitter.com/JonHeyman/status/1614120345522372611"
+      ]
+    }
+  ],
+  "excluded": [
+    {
+      "name": "Hunter Renfroe",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "No agreement reached, will exchange figures"
+    },
+    {
+      "name": "Gio Urshela",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "No agreement reached, will exchange figures"
+    },
+    {
+      "name": "Luis Rengifo",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "No agreement reached, will exchange figures"
+    },
+    {
+      "name": "Cristian Javier",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "No agreement reached, will exchange figures"
+    },
+    {
+      "name": "Tyler Matzek",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "two-year, $3.1MM deal in November"
+    },
+    {
+      "name": "Sean Murphy",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "six-year, $73MM extension earlier this month"
+    },
+    {
+      "name": "Ryan Helsley",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "No agreement reached, will exchange figures"
+    },
+    {
+      "name": "Genesis Cabrera",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "No agreement reached, will exchange figures"
+    },
+    {
+      "name": "Jon Berti",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach agreement, will exchange figures"
+    },
+    {
+      "name": "JT Chargois",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Reportedly reached one-year agreement"
+    },
+    {
+      "name": "Jesus Luzardo",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach agreement, will exchange figures"
+    },
+    {
+      "name": "Teoscar Hernandez",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach agreement, will exchange figures"
+    },
+    {
+      "name": "Diego Castillo",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach agreement, will exchange figures"
+    },
+    {
+      "name": "Dylan Moore",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach agreement, will exchange figures"
+    },
+    {
+      "name": "Tomas Nido",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Reportedly reached one-year agreement"
+    },
+    {
+      "name": "Jeff McNeil",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach agreement, will exchange figures"
+    },
+    {
+      "name": "Elieser Hernandez",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Reportedly reached one-year agreement"
+    },
+    {
+      "name": "Luis Guillorme",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Reportedly reached one-year agreement"
+    },
+    {
+      "name": "Jeff Brigham",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Reportedly reached one-year agreement"
+    },
+    {
+      "name": "Hunter Harvey",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Agreed to one-year deal, per team."
+    },
+    {
+      "name": "Austin Voth",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach an agreement , will exchange figures"
+    },
+    {
+      "name": "Seranthony Dominguez",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach agreement , will exchange figures"
+    },
+    {
+      "name": "Rafael Devers",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "$17.5MM agreement earlier this month (followed by 10-year, $313MM extension )"
+    },
+    {
+      "name": "Tyler Kinley",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "three-year, $6.25MM deal in November"
+    },
+    {
+      "name": "Rony Garcia",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Agreed to one-year deal, per team."
+    },
+    {
+      "name": "Reynaldo Lopez",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Agreed to one-year deal"
+    }
+  ]
+}

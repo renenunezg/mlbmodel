@@ -1,0 +1,421 @@
+{
+  "first_season": 2026,
+  "cutoff": "2025-12-31",
+  "cohort_source": "https://www.mlb.com/news/mlb-free-agents-2025-2026",
+  "selection": "Chronological holdout. All announced one-year November/December 2025 signings on official MLB list. Same eligibility as 2025: verified guaranteed cash, no exercisable player/club option, no future reserve control, MLB history. Selected before evaluating predictions.",
+  "contracts": [
+    {
+      "name": "James McCann",
+      "player_id": 543510,
+      "date": "2025-11-21",
+      "first_season": 2026,
+      "years": 1,
+      "transaction_type": "free_agent_signing",
+      "cash_musd": [
+        2.75
+      ],
+      "guarantee_musd": 2.75,
+      "source": "https://www.mlb.com/news/james-mccann-diamondbacks-contract"
+    },
+    {
+      "name": "Amed Rosario",
+      "player_id": 642708,
+      "date": "2025-12-30",
+      "first_season": 2026,
+      "years": 1,
+      "transaction_type": "free_agent_signing",
+      "cash_musd": [
+        2.5
+      ],
+      "guarantee_musd": 2.5,
+      "source": "https://www.mlb.com/news/amed-rosario-yankees-contract"
+    },
+    {
+      "name": "Miguel Rojas",
+      "player_id": 500743,
+      "date": "2025-12-04",
+      "first_season": 2026,
+      "years": 1,
+      "transaction_type": "free_agent_signing",
+      "cash_musd": [
+        5.5
+      ],
+      "guarantee_musd": 5.5,
+      "source": "https://www.mlb.com/news/miguel-rojas-dodgers-free-agent-contract"
+    },
+    {
+      "name": "Ha-Seong Kim",
+      "player_id": 673490,
+      "date": "2025-12-15",
+      "first_season": 2026,
+      "years": 1,
+      "transaction_type": "free_agent_signing",
+      "cash_musd": [
+        20
+      ],
+      "guarantee_musd": 20,
+      "source": "https://www.mlb.com/news/ha-seong-kim-contract-braves"
+    },
+    {
+      "name": "Rob Refsnyder",
+      "player_id": 608701,
+      "date": "2025-12-22",
+      "first_season": 2026,
+      "years": 1,
+      "transaction_type": "free_agent_signing",
+      "cash_musd": [
+        6.25
+      ],
+      "guarantee_musd": 6.25,
+      "source": "https://www.mlb.com/news/rob-refsnyder-mariners-contract"
+    },
+    {
+      "name": "Cedric Mullins",
+      "player_id": 656775,
+      "date": "2025-12-06",
+      "first_season": 2026,
+      "years": 1,
+      "transaction_type": "free_agent_signing",
+      "cash_musd": [
+        7,
+        0.5
+      ],
+      "guarantee_musd": 7.5,
+      "source": "https://www.mlb.com/news/cedric-mullins-rays-deal"
+    },
+    {
+      "name": "Lane Thomas",
+      "player_id": 657041,
+      "date": "2025-12-17",
+      "first_season": 2026,
+      "years": 1,
+      "transaction_type": "free_agent_signing",
+      "cash_musd": [
+        5.25
+      ],
+      "guarantee_musd": 5.25,
+      "source": "https://www.mlb.com/news/lane-thomas-royals-contract"
+    },
+    {
+      "name": "Ryan Yarbrough",
+      "player_id": 642232,
+      "date": "2025-11-21",
+      "first_season": 2026,
+      "years": 1,
+      "transaction_type": "free_agent_signing",
+      "cash_musd": [
+        2.5
+      ],
+      "guarantee_musd": 2.5,
+      "source": "https://www.mlb.com/news/ryan-yarbrough-yankees-deal"
+    },
+    {
+      "name": "Raisel Iglesias",
+      "player_id": 628452,
+      "date": "2025-11-19",
+      "first_season": 2026,
+      "years": 1,
+      "transaction_type": "free_agent_signing",
+      "cash_musd": [
+        16
+      ],
+      "guarantee_musd": 16,
+      "source": "https://www.mlb.com/news/raisel-iglesias-braves-2026-contract"
+    },
+    {
+      "name": "Hoby Milner",
+      "player_id": 571948,
+      "date": "2025-12-16",
+      "first_season": 2026,
+      "years": 1,
+      "transaction_type": "free_agent_signing",
+      "cash_musd": [
+        3.75
+      ],
+      "guarantee_musd": 3.75,
+      "source": "https://www.mlb.com/news/hoby-milner-cubs-contract-2026"
+    },
+    {
+      "name": "Mark Leiter Jr.",
+      "player_id": 643410,
+      "date": "2025-12-17",
+      "first_season": 2026,
+      "years": 1,
+      "transaction_type": "free_agent_signing",
+      "cash_musd": [
+        3
+      ],
+      "guarantee_musd": 3,
+      "source": "https://www.mlb.com/news/mark-leiter-jr-athletics-contract"
+    },
+    {
+      "name": "Pete Fairbanks",
+      "player_id": 664126,
+      "date": "2025-12-28",
+      "first_season": 2026,
+      "years": 1,
+      "transaction_type": "free_agent_signing",
+      "cash_musd": [
+        13
+      ],
+      "guarantee_musd": 13,
+      "source": "https://www.mlb.com/news/pete-fairbanks-marlins-contract",
+      "cash_source": "https://www.foxsports.com/articles/mlb/marlins-finalize-13-million-1year-deal-with-reliever-pete-fairbanks"
+    },
+    {
+      "name": "Sean Newcomb",
+      "player_id": 656794,
+      "date": "2025-12-23",
+      "first_season": 2026,
+      "years": 1,
+      "transaction_type": "free_agent_signing",
+      "cash_musd": [
+        4.5
+      ],
+      "guarantee_musd": 4.5,
+      "source": "https://www.mlb.com/news/sean-newcomb-contract-with-white-sox"
+    },
+    {
+      "name": "Hunter Harvey",
+      "player_id": 640451,
+      "date": "2025-12-31",
+      "first_season": 2026,
+      "years": 1,
+      "transaction_type": "free_agent_signing",
+      "cash_musd": [
+        6
+      ],
+      "guarantee_musd": 6,
+      "source": "https://www.mlb.com/news/hunter-harvey-cubs-contract"
+    },
+    {
+      "name": "Gregory Soto",
+      "player_id": 642397,
+      "date": "2025-12-16",
+      "first_season": 2026,
+      "years": 1,
+      "transaction_type": "free_agent_signing",
+      "cash_musd": [
+        7.75
+      ],
+      "guarantee_musd": 7.75,
+      "source": "https://www.mlb.com/news/gregory-soto-pirates-contract"
+    },
+    {
+      "name": "Caleb Ferguson",
+      "player_id": 657571,
+      "date": "2025-12-18",
+      "first_season": 2026,
+      "years": 1,
+      "transaction_type": "free_agent_signing",
+      "cash_musd": [
+        4.5
+      ],
+      "guarantee_musd": 4.5,
+      "source": "https://www.mlb.com/news/caleb-ferguson-signs-reds"
+    },
+    {
+      "name": "Drew Pomeranz",
+      "player_id": 519141,
+      "date": "2025-12-16",
+      "first_season": 2026,
+      "years": 1,
+      "transaction_type": "free_agent_signing",
+      "cash_musd": [
+        4
+      ],
+      "guarantee_musd": 4,
+      "source": "https://www.mlb.com/news/jordan-romano-drew-pomeranz-angels-contracts"
+    },
+    {
+      "name": "Jordan Romano",
+      "player_id": 605447,
+      "date": "2025-12-16",
+      "first_season": 2026,
+      "years": 1,
+      "transaction_type": "free_agent_signing",
+      "cash_musd": [
+        2
+      ],
+      "guarantee_musd": 2,
+      "source": "https://www.mlb.com/news/jordan-romano-drew-pomeranz-angels-contracts"
+    }
+  ],
+  "excluded": [
+    {
+      "name": "Yohel Pozo",
+      "source": "https://www.mlb.com/news/yohel-pozo-returns-to-cardinals-on-one-year-deal",
+      "reason": "Guarantee or remaining reserve rights not verified in the linked announcement"
+    },
+    {
+      "name": "Josh Bell",
+      "source": "https://www.mlb.com/news/josh-bell-twins-contract",
+      "reason": "Mutual option buyout payment split not verified"
+    },
+    {
+      "name": "Tyler Austin",
+      "source": "https://www.mlb.com/news/tyler-austin-contract-with-cubs",
+      "reason": "No recent MLB history; NPB translation required"
+    },
+    {
+      "name": "Akil Baddoo",
+      "source": "https://www.mlb.com/news/akil-baddoo-deal-with-brewers",
+      "reason": "Retained reserve rights"
+    },
+    {
+      "name": "Christopher Morel",
+      "source": "https://www.mlb.com/news/christopher-morel-marlins-deal",
+      "reason": "Retained reserve rights"
+    },
+    {
+      "name": "JJ Bleday",
+      "source": "https://www.mlb.com/news/jj-bleday-reds-contract",
+      "reason": "Retained reserve rights"
+    },
+    {
+      "name": "Leody Taveras",
+      "source": "https://www.mlb.com/news/leody-taveras-orioles-free-agent-contract",
+      "reason": "Retained reserve rights"
+    },
+    {
+      "name": "Jake Fraley",
+      "source": "https://www.mlb.com/news/jake-fraley-signs-one-year-contract-with-rays",
+      "reason": "Retained reserve rights"
+    },
+    {
+      "name": "Adolis García",
+      "source": "https://www.mlb.com/news/adolis-garcia-deal-with-phillies",
+      "reason": "Retained reserve rights beyond 2026"
+    },
+    {
+      "name": "Zach Eflin",
+      "source": "https://www.mlb.com/news/zach-eflin-orioles-2026-contract",
+      "reason": "Mutual option buyout payment split not verified"
+    },
+    {
+      "name": "Michael Soroka",
+      "source": "https://www.mlb.com/news/michael-soroka-diamondbacks-contract",
+      "reason": "Mutual option buyout payment split not verified"
+    },
+    {
+      "name": "Dustin May",
+      "source": "https://www.mlb.com/news/dustin-may-cardinals-contract",
+      "reason": "Mutual option cash not verified"
+    },
+    {
+      "name": "Alek Manoah",
+      "source": "https://www.mlb.com/news/angels-alek-manoah-free-agent-contract",
+      "reason": "Retained reserve rights"
+    },
+    {
+      "name": "Kyle Hart",
+      "source": "https://www.mlb.com/news/kyle-hart-padres-contract-for-2026",
+      "reason": "Club option"
+    },
+    {
+      "name": "Drew Anderson",
+      "source": "https://www.mlb.com/news/tigers-sign-pitcher-drew-anderson",
+      "reason": "Club option and no recent MLB history"
+    },
+    {
+      "name": "Foster Griffin",
+      "source": "https://www.mlb.com/news/foster-griffin-signs-nationals",
+      "reason": "No recent MLB history; NPB translation required"
+    },
+    {
+      "name": "Ryan Weiss",
+      "source": "https://www.mlb.com/news/ryan-weiss-astros-free-agent-contract",
+      "reason": "Club option and no MLB history"
+    },
+    {
+      "name": "Shawn Armstrong",
+      "source": "https://www.mlb.com/news/shawn-armstrong-guardians-contract",
+      "reason": "Mutual option cash split not verified"
+    },
+    {
+      "name": "Kenley Jansen",
+      "source": "https://www.mlb.com/news/kenley-jansen-tigers-contract",
+      "reason": "Club option"
+    },
+    {
+      "name": "Chris Martin",
+      "source": "https://www.mlb.com/news/chris-martin-rangers-contract",
+      "reason": "Guarantee or remaining reserve rights not verified in the linked announcement"
+    },
+    {
+      "name": "Caleb Thielbar",
+      "source": "https://www.mlb.com/news/caleb-thielbar-deal-with-cubs",
+      "reason": "Guarantee or remaining reserve rights not verified in the linked announcement"
+    },
+    {
+      "name": "Jacob Webb",
+      "source": "https://www.mlb.com/news/jacob-webb-cubs-bullpen",
+      "reason": "Club option"
+    },
+    {
+      "name": "Tyler Alexander",
+      "source": "https://www.mlb.com/news/danny-jansen-rangers-deal",
+      "reason": "Guarantee or remaining reserve rights not verified in the linked announcement"
+    },
+    {
+      "name": "Ian Hamilton",
+      "source": "https://www.mlb.com/news/ian-hamilton-signs-with-the-braves-for-2026",
+      "reason": "Guarantee or remaining reserve rights not verified in the linked announcement"
+    },
+    {
+      "name": "Joel Payamps",
+      "source": "https://www.mlb.com/news/joel-payamps-braves-2026-contract",
+      "reason": "Retained reserve rights"
+    },
+    {
+      "name": "Danny Young",
+      "source": "https://www.mlb.com/news/danny-young-deal-with-braves",
+      "reason": "Guarantee or remaining reserve rights not verified in the linked announcement"
+    },
+    {
+      "name": "Jason Foley",
+      "source": "https://www.mlb.com/news/jason-foley-giants-contract",
+      "reason": "Retained reserve rights"
+    },
+    {
+      "name": "Sam Hentges",
+      "source": "https://www.mlb.com/news/sam-hentges-giants-contract",
+      "reason": "Retained reserve rights"
+    },
+    {
+      "name": "Keegan Thompson",
+      "source": "https://www.mlb.com/news/keegan-thompson-signs-major-league-contract-with-reds",
+      "reason": "Guarantee or remaining reserve rights not verified in the linked announcement"
+    },
+    {
+      "name": "Colin Holderman",
+      "source": "https://www.mlb.com/news/colin-holderman-guardians-deal",
+      "reason": "Guarantee or remaining reserve rights not verified in the linked announcement"
+    },
+    {
+      "name": "Ty Adcock",
+      "source": "https://www.mlb.com/news/ty-adcock-padres-contract",
+      "reason": "Guarantee or remaining reserve rights not verified in the linked announcement"
+    },
+    {
+      "name": "Alexis Díaz",
+      "source": "https://www.mlb.com/news/danny-jansen-rangers-deal",
+      "reason": "Guarantee or remaining reserve rights not verified in the linked announcement"
+    },
+    {
+      "name": "Connor Brogdon",
+      "source": "https://www.mlb.com/news/connor-brogdon-guardians-free-agent-contract",
+      "reason": "Guarantee or remaining reserve rights not verified in the linked announcement"
+    },
+    {
+      "name": "Zach Pop",
+      "source": "https://www.mlb.com/news/zach-pop-deal-phillies",
+      "reason": "Guarantee or remaining reserve rights not verified in the linked announcement"
+    },
+    {
+      "name": "Andrew Knizner",
+      "source": "https://www.mlb.com/news/andrew-knizner-mariners-contract",
+      "reason": "Remaining reserve rights not independently verified"
+    }
+  ]
+}

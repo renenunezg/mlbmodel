@@ -1,0 +1,331 @@
+{
+  "first_season": 2024,
+  "cutoff": "2023-12-31",
+  "cohort_source": "https://www.mlb.com/news/2023-24-mlb-free-agents-by-position",
+  "selection": "All November/December one-year signings in the official season tracker, fixed before prediction review. Exclude exercisable options, retained reserve rights, split salaries and unresolved cash; keep all exclusions. Mutual options enter as guaranteed buyouts.",
+  "cash_convention": "Salary and signing bonus in first playing year; mutual-option buyouts in the following year. Incentives excluded. No reported deferrals in included announcements.",
+  "contracts": [
+    {
+      "player_id": 595978,
+      "name": "Austin Hedges",
+      "first_season": 2024,
+      "date": "2023-12-15",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 4,
+      "cash_musd": [
+        4
+      ],
+      "source": "https://www.mlb.com/news/austin-hedges-deal-with-guardians"
+    },
+    {
+      "player_id": 642133,
+      "name": "Rowdy Tellez",
+      "first_season": 2024,
+      "date": "2023-12-15",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 3.2,
+      "cash_musd": [
+        3.2
+      ],
+      "source": "https://www.mlb.com/news/rowdy-tellez-pirates"
+    },
+    {
+      "player_id": 657557,
+      "name": "Paul DeJong",
+      "first_season": 2024,
+      "date": "2023-11-28",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 1.75,
+      "cash_musd": [
+        1.75
+      ],
+      "source": "https://www.mlb.com/news/paul-dejong-white-sox-deal"
+    },
+    {
+      "player_id": 621563,
+      "name": "Joey Wendle",
+      "first_season": 2024,
+      "date": "2023-11-30",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 2,
+      "cash_musd": [
+        2
+      ],
+      "source": "https://www.mlb.com/news/luis-severino-mets-deal"
+    },
+    {
+      "player_id": 595281,
+      "name": "Kevin Kiermaier",
+      "first_season": 2024,
+      "date": "2023-12-28",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 10.5,
+      "cash_musd": [
+        10.5
+      ],
+      "source": "https://www.mlb.com/news/kevin-kiermaier-deal-with-blue-jays"
+    },
+    {
+      "player_id": 518792,
+      "name": "Jason Heyward",
+      "first_season": 2024,
+      "date": "2023-12-06",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 9,
+      "cash_musd": [
+        9
+      ],
+      "source": "https://www.mlb.com/news/jason-heyward-return-dodgers-contract"
+    },
+    {
+      "player_id": 457705,
+      "name": "Andrew McCutchen",
+      "first_season": 2024,
+      "date": "2023-12-20",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 5,
+      "cash_musd": [
+        5
+      ],
+      "source": "https://www.mlb.com/news/andrew-mccutchen-pirates-free-agent-deal"
+    },
+    {
+      "player_id": 656427,
+      "name": "Jack Flaherty",
+      "first_season": 2024,
+      "date": "2023-12-20",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 14,
+      "cash_musd": [
+        14
+      ],
+      "source": "https://www.mlb.com/news/jack-flaherty-tigers-contract"
+    },
+    {
+      "player_id": 489119,
+      "name": "Wade Miley",
+      "first_season": 2024,
+      "date": "2023-12-04",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 8.5,
+      "cash_musd": [
+        7,
+        1.5
+      ],
+      "source": "https://www.mlb.com/news/wade-miley-brewers-negotiations-2023"
+    },
+    {
+      "player_id": 622663,
+      "name": "Luis Severino",
+      "first_season": 2024,
+      "date": "2023-12-01",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 13,
+      "cash_musd": [
+        13
+      ],
+      "source": "https://www.mlb.com/news/luis-severino-mets-deal"
+    },
+    {
+      "player_id": 605452,
+      "name": "Joe Ross",
+      "first_season": 2024,
+      "date": "2023-12-12",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 1.75,
+      "cash_musd": [
+        1.75
+      ],
+      "source": "https://www.mlb.com/news/brewers-sign-joe-ross"
+    },
+    {
+      "player_id": 571670,
+      "name": "Dylan Floro",
+      "first_season": 2024,
+      "date": "2023-12-12",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 2.25,
+      "cash_musd": [
+        2.25
+      ],
+      "source": "https://www.mlb.com/news/nick-senzel-nationals-agree-to-deal"
+    },
+    {
+      "player_id": 571656,
+      "name": "Buck Farmer",
+      "first_season": 2024,
+      "date": "2023-12-28",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 2.25,
+      "cash_musd": [
+        2.25
+      ],
+      "source": "https://www.mlb.com/news/buck-farmer-re-signs-with-reds-on-one-year-deal"
+    },
+    {
+      "player_id": 523260,
+      "name": "Joe Kelly",
+      "first_season": 2024,
+      "date": "2023-12-11",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 8,
+      "cash_musd": [
+        8
+      ],
+      "source": "https://www.mlb.com/news/joe-kelly-deal-with-dodgers"
+    },
+    {
+      "player_id": 519293,
+      "name": "Will Smith",
+      "first_season": 2024,
+      "date": "2023-12-11",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 5,
+      "cash_musd": [
+        5
+      ],
+      "source": "https://www.mlb.com/news/will-smith-royals-free-agent-deal"
+    },
+    {
+      "player_id": 641627,
+      "name": "Trevor Gott",
+      "first_season": 2024,
+      "date": "2023-12-19",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 1.5,
+      "cash_musd": [
+        1.5
+      ],
+      "source": "https://www.mlb.com/news/trevor-gott-athletics-1-year-deal"
+    },
+    {
+      "player_id": 657612,
+      "name": "Tim Hill",
+      "first_season": 2024,
+      "date": "2023-12-28",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 1.8,
+      "cash_musd": [
+        1.8
+      ],
+      "source": "https://www.mlb.com/news/tim-hill-white-sox-free-agent-deal"
+    },
+    {
+      "player_id": 605347,
+      "name": "Jorge L\u00f3pez",
+      "first_season": 2024,
+      "date": "2023-12-13",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 2,
+      "cash_musd": [
+        2
+      ],
+      "source": "https://www.mlb.com/news/jorge-lopez-deal-with-mets"
+    }
+  ],
+  "excluded": [
+    {
+      "name": "Eric Haase",
+      "source": "https://www.mlb.com/news/eric-haase-brewers-deal",
+      "reason": "Retained reserve rights or split salary; not a pure one-year free-agent purchase"
+    },
+    {
+      "name": "Garrett Hampson",
+      "source": "https://www.mlb.com/news/garrett-hampson-signs-1-year-deal-with-royals",
+      "reason": "Retained reserve rights or split salary; not a pure one-year free-agent purchase"
+    },
+    {
+      "name": "Nick Senzel",
+      "source": "https://www.mlb.com/news/nick-senzel-nationals-agree-to-deal",
+      "reason": "Retained reserve rights or split salary; not a pure one-year free-agent purchase"
+    },
+    {
+      "name": "Hunter Renfroe",
+      "source": "https://www.mlb.com/news/hunter-renfroe-deal-with-royals",
+      "reason": "Player, club, or vesting option"
+    },
+    {
+      "name": "Kyle Gibson",
+      "source": "https://www.mlb.com/news/kyle-gibson-cardinals-deal",
+      "reason": "Player, club, or vesting option"
+    },
+    {
+      "name": "Michael Wacha",
+      "source": "https://www.mlb.com/news/michael-wacha-deal-with-royals",
+      "reason": "Player, club, or vesting option"
+    },
+    {
+      "name": "Lance Lynn",
+      "source": "https://www.mlb.com/news/lance-lynn-cardinals-deal",
+      "reason": "Player, club, or vesting option"
+    },
+    {
+      "name": "Chris Flexen",
+      "source": "https://www.mlb.com/news/white-sox-chris-flexen-deal",
+      "reason": "Retained reserve rights or split salary; not a pure one-year free-agent purchase"
+    },
+    {
+      "name": "Craig Kimbrel",
+      "source": "https://www.mlb.com/news/craig-kimbrel-orioles-free-agent-deal",
+      "reason": "Player, club, or vesting option"
+    },
+    {
+      "name": "Chris Stratton",
+      "source": "https://www.mlb.com/news/seth-lugo-royals-free-agent-deal",
+      "reason": "Player, club, or vesting option"
+    },
+    {
+      "name": "Andrew Chafin",
+      "source": "https://www.mlb.com/news/andrew-chafin-tigers-free-agent-deal",
+      "reason": "Player, club, or vesting option"
+    },
+    {
+      "name": "Emilio Pag\u00e1n",
+      "source": "https://www.mlb.com/news/emilio-pagan-reds-deal",
+      "reason": "Player, club, or vesting option"
+    },
+    {
+      "name": "Shelby Miller",
+      "source": "https://www.mlb.com/news/tigers-sign-shelby-miller",
+      "reason": "Player, club, or vesting option"
+    },
+    {
+      "name": "Chris Devenski",
+      "source": "https://www.mlb.com/news/chris-devenski-rays-deal",
+      "reason": "Player, club, or vesting option"
+    },
+    {
+      "name": "Angel Perdomo",
+      "source": "https://twitter.com/Braves/status/1732832767757439080?s=20",
+      "reason": "Retained reserve rights or split salary; not a pure one-year free-agent purchase"
+    },
+    {
+      "name": "Josh Staumont",
+      "source": "https://www.mlb.com/news/twins-sign-josh-staumont-to-one-year-deal",
+      "reason": "Retained reserve rights or split salary; not a pure one-year free-agent purchase"
+    },
+    {
+      "name": "Kirby Yates",
+      "source": "https://www.mlb.com/news/rangers-kirby-yates-contract-free-agent",
+      "reason": "Guaranteed cash timing or exact amount unresolved in the linked announcement"
+    }
+  ]
+}

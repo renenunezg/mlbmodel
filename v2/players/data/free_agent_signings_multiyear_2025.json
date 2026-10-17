@@ -1,0 +1,554 @@
+{
+  "first_season": 2025,
+  "cutoff": "2024-12-31",
+  "cohort_source": "https://www.mlb.com/news/2024-25-mlb-free-agents-by-position",
+  "selection": "Original fixed November-December 2024 one-year signing universe, expanded to every multi-year signing in the same MLB list and period. Multi-year deals with verified annual guaranteed cash enter calibration; all remaining deals are explicitly excluded. Previously inspected long-contract cases are now development data, never holdout evidence.",
+  "cash_convention": "Annual cash including reported signing bonuses and buyouts in their payment years. Reported deferrals are included after the playing term. Exact within-year payment dates are not modeled.",
+  "contracts": [
+    {
+      "player_id": 643376,
+      "name": "Danny Jansen",
+      "first_season": 2025,
+      "date": "2024-12-12",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 8.5,
+      "cash_musd": [
+        8,
+        0.5
+      ],
+      "source": "https://www.mlb.com/news/danny-jansen-deal-with-rays"
+    },
+    {
+      "player_id": 607732,
+      "name": "Jacob Stallings",
+      "first_season": 2025,
+      "date": "2024-11-20",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 2.0,
+      "cash_musd": [
+        1.5,
+        0.5
+      ],
+      "source": "https://www.mlb.com/news/jacob-stallings-rockies-deal"
+    },
+    {
+      "player_id": 596142,
+      "name": "Gary S\u00e1nchez",
+      "first_season": 2025,
+      "date": "2024-12-10",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 8.5,
+      "cash_musd": [
+        8.5
+      ],
+      "source": "https://www.mlb.com/news/gary-sanchez-contract-orioles"
+    },
+    {
+      "player_id": 467793,
+      "name": "Carlos Santana",
+      "first_season": 2025,
+      "date": "2024-12-23",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 12,
+      "cash_musd": [
+        12
+      ],
+      "source": "https://www.mlb.com/news/carlos-santana-contract-with-guardians"
+    },
+    {
+      "player_id": 650402,
+      "name": "Gleyber Torres",
+      "first_season": 2025,
+      "date": "2024-12-27",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 15,
+      "cash_musd": [
+        15
+      ],
+      "source": "https://www.mlb.com/news/gleyber-torres-contract-with-tigers"
+    },
+    {
+      "player_id": 571657,
+      "name": "Kyle Farmer",
+      "first_season": 2025,
+      "date": "2024-11-23",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 3.25,
+      "cash_musd": [
+        2.5,
+        0.75
+      ],
+      "source": "https://www.mlb.com/news/kyle-farmer-rockies-free-agent-deal"
+    },
+    {
+      "player_id": 570482,
+      "name": "Gio Urshela",
+      "first_season": 2025,
+      "date": "2024-12-22",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 2.15,
+      "cash_musd": [
+        2.15
+      ],
+      "source": "https://www.mlb.com/news/gio-urshela-contract-athletics"
+    },
+    {
+      "player_id": 624424,
+      "name": "Michael Conforto",
+      "first_season": 2025,
+      "date": "2024-12-10",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 17,
+      "cash_musd": [
+        17
+      ],
+      "source": "https://www.mlb.com/news/michael-conforto-contract-dodgers"
+    },
+    {
+      "player_id": 596103,
+      "name": "Austin Slater",
+      "first_season": 2025,
+      "date": "2024-11-20",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 1.75,
+      "cash_musd": [
+        1.75
+      ],
+      "source": "https://www.mlb.com/news/austin-slater-white-sox-contract-free-agent"
+    },
+    {
+      "player_id": 596146,
+      "name": "Max Kepler",
+      "first_season": 2025,
+      "date": "2024-12-20",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 10,
+      "cash_musd": [
+        10
+      ],
+      "source": "https://www.mlb.com/news/max-kepler-phillies-contract"
+    },
+    {
+      "player_id": 457705,
+      "name": "Andrew McCutchen",
+      "first_season": 2025,
+      "date": "2024-12-23",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 5,
+      "cash_musd": [
+        5
+      ],
+      "source": "https://www.mlb.com/news/andrew-mccutchen-contract-with-pirates"
+    },
+    {
+      "player_id": 543294,
+      "name": "Kyle Hendricks",
+      "first_season": 2025,
+      "date": "2024-11-07",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 2.5,
+      "cash_musd": [
+        2.5
+      ],
+      "source": "https://www.mlb.com/news/kyle-hendricks-angels-deal"
+    },
+    {
+      "player_id": 502171,
+      "name": "Alex Cobb",
+      "first_season": 2025,
+      "date": "2024-12-10",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 15,
+      "cash_musd": [
+        15
+      ],
+      "source": "https://www.mlb.com/news/alex-cobb-tigers-contract-free-agent"
+    },
+    {
+      "player_id": 647336,
+      "name": "Michael Soroka",
+      "first_season": 2025,
+      "date": "2024-12-19",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 9,
+      "cash_musd": [
+        9
+      ],
+      "source": "https://www.mlb.com/news/michael-soroka-nationals-free-agent-contract"
+    },
+    {
+      "player_id": 621111,
+      "name": "Walker Buehler",
+      "first_season": 2025,
+      "date": "2024-12-28",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 21.05,
+      "cash_musd": [
+        18.05,
+        3
+      ],
+      "source": "https://www.mlb.com/news/walker-buehler-contract-with-red-sox",
+      "cash_source": "https://www.nbcsports.com/mlb/news/walker-buehler-guaranteed-21-05-million-in-1-year-contract-with-boston-red-sox"
+    },
+    {
+      "player_id": 547973,
+      "name": "Aroldis Chapman",
+      "first_season": 2025,
+      "date": "2024-12-10",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 10.75,
+      "cash_musd": [
+        10.75
+      ],
+      "source": "https://www.mlb.com/news/aroldis-chapman-red-sox-free-agent-deal"
+    },
+    {
+      "player_id": 605447,
+      "name": "Jordan Romano",
+      "first_season": 2025,
+      "date": "2024-12-09",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 8.5,
+      "cash_musd": [
+        8.5
+      ],
+      "source": "https://www.mlb.com/news/jordan-romano-phillies-contract-free-agent"
+    },
+    {
+      "player_id": 458677,
+      "name": "Justin Wilson",
+      "first_season": 2025,
+      "date": "2024-11-14",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 2.25,
+      "cash_musd": [
+        2.25
+      ],
+      "source": "https://www.mlb.com/news/justin-wilson-red-sox-deal"
+    },
+    {
+      "player_id": 608331,
+      "name": "Max Fried",
+      "date": "2024-12-17",
+      "years": 8,
+      "guarantee_musd": 218,
+      "cash_musd": [
+        22,
+        22,
+        29,
+        29,
+        29,
+        29,
+        29,
+        29
+      ],
+      "source": "https://www.mlb.com/news/max-fried-yankees-contract",
+      "cash_source": "https://www.nbcsports.com/mlb/news/report-left-hander-max-fried-agrees-to-eight-year-218-million-contract-with-yankees",
+      "first_season": 2025,
+      "transaction_type": "free_agent_signing",
+      "previously_inspected": true
+    },
+    {
+      "player_id": 543135,
+      "name": "Nathan Eovaldi",
+      "date": "2024-12-12",
+      "years": 3,
+      "guarantee_musd": 75,
+      "cash_musd": [
+        18,
+        31,
+        20,
+        6
+      ],
+      "source": "https://www.mlb.com/news/nathan-eovaldi-rangers-contract",
+      "cash_source": "https://www.clickondetroit.com/sports/2024/12/13/texas-rangers-and-rhp-nathan-eovaldi-finalize-75-million-3-year-contract/",
+      "first_season": 2025,
+      "transaction_type": "free_agent_signing",
+      "previously_inspected": true
+    },
+    {
+      "player_id": 579328,
+      "name": "Yusei Kikuchi",
+      "date": "2024-11-27",
+      "years": 3,
+      "guarantee_musd": 63,
+      "cash_musd": [
+        21,
+        21,
+        21
+      ],
+      "source": "https://www.mlb.com/angels/press-release/press-release-angels-sign-lhp-yusei-kikuchi",
+      "first_season": 2025,
+      "transaction_type": "free_agent_signing",
+      "previously_inspected": true
+    },
+    {
+      "player_id": 642715,
+      "name": "Willy Adames",
+      "years": 7,
+      "guarantee_musd": 182,
+      "cash_musd": [
+        21,
+        21,
+        28,
+        28,
+        28,
+        28,
+        28
+      ],
+      "date": "2024-12-10",
+      "source": "https://www.mlb.com/giants/news/willy-adames-giants-contract",
+      "cash_source": "https://kesq.com/news/2024/12/12/willy-adames-plans-to-play-every-day-for-san-francisco-and-bring-the-giants-championships/",
+      "first_season": 2025,
+      "transaction_type": "free_agent_signing"
+    },
+    {
+      "player_id": 608348,
+      "name": "Carson Kelly",
+      "years": 2,
+      "guarantee_musd": 11.5,
+      "cash_musd": [
+        5,
+        5,
+        1.5
+      ],
+      "date": "2024-12-13",
+      "source": "https://www.mlb.com/news/carson-kelly-contract-with-cubs",
+      "cash_source": "https://www.mlb.com/news/carson-kelly-contract-with-cubs",
+      "first_season": 2025,
+      "transaction_type": "free_agent_signing"
+    },
+    {
+      "player_id": 663776,
+      "name": "Patrick Sandoval",
+      "years": 2,
+      "guarantee_musd": 18.25,
+      "cash_musd": [
+        5.5,
+        12.75
+      ],
+      "date": "2024-12-23",
+      "source": "https://www.mlb.com/redsox/news/patrick-sandoval-contract-with-red-sox",
+      "cash_source": "https://www.foxsports.com/articles/mlb/red-sox-finalize-1825m-2year-deal-with-patrick-sandoval-who-is-recovering-from-elbow-surgery",
+      "first_season": 2025,
+      "transaction_type": "free_agent_signing"
+    },
+    {
+      "player_id": 605483,
+      "name": "Blake Snell",
+      "years": 5,
+      "guarantee_musd": 182,
+      "cash_musd": [
+        64.8,
+        12.8,
+        12.8,
+        12.8,
+        12.8,
+        0,
+        0,
+        0,
+        0,
+        0,
+        5.5,
+        5.5,
+        5.5,
+        5.5,
+        5.5,
+        5.5,
+        5.5,
+        5.5,
+        5.5,
+        5.5,
+        5.5,
+        5.5
+      ],
+      "date": "2024-11-30",
+      "source": "https://www.mlb.com/press-release/press-release-dodgers-sign-two-time-cy-young-award-winner-blake-snell",
+      "cash_source": "https://www.truebluela.com/2024/12/3/24311261/blake-snell-dodgers-contract-details",
+      "first_season": 2025,
+      "transaction_type": "free_agent_signing"
+    }
+  ],
+  "excluded": [
+    {
+      "name": "Austin Hedges",
+      "source": "https://www.mlb.com/news/austin-hedges-guardians-deal",
+      "reason": "Guarantee not reported in the linked signing announcement"
+    },
+    {
+      "name": "Jared Young",
+      "source": "https://www.mlb.com/news/jared-young-signs-contract-with-mets",
+      "reason": "Guarantee not reported in the linked signing announcement"
+    },
+    {
+      "name": "Paul Goldschmidt",
+      "source": "https://www.mlb.com/news/paul-goldschmidt-contract-with-yankees",
+      "reason": "Reserved in the previously inspected diagnostic case series"
+    },
+    {
+      "name": "Kevin Newman",
+      "source": "https://www.mlb.com/news/angels-agree-to-deal-with-kevin-newman",
+      "reason": "Club option requires option valuation, not a guaranteed cash regression"
+    },
+    {
+      "name": "Eric Wagaman",
+      "source": "https://www.mlb.com/news/marlins-sign-eric-wagaman-vidal-brujan-designated-for-assignment",
+      "reason": "Guarantee not reported in the linked signing announcement"
+    },
+    {
+      "name": "Bryan De La Cruz",
+      "source": "https://www.mlb.com/news/bryan-de-la-cruz-braves-agree-to-one-year-contract",
+      "reason": "Split deal and retained arbitration control"
+    },
+    {
+      "name": "Mike Tauchman",
+      "source": "https://www.mlb.com/news/mike-tauchman-white-sox-free-agent-contract",
+      "reason": "Retained arbitration control beyond the stated one-year deal"
+    },
+    {
+      "name": "Shane Bieber",
+      "source": "https://www.mlb.com/news/shane-bieber-returns-to-guardians-on-free-agent-deal",
+      "reason": "Player option requires option valuation"
+    },
+    {
+      "name": "Griffin Canning",
+      "source": "https://www.mlb.com/news/griffin-canning-mets-free-agent-contract",
+      "reason": "Retained arbitration control beyond the stated one-year deal"
+    },
+    {
+      "name": "Bryse Wilson",
+      "source": "https://www.mlb.com/news/bryse-wilson-white-sox-deal",
+      "reason": "Retained arbitration control beyond the stated one-year deal"
+    },
+    {
+      "name": "Tomoyuki Sugano",
+      "source": "https://www.mlb.com/news/tomoyuki-sugano-orioles-contract",
+      "reason": "No MLB projection history; requires NPB translation"
+    },
+    {
+      "name": "Shawn Armstrong",
+      "source": "https://www.mlb.com/news/shawn-armstrong-contract-with-rangers",
+      "reason": "Guarantee not reported in the linked signing announcement"
+    },
+    {
+      "name": "Hoby Milner",
+      "source": "https://www.mlb.com/news/hoby-milner-contract-rangers",
+      "reason": "Guarantee not reported in the linked signing announcement"
+    },
+    {
+      "name": "Joe Ross",
+      "source": "https://www.mlb.com/news/joe-ross-free-agent-contract-with-phillies",
+      "reason": "Guarantee not reported in the linked signing announcement"
+    },
+    {
+      "name": "Jacob Webb",
+      "source": "https://www.mlb.com/news/jacob-webb-rangers-contract",
+      "reason": "Guarantee not reported in the linked signing announcement"
+    },
+    {
+      "name": "Caleb Thielbar",
+      "source": "https://www.mlb.com/news/caleb-thielbar-cubs-contract",
+      "reason": "Guarantee not reported in the linked signing announcement"
+    },
+    {
+      "name": "T.J. McFarland",
+      "source": "https://www.mlb.com/news/t-j-mcfarland-athletics-agree-to-deal",
+      "reason": "Guarantee not reported in the linked signing announcement"
+    },
+    {
+      "name": "Jonathan Lo\u00e1isiga",
+      "source": "https://www.mlb.com/news/jonathan-loaisiga-yankees-contract",
+      "reason": "Team option and cash terms not verified"
+    },
+    {
+      "name": "Connor Gillispie",
+      "source": "https://www.mlb.com/news/braves-agree-to-deal-with-connor-gillispie",
+      "reason": "Guarantee not reported in the linked signing announcement"
+    },
+    {
+      "name": "Josh Walker",
+      "source": "https://www.mlb.com/news/josh-walker-mlb-contract-blue-jays",
+      "reason": "Guarantee not reported in the linked signing announcement"
+    },
+    {
+      "name": "Kyle Higashioka",
+      "reason": "Club option requires option valuation"
+    },
+    {
+      "name": "Travis d'Arnaud",
+      "reason": "Annual cash schedule not independently verified"
+    },
+    {
+      "name": "Christian Walker",
+      "reason": "Annual cash schedule not verified in a pre-2025 source"
+    },
+    {
+      "name": "Tyler O'Neill",
+      "reason": "Player opt-out"
+    },
+    {
+      "name": "Juan Soto",
+      "reason": "Opt-out with club counter-option"
+    },
+    {
+      "name": "Joc Pederson",
+      "reason": "Player opt-out"
+    },
+    {
+      "name": "Corbin Burnes",
+      "reason": "Player opt-out"
+    },
+    {
+      "name": "Sean Manaea",
+      "reason": "Deferred cash schedule not completely verified"
+    },
+    {
+      "name": "Trevor Williams",
+      "reason": "Annual cash schedule not independently verified"
+    },
+    {
+      "name": "Luis Severino",
+      "reason": "Player opt-out"
+    },
+    {
+      "name": "Frankie Montas",
+      "reason": "Player option"
+    },
+    {
+      "name": "Clay Holmes",
+      "reason": "Player opt-out"
+    },
+    {
+      "name": "Yimi Garcia",
+      "reason": "Annual cash schedule not verified before information cutoff"
+    },
+    {
+      "name": "Blake Treinen",
+      "reason": "Conflicting reported signing bonus does not reconcile with guarantee"
+    },
+    {
+      "name": "Matthew Boyd",
+      "reason": "Reported bonus and salary schedule does not reconcile to $29M guarantee",
+      "source": "https://sports.yahoo.com/cubs-add-matthew-boyd-rotation-150958818.html"
+    }
+  ],
+  "information_cutoff": "2025-01-08"
+}

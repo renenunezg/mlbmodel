@@ -168,13 +168,91 @@ def statcast_components_from_cache(seasons: list[int], ages: pd.DataFrame) -> pd
 
 
 def fit_curves_from_cache(max_season: int) -> dict[str, dict[int, float]]:
-    """Convenience: season lines for every player in the outcome caches, then ``fit_curves``."""
-    ids: set[int] = set()
-    for path in CACHE_DIR.glob("outcomes_*.parquet"):
-        ids.update(pd.read_parquet(path, columns=["player_id"])["player_id"].astype(int))
-    hitting = bio.season_lines(sorted(ids), "hitting")
-    pitching = bio.season_lines(sorted(ids), "pitching")
+    """Complete historical populations, including players retired before Statcast."""
+    years = list(range(FIRST_LINE_SEASON, max_season + 1))
+    hitting = bio.league_season_lines(years, "hitting")
+    pitching = bio.league_season_lines(years, "pitching")
     ages = pd.concat([hitting[["player_id", "season", "age"]], pitching[["player_id", "season", "age"]]]).drop_duplicates(["player_id", "season"])
-    seasons = sorted(int(p.stem.split("_")[1]) for p in CACHE_DIR.glob("inputs_*.parquet"))
+    seasons = sorted(int(p.stem.split("_")[1]) for p in CACHE_DIR.glob("inputs_*.parquet")
+                     if int(p.stem.split("_")[1]) <= max_season)
     sc = statcast_components_from_cache(seasons, ages)
     return fit_curves(hitting, pitching, sc, max_season)
+
+
+def _projection_design(frame: pd.DataFrame, ages: np.ndarray) -> np.ndarray:
+    age = (np.asarray(ages, dtype=float) - 27) / 10
+    quality = frame["quality"].to_numpy(float)
+    return np.column_stack([np.ones(len(frame)), quality, age, quality*age])
+
+
+def _projection_fit(rows: pd.DataFrame, penalty: float) -> np.ndarray:
+    x = _projection_design(rows, rows["age"].to_numpy())
+    weights = rows["actual"].to_numpy(float) / rows["actual"].mean()
+    regularizer = np.eye(x.shape[1]) * penalty
+    regularizer[0, 0] = 0
+    return np.linalg.solve(x.T @ (weights[:, None]*x) + regularizer,
+                           x.T @ (weights*rows["target_quality"].to_numpy(float)))
+
+
+def fit_projection(panel: pd.DataFrame, last_target_season: int) -> dict:
+    """Expected future rate weighted by the volume at which it is produced.
+
+    E[volume * rate] / E[volume] is the rate that belongs beside an expected
+    workload. Annual survivor deltas cannot be repeatedly subtracted from an
+    already regressed skill forecast. Fit each horizon directly, then express
+    its change relative to the same model's first-year rate prediction.
+    """
+    training = panel[(panel["target_season"] <= last_target_season) & panel["actual"].gt(0)
+                     & panel["target_quality"].notna()]
+    models, regularization = {}, {}
+    for role in ("bat", "pit"):
+        one = training[training["role"].eq(role) & training["horizon"].eq(1)]
+        folds = sorted(one["origin"].unique())[3:][-3:]
+        if not folds:
+            raise ValueError("Insufficient chronological production-rate history")
+        penalties = np.logspace(-3, 3, 25)
+        errors = []
+        for penalty in penalties:
+            sse, volume = 0.0, 0.0
+            for origin in folds:
+                train, held = one[one["target_season"] < origin], one[one["origin"] == origin]
+                beta = _projection_fit(train, float(penalty))
+                error = _projection_design(held, held["age"].to_numpy()) @ beta - held["target_quality"].to_numpy()
+                sse += float(np.sum(held["actual"].to_numpy() * error**2))
+                volume += float(held["actual"].sum())
+            errors.append(sse/volume)
+        penalty = float(penalties[np.argmin(errors)])
+        regularization[role] = {"penalty": penalty, "forward_origins": [int(x) for x in folds]}
+        for horizon, rows in training[training["role"].eq(role)].groupby("horizon"):
+            if len(rows) < 8:
+                continue
+            models.setdefault(str(int(horizon)), {})[role] = {
+                "coefficients": _projection_fit(rows, penalty).tolist(), "n": len(rows),
+                "origins": int(rows["origin"].nunique())}
+    return {"method": "direct_volume_weighted_rate_v1", "last_target_season": last_target_season,
+            "models": models, "regularization": regularization,
+            "units": {"bat": "runs per 600 PA", "pit": "runs per 180 IP"}}
+
+
+def add_projection_shifts(forecast: pd.DataFrame, history: pd.DataFrame, ages: pd.Series,
+                          fitted: dict, first_season: int) -> pd.DataFrame:
+    """Add rate changes without treating a future forecast as observed performance."""
+    if not fitted or fitted.get("method") != "direct_volume_weighted_rate_v1":
+        raise ValueError("Refit and validate the production aging model before scoring")
+    if fitted["last_target_season"] >= first_season:
+        raise ValueError("Production aging forecast overlaps training targets")
+    out = forecast.merge(history[["player_id", "role", "quality"]], on=["player_id", "role"], how="left", validate="many_to_one")
+    out["run_shift"] = np.nan
+    out["run_rate"] = np.nan
+    for (season, role), rows in out.groupby(["season", "role"]):
+        horizon = str(int(season-first_season+1))
+        if horizon not in fitted["models"] or role not in fitted["models"][horizon]:
+            raise ValueError(f"Unsupported production aging horizon {horizon} for {role}")
+        x = _projection_design(rows, rows["player_id"].map(ages).to_numpy())
+        current = np.asarray(fitted["models"]["1"][role]["coefficients"])
+        future = np.asarray(fitted["models"][horizon][role]["coefficients"])
+        out.loc[rows.index, "run_shift"] = x @ (future-current)
+        out.loc[rows.index, "run_rate"] = x @ future
+    if not np.isfinite(out["run_shift"]).all():
+        raise ValueError("Missing production aging projection")
+    return out.drop(columns="quality")

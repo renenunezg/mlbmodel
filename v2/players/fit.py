@@ -1,8 +1,9 @@
 """The offseason fit: weights, curves, prices, and the evaluation report.
 
-Development pairs 2021→2022 through 2024→2025 choose everything; the holdout
-2025→2026 is scored once at the end and reported whatever it says. Season 2026
-never chooses anything. Runs locally; publishes the model row when writes are allowed.
+Development pairs end with the requested development season and its next-year
+target. The following pair is the grade holdout, reported only when observed.
+Market validation is separate. Publication requires both write authorization
+and a validated model.
 
 Usage:
     python -m v2.players.fit --last-dev-season 2024 [--no-publish]
@@ -12,7 +13,9 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+from dataclasses import asdict
 from datetime import UTC, datetime
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -22,9 +25,8 @@ from scipy.stats import spearmanr
 from backend.db import writes_allowed
 from backend.log import setup_logging
 from v2.data.pa_dataset import OUTCOMES
-from v2.players import aging, bio, features, inputs, pricing
+from v2.players import aging, bio, features, inputs, pricing, production, workload
 from v2.players import runs as runs_mod
-from v2.players.contracts import load_contracts
 from v2.players.inputs import INPUTS
 from v2.players.model import MODELS_DIR, ValueModel, model_path, publish_model
 from v2.players.savant import load_board
@@ -41,7 +43,6 @@ RELIABILITY_BINS = 5
 MARCEL_WEIGHTS = (5.0, 4.0, 3.0)
 MARCEL_REGRESSION_PA = 1200.0
 WOBA = {"BB": 0.69, "HBP": 0.72, "1B": 0.89, "2B": 1.27, "3B": 1.62, "HR": 2.10}
-PRICE_FIRST_SEASONS = (2024, 2025, 2026)
 # The OAA board filters by Statcast position code, not abbreviation.
 POSITIONS_FOR_ADJUSTMENT = {position: str(slot) for slot, position in bio.FIELD_POSITIONS.items()}
 # Trait target: (source, name, sign) where source is counts or inputs; sign orients higher-is-better.
@@ -387,16 +388,6 @@ def _score_pair(p: dict, data: SeasonData, model: ValueModel, pool_name: str, xw
     return out
 
 
-def projected_war(p: dict, data: SeasonData, model: ValueModel) -> pd.Series:
-    """Projected WAR for season t+1 from the pair's features, with a full season of playing time."""
-    x, _, _ = grade_design(p, model)
-    proj = features.project_runs(x, p["group"], model)
-    pos = p["group"].map(model.positional_adjustment).fillna(0.0).where(~p["group"].isin(features.PITCHER_GROUPS), 0.0)
-    repl = p["group"].map(model.replacement).fillna(0.0)
-    full = proj + pos - repl
-    return full / model.runs_per_win
-
-
 def fit_positional_adjustment(data: SeasonData, seasons: list[int]) -> tuple[dict[str, float], int]:
     boards = []
     for season in seasons:
@@ -415,7 +406,14 @@ def fit_positional_adjustment(data: SeasonData, seasons: list[int]) -> tuple[dic
     return runs_mod.positional_adjustment(data.positions[data.positions["season"].isin(seasons)], pd.concat(boards, ignore_index=True))
 
 
-def fit(last_dev_season: int = 2024, holdout_pair: tuple[int, int] = (2025, 2026)) -> tuple[ValueModel, dict]:
+def fit(last_dev_season: int = 2024, holdout_pair: tuple[int, int] | None = None, *,
+        calibration_model: ValueModel | None = None, market_cohort: dict | None = None,
+        calibration_history: list[tuple[ValueModel, dict]] | None = None) -> tuple[ValueModel, dict]:
+    holdout_pair = holdout_pair or (last_dev_season+1, last_dev_season+2)
+    if holdout_pair[0] <= last_dev_season or holdout_pair[1] != holdout_pair[0]+1:
+        raise ValueError("Grade development and holdout pairs overlap or are not consecutive")
+    if calibration_history and calibration_model is not None:
+        raise ValueError("Choose either chronological calibration history or a single cohort")
     dev_first = list(range(2021, last_dev_season + 1))
     dev_seasons = list(range(2021, last_dev_season + 2))
     seasons = list(range(2021 - 2, holdout_pair[1] + 1))
@@ -454,21 +452,43 @@ def fit(last_dev_season: int = 2024, holdout_pair: tuple[int, int] = (2025, 2026
     fitted_positional, model.positional_seasons = model.positional_adjustment, model.positional_seasons
     model.positional_adjustment = dict(runs_mod.PUBLISHED_POSITIONAL_RUNS)
 
-    # Prices from contracts, using projections made with inputs through the prior season.
-    contracts = load_contracts(max(PRICE_FIRST_SEASONS))
-    signings = pricing.free_agent_signings(contracts, max(PRICE_FIRST_SEASONS))
-    wars = []
-    for first in PRICE_FIRST_SEASONS:
-        if first - 1 not in data.inputs or first - 1 > holdout_pair[0]:
-            continue
-        p = build_pair(data, first - 1, model) if first - 1 not in [q["t"] for q in pairs] else next(q for q in pairs if q["t"] == first - 1)
-        war = projected_war(p, data, model)
-        wars.append(pd.DataFrame({"player_id": war.index, "first_season": first, "war": war.values}))
-    war_frame = pd.concat(wars, ignore_index=True) if wars else pd.DataFrame(columns=["player_id", "first_season", "war"])
-    price = pricing.fit_price_per_win(signings, war_frame)
-    model.price = {"price_musd": price.price_musd, "se": price.se, "inflation": price.inflation, "n": price.n, "source": price.source}
-    current = war_frame[war_frame["first_season"] == max(PRICE_FIRST_SEASONS)]
-    model.arb_fractions = pricing.fit_arbitration_fractions(contracts, current, price, max(PRICE_FIRST_SEASONS)) if len(current) else dict(pricing.FALLBACK_ARB_FRACTIONS)
+    # Economic forecasts use completed development targets, with absent players
+    # retained as zeros. The following grade holdout target remains excluded.
+    lines = workload.load_lines(list(range(workload.FIRST_HISTORY_SEASON, last_dev_season + 2)))
+    rosters = {year: set(bio.october_roster(year-1)["player_id"])
+               for year in range(workload.FIRST_ORIGIN, last_dev_season + 2)}
+    panel = workload.training_frame(lines, rosters, last_dev_season + 1)
+    model.workload = workload.fit(panel, last_dev_season + 1)
+    model.production_aging = {}
+    war_panel = production.panel(production.load_lines(last_dev_season + 1), last_dev_season + 1)
+    model.production = production.fit(war_panel, last_dev_season + 1)
+    model.model_version = "player-value-v2-fwar"
+
+    # Contract transactions and frozen forecasts are distinct from current payroll.
+    # Never infer free agency or arbitration from how the team acquired the player.
+    calibration = {"status": "uncalibrated", "reason": "Supply a frozen pre-signing model and verified signing cohort"}
+    model.price["source"] = "uncalibrated"
+    model.arb_fractions = dict(pricing.FALLBACK_ARB_FRACTIONS)
+    if calibration_model is not None and market_cohort is not None:
+        from v2.players.market import calibrate
+
+        if market_cohort["first_season"] >= holdout_pair[1]:
+            raise ValueError("Dollar calibration cannot consume the market holdout season")
+        price, calibration = calibrate(calibration_model, market_cohort)
+        model.price = asdict(price)
+    elif calibration_history:
+        from v2.players.arbitration import calibrate as calibrate_arbitration
+        from v2.players.market import calibrate_history
+
+        cohorts = [cohort for _, cohort in calibration_history]
+        if any(c["first_season"] >= holdout_pair[1] for c in cohorts):
+            raise ValueError("Dollar calibration cannot consume the market holdout season")
+        if len({c["first_season"] for c in cohorts}) != len(cohorts):
+            raise ValueError("Duplicate signing winter in calibration history")
+        frozen = {c["first_season"]: m for m, c in calibration_history}
+        price, calibration = calibrate_history(cohorts, frozen)
+        model.arbitration, calibration["arbitration"] = calibrate_arbitration(frozen)
+        model.price = asdict(price)
 
     # Evaluation: leave-one-pair-out on development, then the holdout once.
     xwoba_boards = {}
@@ -482,14 +502,15 @@ def fit(last_dev_season: int = 2024, holdout_pair: tuple[int, int] = (2025, 2026
     report = evaluate(pairs, data, model, holdout, xwoba_boards)
     report.update({
         "window_weights": offsets, "shrink_strength": strength, "runs_per_win": model.runs_per_win,
-        "price": model.price, "arb_fractions": model.arb_fractions,
+        "price": model.price, "arb_fractions": model.arb_fractions, "dollar_calibration": calibration,
         "replacement": model.replacement, "measured_fringe_replacement": measured_replacement,
         "positional_adjustment": model.positional_adjustment, "fitted_positional_runs": fitted_positional,
         "positional_seasons": model.positional_seasons, "reliability_k": model.reliability_k,
         "zero_weight_inputs": [f"{r['pool']}:{r['trait']}:{r['input']}" for r in model.trait_weights if r["weight"] == 0],
         "grade_weights": model.grade_weights, "trait_weights": model.trait_weights,
     })
-    model.evaluation = {k: report[k] for k in ("dev_pairs", "holdout")}
+    model.evaluation = {k: report[k] for k in ("dev_pairs", "holdout", "dollar_calibration")}
+    model.evaluation["market"] = {"status": "not_validated"}
     return model, report
 
 
@@ -497,8 +518,18 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Fit the player valuation model.")
     ap.add_argument("--last-dev-season", type=int, default=2024)
     ap.add_argument("--no-publish", action="store_true")
+    ap.add_argument("--calibration-model", type=Path, help="Frozen model trained strictly before the signing cohort")
+    ap.add_argument("--calibration-history", type=Path, help="JSON list of {cohort, model} paths with frozen pre-signing forecasts")
+    ap.add_argument("--market-contracts", type=Path, default=Path(__file__).parent / "data/free_agent_signings_2025.json")
     args = ap.parse_args()
-    model, report = fit(args.last_dev_season)
+    if args.calibration_history and args.calibration_model:
+        ap.error("Choose --calibration-history or --calibration-model")
+    history = ([(ValueModel.load(Path(item["model"])), json.loads(Path(item["cohort"]).read_text()))
+                for item in json.loads(args.calibration_history.read_text())] if args.calibration_history else None)
+    model, report = fit(args.last_dev_season,
+                        calibration_model=ValueModel.load(args.calibration_model) if args.calibration_model else None,
+                        market_cohort=json.loads(args.market_contracts.read_text()) if args.calibration_model else None,
+                        calibration_history=history)
     path = model.save(model_path(args.last_dev_season))
     (MODELS_DIR / f"evaluation_{args.last_dev_season}.json").write_text(json.dumps(report, indent=1, default=str), encoding="utf-8")
     log.info(f"saved {path}")

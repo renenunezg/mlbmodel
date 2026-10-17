@@ -5,6 +5,7 @@ and optionally on disk. Scoring refuses a model fitted on the season it scores.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from dataclasses import asdict, dataclass, field
@@ -27,6 +28,12 @@ from v2.players.runs import PUBLISHED_POSITIONAL_RUNS
 log = logging.getLogger(__name__)
 
 MODEL_VERSION = "player-value-v1"
+MARKET_VALIDATION_CHECKS = frozenset({
+    "fwar_improves_on_each_paired_role_and_year", "broad_contract_error_and_bias_pass",
+    "original_contract_regression_removed", "later_arbitration_salary_accuracy_improves",
+    "all_trade_assets_accounted", "paired_trade_gap_error_improves",
+    "identified_trade_regressions_improve", "complete_scoring_population",
+})
 MODELS_DIR = Path(__file__).resolve().parent / "models"
 DEFAULT_WINDOW = {0: 5.0, 1: 4.0, 2: 3.0}
 DEFAULT_SHRINK = 100.0
@@ -58,6 +65,10 @@ class ValueModel:
     runs_per_win: float = DEFAULT_RUNS_PER_WIN
     price: dict = field(default_factory=lambda: asdict(PriceModel(FALLBACK_PRICE_MUSD, float("nan"), FALLBACK_INFLATION, 0, FALLBACK_PRICE_SOURCE)))
     arb_fractions: dict[int, float] = field(default_factory=lambda: dict(FALLBACK_ARB_FRACTIONS))
+    arbitration: dict = field(default_factory=dict)
+    workload: dict = field(default_factory=dict)
+    production_aging: dict = field(default_factory=dict)
+    production: dict = field(default_factory=dict)
     evaluation: dict = field(default_factory=dict)
 
     @classmethod
@@ -67,13 +78,39 @@ class ValueModel:
 
     def validate(self, season: int) -> None:
         """Refuse to score a season the model was developed on."""
+        from v2.players.production import METHOD
+
+        if self.production and self.production.get("method") != METHOD:
+            raise ValueError("Economic production requires a fitted fWAR model")
+        if self.production and season <= self.production["last_target_season"]:
+            raise ValueError("WAR forecast overlaps training targets")
         if season in self.dev_seasons:
             raise ValueError(f"model trained on {season}; refusing to score it")
 
+    def require_market_validation(self) -> None:
+        """A fitted dollar slope is not permission to publish player valuations."""
+        review = self.evaluation.get("market", {})
+        if (review.get("status") != "validated" or set(review.get("checks", {})) != MARKET_VALIDATION_CHECKS
+                or not all(review["checks"].values())):
+            raise ValueError("Trade values have not passed independent contract and trade validation")
+        if review.get("model_fingerprint") != self.validation_fingerprint():
+            raise ValueError("Market validation does not match these model parameters and scoring sources")
+
+    def validation_fingerprint(self) -> str:
+        """Bind release evidence to the complete model and its executable sources."""
+        payload = self.to_payload()
+        payload.pop("evaluation")
+        root = Path(__file__).parent
+        files = [p for p in root.glob("*.py") if " " not in p.name] + list((root / "data").glob("*.json"))
+        sources = {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}
+        return hashlib.sha256(json.dumps({"model": payload, "sources": sources}, sort_keys=True,
+                                         allow_nan=False).encode()).hexdigest()
+
     def price_model(self) -> PriceModel:
         p = self.price
-        return PriceModel(float(p["price_musd"]), float(p["se"]) if p.get("se") == p.get("se") else float("nan"),
-                          float(p["inflation"]), int(p["n"]), str(p["source"]))
+        return PriceModel(float(p["price_musd"]), float(p["se"]) if p.get("se") is not None and p.get("se") == p.get("se") else None,
+                          float(p["inflation"]), int(p["n"]), str(p["source"]), int(p["base_season"]) if p.get("base_season") is not None else None,
+                          bool(p.get("above_minimum", False)), dict(p.get("role_prices", {})), dict(p.get("profile_prices", {})))
 
     def trait_weight_frame(self) -> pd.DataFrame:
         return pd.DataFrame(self.trait_weights, columns=["pool", "trait", "input", "weight", "status"])
@@ -115,6 +152,7 @@ def model_path(last_dev_season: int) -> Path:
 
 def publish_model(model: ValueModel) -> None:
     """Upsert the model row; scoring in CI reads the newest ``fitted_at``."""
+    model.require_market_validation()
     payload = json.dumps(model.to_payload(), allow_nan=False)
     with engine.begin() as conn:
         conn.execute(text(

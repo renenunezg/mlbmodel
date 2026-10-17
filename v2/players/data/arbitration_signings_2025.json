@@ -1,0 +1,2279 @@
+{
+  "first_season": 2025,
+  "selection": "Every numerically reported one-year agreement in the annual filing-deadline tracker; extensions, option contracts, unresolved hearings and unresolved identities remain excluded. No filtering on production or model error.",
+  "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+  "contracts": [
+    {
+      "player_id": 621493,
+      "name": "Taylor Ward",
+      "first_season": 2025,
+      "service_time": 4.953488372093023,
+      "service_notation": "4.164",
+      "salary_musd": 7.825,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877409424077209815"
+      ]
+    },
+    {
+      "player_id": 656271,
+      "name": "Brock Burke",
+      "first_season": 2025,
+      "service_time": 4.261627906976744,
+      "service_notation": "4.045",
+      "salary_musd": 1.15,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2025/01/angels-brock-burke-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 660761,
+      "name": "Jose Suarez",
+      "first_season": 2025,
+      "service_time": 4.127906976744186,
+      "service_notation": "4.022",
+      "salary_musd": 1.1,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/AriA1exander/status/1877418002842312767"
+      ]
+    },
+    {
+      "player_id": 666176,
+      "name": "Jo Adell",
+      "first_season": 2025,
+      "service_time": 3.494186046511628,
+      "service_notation": "3.085",
+      "salary_musd": 2.1,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877414468692619548"
+      ]
+    },
+    {
+      "player_id": 664068,
+      "name": "Scott Kingery",
+      "first_season": 2025,
+      "service_time": 3.296511627906977,
+      "service_notation": "3.051",
+      "salary_musd": 0.77,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/angels-scott-kingery-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 672282,
+      "name": "Reid Detmers",
+      "first_season": 2025,
+      "service_time": 2.9244186046511627,
+      "service_notation": "2.159",
+      "salary_musd": 1.825,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877411577139270039"
+      ]
+    },
+    {
+      "player_id": 664285,
+      "name": "Framber Valdez",
+      "first_season": 2025,
+      "service_time": 5.9476744186046515,
+      "service_notation": "5.163",
+      "salary_musd": 18.0,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2025/01/astros-framber-valdez-avoid-arbitration-2.html"
+      ]
+    },
+    {
+      "player_id": 643289,
+      "name": "Mauricio Dubon",
+      "first_season": 2025,
+      "service_time": 4.941860465116279,
+      "service_notation": "4.162",
+      "salary_musd": 5.0,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877405717407080868"
+      ]
+    },
+    {
+      "player_id": 677651,
+      "name": "Luis Garcia",
+      "first_season": 2025,
+      "service_time": 4.482558139534884,
+      "service_notation": "4.083",
+      "salary_musd": 1.875,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2025/01/astros-luis-garcia-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 650556,
+      "name": "Bryan Abreu",
+      "first_season": 2025,
+      "service_time": 4.127906976744186,
+      "service_notation": "4.022",
+      "salary_musd": 3.45,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/Chandler_Rome/status/1877431578302787747"
+      ]
+    },
+    {
+      "player_id": 676801,
+      "name": "Chas McCormick",
+      "first_season": 2025,
+      "service_time": 4.0,
+      "service_notation": "4.000",
+      "salary_musd": 3.4,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/Chandler_Rome/status/1877420998699417735"
+      ]
+    },
+    {
+      "player_id": 670623,
+      "name": "Isaac Paredes",
+      "first_season": 2025,
+      "service_time": 3.9302325581395348,
+      "service_notation": "3.160",
+      "salary_musd": 6.625,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/Chandler_Rome/status/1877417387449811133"
+      ]
+    },
+    {
+      "player_id": 676694,
+      "name": "Jake Meyers",
+      "first_season": 2025,
+      "service_time": 3.255813953488372,
+      "service_notation": "3.044",
+      "salary_musd": 2.3,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/Chandler_Rome/status/1877431499084943845"
+      ]
+    },
+    {
+      "player_id": 665161,
+      "name": "Jeremy Pena",
+      "first_season": 2025,
+      "service_time": 3.0,
+      "service_notation": "3.000",
+      "salary_musd": 4.1,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/AriA1exander/status/1877442365075460121"
+      ]
+    },
+    {
+      "player_id": 609280,
+      "name": "Miguel Andujar",
+      "first_season": 2025,
+      "service_time": 5.308139534883721,
+      "service_notation": "5.053",
+      "salary_musd": 3.0,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877410193979412621"
+      ]
+    },
+    {
+      "player_id": 664913,
+      "name": "Seth Brown",
+      "first_season": 2025,
+      "service_time": 4.558139534883721,
+      "service_notation": "4.096",
+      "salary_musd": 2.7,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/athletics-seth-brown-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 665489,
+      "name": "Vladimir Guerrero Jr.",
+      "first_season": 2025,
+      "service_time": 5.912790697674419,
+      "service_notation": "5.157",
+      "salary_musd": 28.5,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2025/01/blue-jays-vladimir-guerrero-jr-avoid-arbitration-2.html"
+      ]
+    },
+    {
+      "player_id": 657024,
+      "name": "Erik Swanson",
+      "first_season": 2025,
+      "service_time": 5.343023255813954,
+      "service_notation": "5.059",
+      "salary_musd": 3.0,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/players-avoiding-arbitration-11-22-24.html"
+      ]
+    },
+    {
+      "player_id": 662139,
+      "name": "Daulton Varsho",
+      "first_season": 2025,
+      "service_time": 4.7441860465116275,
+      "service_notation": "4.128",
+      "salary_musd": 8.2,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877417679193059657"
+      ]
+    },
+    {
+      "player_id": 672386,
+      "name": "Alejandro Kirk",
+      "first_season": 2025,
+      "service_time": 4.273255813953488,
+      "service_notation": "4.047",
+      "salary_musd": 4.6,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/Feinsand/status/1877509060506837416"
+      ]
+    },
+    {
+      "player_id": 680704,
+      "name": "Nick Sandlin",
+      "first_season": 2025,
+      "service_time": 3.9127906976744184,
+      "service_notation": "3.157",
+      "salary_musd": 1.63,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/bnicholsonsmith/status/1877420372653457763"
+      ]
+    },
+    {
+      "player_id": 666201,
+      "name": "Alek Manoah",
+      "first_season": 2025,
+      "service_time": 3.366279069767442,
+      "service_notation": "3.063",
+      "salary_musd": 2.2,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ShiDavidi/status/1877427450293968920"
+      ]
+    },
+    {
+      "player_id": 647315,
+      "name": "Zach Pop",
+      "first_season": 2025,
+      "service_time": 2.994186046511628,
+      "service_notation": "2.171",
+      "salary_musd": 0.9,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ShiDavidi/status/1877407992192086168"
+      ]
+    },
+    {
+      "player_id": 676391,
+      "name": "Ernie Clement",
+      "first_season": 2025,
+      "service_time": 2.9767441860465116,
+      "service_notation": "2.168",
+      "salary_musd": 1.97,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/Gate14Pod/status/1877416138570711414"
+      ]
+    },
+    {
+      "player_id": 672284,
+      "name": "Jarred Kelenic",
+      "first_season": 2025,
+      "service_time": 2.9825581395348837,
+      "service_notation": "2.169",
+      "salary_musd": 2.3,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877402005775302732"
+      ]
+    },
+    {
+      "player_id": 669276,
+      "name": "Dylan Lee",
+      "first_season": 2025,
+      "service_time": 2.8720930232558137,
+      "service_notation": "2.150",
+      "salary_musd": 1.025,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/JustinCToscano/status/1877428839271285213"
+      ]
+    },
+    {
+      "player_id": 641482,
+      "name": "Nestor Cortes",
+      "first_season": 2025,
+      "service_time": 5.546511627906977,
+      "service_notation": "5.094",
+      "salary_musd": 7.6,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877419647592505646"
+      ]
+    },
+    {
+      "player_id": 650644,
+      "name": "Aaron Civale",
+      "first_season": 2025,
+      "service_time": 5.337209302325581,
+      "service_notation": "5.058",
+      "salary_musd": 8.0,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877420879123980377"
+      ]
+    },
+    {
+      "player_id": 606303,
+      "name": "Joel Payamps",
+      "first_season": 2025,
+      "service_time": 4.156976744186046,
+      "service_notation": "4.027",
+      "salary_musd": 2.995,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877418694776627261"
+      ]
+    },
+    {
+      "player_id": 606992,
+      "name": "Eric Haase",
+      "first_season": 2025,
+      "service_time": 3.9244186046511627,
+      "service_notation": "3.159",
+      "salary_musd": 1.35,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/players-avoiding-arbitration-11-22-24.html"
+      ]
+    },
+    {
+      "player_id": 683232,
+      "name": "Nick Mears",
+      "first_season": 2025,
+      "service_time": 3.1279069767441863,
+      "service_notation": "3.022",
+      "salary_musd": 0.963,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/AdamMcCalvy/status/1877476604462424261"
+      ]
+    },
+    {
+      "player_id": 656730,
+      "name": "Trevor Megill",
+      "first_season": 2025,
+      "service_time": 3.011627906976744,
+      "service_notation": "3.002",
+      "salary_musd": 1.94,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877404013500514579"
+      ]
+    },
+    {
+      "player_id": 664854,
+      "name": "Ryan Helsley",
+      "first_season": 2025,
+      "service_time": 5.6104651162790695,
+      "service_notation": "5.105",
+      "salary_musd": 8.2,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877416861756764603"
+      ]
+    },
+    {
+      "player_id": 668941,
+      "name": "JoJo Romero",
+      "first_season": 2025,
+      "service_time": 4.261627906976744,
+      "service_notation": "4.045",
+      "salary_musd": 2.26,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/dgoold/status/1877477593156358458"
+      ]
+    },
+    {
+      "player_id": 667463,
+      "name": "John King",
+      "first_season": 2025,
+      "service_time": 3.8430232558139537,
+      "service_notation": "3.145",
+      "salary_musd": 1.605,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/AriA1exander/status/1877447025874120755"
+      ]
+    },
+    {
+      "player_id": 657240,
+      "name": "Julian Merryweather",
+      "first_season": 2025,
+      "service_time": 4.633720930232558,
+      "service_notation": "4.109",
+      "salary_musd": 1.225,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/players-avoiding-arbitration-11-22-24.html"
+      ]
+    },
+    {
+      "player_id": 663878,
+      "name": "Nate Pearson",
+      "first_season": 2025,
+      "service_time": 4.02906976744186,
+      "service_notation": "4.005",
+      "salary_musd": 1.35,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/Feinsand/status/1877411995651068242"
+      ]
+    },
+    {
+      "player_id": 657006,
+      "name": "Justin Steele",
+      "first_season": 2025,
+      "service_time": 3.8313953488372094,
+      "service_notation": "3.143",
+      "salary_musd": 6.55,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877420127819317623"
+      ]
+    },
+    {
+      "player_id": 669212,
+      "name": "Eli Morgan",
+      "first_season": 2025,
+      "service_time": 3.5290697674418605,
+      "service_notation": "3.091",
+      "salary_musd": 0.95,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/M_Montemurro/status/1877554813925220679"
+      ]
+    },
+    {
+      "player_id": 624522,
+      "name": "Keegan Thompson",
+      "first_season": 2025,
+      "service_time": 3.0348837209302326,
+      "service_notation": "3.006",
+      "salary_musd": 0.85,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/players-avoiding-arbitration-11-22-24.html"
+      ]
+    },
+    {
+      "player_id": 647304,
+      "name": "Josh Naylor",
+      "first_season": 2025,
+      "service_time": 5.738372093023256,
+      "service_notation": "5.127",
+      "salary_musd": 10.9,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2025/01/dbacks-avoid-arbitration-zac-gallen-josh-naylor.html"
+      ]
+    },
+    {
+      "player_id": 668678,
+      "name": "Zac Gallen",
+      "first_season": 2025,
+      "service_time": 5.5813953488372094,
+      "service_notation": "5.100",
+      "salary_musd": 13.5,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2025/01/dbacks-avoid-arbitration-zac-gallen-josh-naylor.html"
+      ]
+    },
+    {
+      "player_id": 640462,
+      "name": "A.J. Puk",
+      "first_season": 2025,
+      "service_time": 4.720930232558139,
+      "service_notation": "4.124",
+      "salary_musd": 2.95,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/JonHeyman/status/1877424621487526095"
+      ]
+    },
+    {
+      "player_id": 657044,
+      "name": "Ryan Thompson",
+      "first_season": 2025,
+      "service_time": 4.5523255813953485,
+      "service_notation": "4.095",
+      "salary_musd": 2.965,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://apnews.com/sports/baseball-7a3df32dcb35e6259e5ab8f9e1c559fb"
+      ]
+    },
+    {
+      "player_id": 656464,
+      "name": "Kevin Ginkel",
+      "first_season": 2025,
+      "service_time": 4.191860465116279,
+      "service_notation": "4.033",
+      "salary_musd": 2.425,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/Feinsand/status/1877404509648875828"
+      ]
+    },
+    {
+      "player_id": 573009,
+      "name": "Joe Mantiply",
+      "first_season": 2025,
+      "service_time": 4.1686046511627906,
+      "service_notation": "4.029",
+      "salary_musd": 1.7,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/kileymcd/status/1877489371059757160"
+      ]
+    },
+    {
+      "player_id": 669459,
+      "name": "Kyle Nelson",
+      "first_season": 2025,
+      "service_time": 3.441860465116279,
+      "service_notation": "3.076",
+      "salary_musd": 0.825,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877377212707754029"
+      ]
+    },
+    {
+      "player_id": 672695,
+      "name": "Geraldo Perdomo",
+      "first_season": 2025,
+      "service_time": 3.0872093023255816,
+      "service_notation": "3.015",
+      "salary_musd": 2.55,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877416378350665928"
+      ]
+    },
+    {
+      "player_id": 656976,
+      "name": "Pavin Smith",
+      "first_season": 2025,
+      "service_time": 3.0872093023255816,
+      "service_notation": "3.015",
+      "salary_musd": 1.5,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2025/01/d-backs-pavin-smith-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 669160,
+      "name": "Dustin May",
+      "first_season": 2025,
+      "service_time": 5.343023255813954,
+      "service_notation": "5.059",
+      "salary_musd": 2.135,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/players-avoiding-arbitration-11-22-24.html"
+      ]
+    },
+    {
+      "player_id": 656629,
+      "name": "Michael Kopech",
+      "first_season": 2025,
+      "service_time": 5.238372093023256,
+      "service_notation": "5.041",
+      "salary_musd": 5.2,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/JonHeyman/status/1877423116198040031"
+      ]
+    },
+    {
+      "player_id": 660813,
+      "name": "Brusdar Graterol",
+      "first_season": 2025,
+      "service_time": 4.970930232558139,
+      "service_notation": "4.167",
+      "salary_musd": 2.8,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/FabianArdaya/status/1877449328580604350"
+      ]
+    },
+    {
+      "player_id": 664062,
+      "name": "Tony Gonsolin",
+      "first_season": 2025,
+      "service_time": 4.883720930232558,
+      "service_notation": "4.152",
+      "salary_musd": 5.4,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/players-avoiding-arbitration-11-22-24.html"
+      ]
+    },
+    {
+      "player_id": 623465,
+      "name": "Evan Phillips",
+      "first_season": 2025,
+      "service_time": 4.790697674418604,
+      "service_notation": "4.136",
+      "salary_musd": 6.1,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByJackHarris/status/1877474438297288790"
+      ]
+    },
+    {
+      "player_id": 607455,
+      "name": "Anthony Banda",
+      "first_season": 2025,
+      "service_time": 3.7848837209302326,
+      "service_notation": "3.135",
+      "salary_musd": 1.0,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/FabianArdaya/status/1877461593748844619"
+      ]
+    },
+    {
+      "player_id": 573262,
+      "name": "Mike Yastrzemski",
+      "first_season": 2025,
+      "service_time": 5.7441860465116275,
+      "service_notation": "5.128",
+      "salary_musd": 9.25,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/giants-mike-yastrzemski-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 664774,
+      "name": "LaMonte Wade Jr.",
+      "first_season": 2025,
+      "service_time": 5.203488372093023,
+      "service_notation": "5.035",
+      "salary_musd": 5.0,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/susanslusser/status/1877408177639371224"
+      ]
+    },
+    {
+      "player_id": 643511,
+      "name": "Tyler Rogers",
+      "first_season": 2025,
+      "service_time": 5.1976744186046515,
+      "service_notation": "5.034",
+      "salary_musd": 5.25,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/BaseballJeff1/status/1877419330989678820"
+      ]
+    },
+    {
+      "player_id": 666808,
+      "name": "Camilo Doval",
+      "first_season": 2025,
+      "service_time": 3.4127906976744184,
+      "service_notation": "3.071",
+      "salary_musd": 4.525,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/susanslusser/status/1877414335573610560"
+      ]
+    },
+    {
+      "player_id": 657041,
+      "name": "Lane Thomas",
+      "first_season": 2025,
+      "service_time": 5.0813953488372094,
+      "service_notation": "5.014",
+      "salary_musd": 7.825,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877414259417633239"
+      ]
+    },
+    {
+      "player_id": 663474,
+      "name": "Triston McKenzie",
+      "first_season": 2025,
+      "service_time": 4.011627906976744,
+      "service_notation": "4.002",
+      "salary_musd": 1.95,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/guardians-triston-mckenzie-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 656529,
+      "name": "Sam Hentges",
+      "first_season": 2025,
+      "service_time": 3.9127906976744184,
+      "service_notation": "3.157",
+      "salary_musd": 1.337,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/players-avoiding-arbitration-11-22-24.html"
+      ]
+    },
+    {
+      "player_id": 680757,
+      "name": "Steven Kwan",
+      "first_season": 2025,
+      "service_time": 3.0,
+      "service_notation": "3.000",
+      "salary_musd": 4.175,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/AriA1exander/status/1877450040194535476"
+      ]
+    },
+    {
+      "player_id": 594902,
+      "name": "Ben Lively",
+      "first_season": 2025,
+      "service_time": 2.7732558139534884,
+      "service_notation": "2.133",
+      "salary_musd": 2.25,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/players-avoiding-arbitration-11-22-24.html"
+      ]
+    },
+    {
+      "player_id": 669622,
+      "name": "Anthony Bender",
+      "first_season": 2025,
+      "service_time": 3.8895348837209305,
+      "service_notation": "3.153",
+      "salary_musd": 1.42,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://apnews.com/sports/baseball-7a3df32dcb35e6259e5ab8f9e1c559fb"
+      ]
+    },
+    {
+      "player_id": 660821,
+      "name": "Jesus Sanchez",
+      "first_season": 2025,
+      "service_time": 3.686046511627907,
+      "service_notation": "3.118",
+      "salary_musd": 4.5,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://apnews.com/sports/baseball-7a3df32dcb35e6259e5ab8f9e1c559fb"
+      ]
+    },
+    {
+      "player_id": 666129,
+      "name": "Braxton Garrett",
+      "first_season": 2025,
+      "service_time": 2.9767441860465116,
+      "service_notation": "2.168",
+      "salary_musd": 1.53,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://apnews.com/sports/baseball-7a3df32dcb35e6259e5ab8f9e1c559fb"
+      ]
+    },
+    {
+      "player_id": 663743,
+      "name": "Nick Fortes",
+      "first_season": 2025,
+      "service_time": 2.866279069767442,
+      "service_notation": "2.149",
+      "salary_musd": 1.86,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://apnews.com/sports/baseball-7a3df32dcb35e6259e5ab8f9e1c559fb"
+      ]
+    },
+    {
+      "player_id": 665795,
+      "name": "Edward Cabrera",
+      "first_season": 2025,
+      "service_time": 2.854651162790698,
+      "service_notation": "2.147",
+      "salary_musd": 1.95,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://apnews.com/sports/baseball-7a3df32dcb35e6259e5ab8f9e1c559fb"
+      ]
+    },
+    {
+      "player_id": 663423,
+      "name": "Trent Thornton",
+      "first_season": 2025,
+      "service_time": 4.8604651162790695,
+      "service_notation": "4.148",
+      "salary_musd": 2.0,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/DKramer_/status/1877444088909205977"
+      ]
+    },
+    {
+      "player_id": 668227,
+      "name": "Randy Arozarena",
+      "first_season": 2025,
+      "service_time": 4.75,
+      "service_notation": "4.129",
+      "salary_musd": 11.3,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2025/01/mariners-randy-arozarena-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 669302,
+      "name": "Logan Gilbert",
+      "first_season": 2025,
+      "service_time": 3.8372093023255816,
+      "service_notation": "3.144",
+      "salary_musd": 7.625,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/JonHeyman/status/1877432073025130717"
+      ]
+    },
+    {
+      "player_id": 663728,
+      "name": "Cal Raleigh",
+      "first_season": 2025,
+      "service_time": 3.494186046511628,
+      "service_notation": "3.085",
+      "salary_musd": 5.6,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877418424646738326"
+      ]
+    },
+    {
+      "player_id": 642100,
+      "name": "Gabe Speier",
+      "first_season": 2025,
+      "service_time": 3.0,
+      "service_notation": "2.172",
+      "salary_musd": 0.845,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://apnews.com/sports/baseball-7a3df32dcb35e6259e5ab8f9e1c559fb"
+      ]
+    },
+    {
+      "player_id": 669923,
+      "name": "George Kirby",
+      "first_season": 2025,
+      "service_time": 2.8779069767441863,
+      "service_notation": "2.151",
+      "salary_musd": 4.3,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/DKramer_/status/1877444088909205977"
+      ]
+    },
+    {
+      "player_id": 621112,
+      "name": "Paul Blackburn",
+      "first_season": 2025,
+      "service_time": 5.104651162790698,
+      "service_notation": "5.018",
+      "salary_musd": 4.05,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://apnews.com/sports/baseball-7a3df32dcb35e6259e5ab8f9e1c559fb"
+      ]
+    },
+    {
+      "player_id": 620443,
+      "name": "Luis Torrens",
+      "first_season": 2025,
+      "service_time": 4.6104651162790695,
+      "service_notation": "4.105",
+      "salary_musd": 1.5,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://apnews.com/sports/baseball-7a3df32dcb35e6259e5ab8f9e1c559fb"
+      ]
+    },
+    {
+      "player_id": 621438,
+      "name": "Tyrone Taylor",
+      "first_season": 2025,
+      "service_time": 4.540697674418604,
+      "service_notation": "4.093",
+      "salary_musd": 3.025,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://apnews.com/sports/baseball-7a3df32dcb35e6259e5ab8f9e1c559fb"
+      ]
+    },
+    {
+      "player_id": 656849,
+      "name": "David Peterson",
+      "first_season": 2025,
+      "service_time": 4.517441860465116,
+      "service_notation": "4.089",
+      "salary_musd": 4.625,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://apnews.com/sports/baseball-7a3df32dcb35e6259e5ab8f9e1c559fb"
+      ]
+    },
+    {
+      "player_id": 656887,
+      "name": "Sean Reid-Foley",
+      "first_season": 2025,
+      "service_time": 3.7732558139534884,
+      "service_notation": "3.133",
+      "salary_musd": 0.8,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/players-avoiding-arbitration-11-22-24.html"
+      ]
+    },
+    {
+      "player_id": 656731,
+      "name": "Tylor Megill",
+      "first_season": 2025,
+      "service_time": 3.1802325581395348,
+      "service_notation": "3.031",
+      "salary_musd": 1.975,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://apnews.com/sports/baseball-7a3df32dcb35e6259e5ab8f9e1c559fb"
+      ]
+    },
+    {
+      "player_id": 642350,
+      "name": "Jose Siri",
+      "first_season": 2025,
+      "service_time": 3.0872093023255816,
+      "service_notation": "3.015",
+      "salary_musd": 2.4,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877415557038743684"
+      ]
+    },
+    {
+      "player_id": 571882,
+      "name": "Derek Law",
+      "first_season": 2025,
+      "service_time": 5.47093023255814,
+      "service_notation": "5.081",
+      "salary_musd": 2.75,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/andrewcgolden/status/1877431354620567849"
+      ]
+    },
+    {
+      "player_id": 671277,
+      "name": "Luis Garcia Jr.",
+      "first_season": 2025,
+      "service_time": 3.8255813953488373,
+      "service_notation": "3.142",
+      "salary_musd": 4.5,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/AriA1exander/status/1877512028744458250"
+      ]
+    },
+    {
+      "player_id": 680686,
+      "name": "Josiah Gray",
+      "first_season": 2025,
+      "service_time": 3.436046511627907,
+      "service_notation": "3.075",
+      "salary_musd": 1.35,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/andrewcgolden/status/1877443199486107994"
+      ]
+    },
+    {
+      "player_id": 666168,
+      "name": "Mason Thompson",
+      "first_season": 2025,
+      "service_time": 3.2674418604651163,
+      "service_notation": "3.046",
+      "salary_musd": 0.77,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/nationals-avoid-arbitration-with-mason-thompson.html"
+      ]
+    },
+    {
+      "player_id": 656180,
+      "name": "Riley Adams",
+      "first_season": 2025,
+      "service_time": 3.0290697674418605,
+      "service_notation": "3.005",
+      "salary_musd": 0.85,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877364848239030646"
+      ]
+    },
+    {
+      "player_id": 669022,
+      "name": "MacKenzie Gore",
+      "first_season": 2025,
+      "service_time": 3.0,
+      "service_notation": "3.000",
+      "salary_musd": 2.89,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/andrewcgolden/status/1877551417344377303"
+      ]
+    },
+    {
+      "player_id": 642397,
+      "name": "Gregory Soto",
+      "first_season": 2025,
+      "service_time": 5.593023255813954,
+      "service_notation": "5.102",
+      "salary_musd": 5.35,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/afkostka/status/1877460259368767621"
+      ]
+    },
+    {
+      "player_id": 656775,
+      "name": "Cedric Mullins",
+      "first_season": 2025,
+      "service_time": 5.453488372093023,
+      "service_notation": "5.078",
+      "salary_musd": 8.725,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877420694285230130"
+      ]
+    },
+    {
+      "player_id": 663624,
+      "name": "Ryan Mountcastle",
+      "first_season": 2025,
+      "service_time": 4.6104651162790695,
+      "service_notation": "4.105",
+      "salary_musd": 6.787,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877420694285230130"
+      ]
+    },
+    {
+      "player_id": 669211,
+      "name": "Keegan Akin",
+      "first_season": 2025,
+      "service_time": 4.482558139534884,
+      "service_notation": "4.083",
+      "salary_musd": 1.475,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/JakeDRill/status/1877511211018838456"
+      ]
+    },
+    {
+      "player_id": 669432,
+      "name": "Trevor Rogers",
+      "first_season": 2025,
+      "service_time": 4.436046511627907,
+      "service_notation": "4.075",
+      "salary_musd": 2.6,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/Feinsand/status/1877408890586898812"
+      ]
+    },
+    {
+      "player_id": 602104,
+      "name": "Ramon Urias",
+      "first_season": 2025,
+      "service_time": 4.145348837209302,
+      "service_notation": "4.025",
+      "salary_musd": 3.15,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/masnRoch/status/1877514199569448974"
+      ]
+    },
+    {
+      "player_id": 669330,
+      "name": "Tyler Wells",
+      "first_season": 2025,
+      "service_time": 3.7674418604651163,
+      "service_notation": "3.132",
+      "salary_musd": 2.075,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/afkostka/status/1877517203697971570"
+      ]
+    },
+    {
+      "player_id": 665152,
+      "name": "Dean Kremer",
+      "first_season": 2025,
+      "service_time": 3.6511627906976747,
+      "service_notation": "3.112",
+      "salary_musd": 2.95,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/afkostka/status/1877423015023006202"
+      ]
+    },
+    {
+      "player_id": 656896,
+      "name": "Emmanuel Rivera",
+      "first_season": 2025,
+      "service_time": 3.1511627906976742,
+      "service_notation": "3.026",
+      "salary_musd": 1.0,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/players-avoiding-arbitration-11-22-24.html"
+      ]
+    },
+    {
+      "player_id": 668939,
+      "name": "Adley Rutschman",
+      "first_season": 2025,
+      "service_time": 3.0,
+      "service_notation": "3.000",
+      "salary_musd": 5.5,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/AriA1exander/status/1877414860868207053"
+      ]
+    },
+    {
+      "player_id": 680694,
+      "name": "Kyle Bradish",
+      "first_season": 2025,
+      "service_time": 2.9302325581395348,
+      "service_notation": "2.160",
+      "salary_musd": 2.35,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/JonHeyman/status/1877422859468898326"
+      ]
+    },
+    {
+      "player_id": 650333,
+      "name": "Luis Arraez",
+      "first_season": 2025,
+      "service_time": 5.703488372093023,
+      "service_notation": "5.121",
+      "salary_musd": 14.0,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2025/01/padres-luis-arraez-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 656302,
+      "name": "Dylan Cease",
+      "first_season": 2025,
+      "service_time": 5.517441860465116,
+      "service_notation": "5.089",
+      "salary_musd": 13.75,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2025/01/padres-dylan-cease-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 670970,
+      "name": "Adrian Morejon",
+      "first_season": 2025,
+      "service_time": 4.813953488372093,
+      "service_notation": "4.140",
+      "salary_musd": 2.0,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/sdutKevinAcee/status/1877409384784941285"
+      ]
+    },
+    {
+      "player_id": 592094,
+      "name": "Jason Adam",
+      "first_season": 2025,
+      "service_time": 4.767441860465116,
+      "service_notation": "4.132",
+      "salary_musd": 4.8,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877417782872080669"
+      ]
+    },
+    {
+      "player_id": 669134,
+      "name": "Luis Campusano",
+      "first_season": 2025,
+      "service_time": 2.8372093023255816,
+      "service_notation": "2.144",
+      "salary_musd": 1.0,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877393902342168672"
+      ]
+    },
+    {
+      "player_id": 624133,
+      "name": "Ranger Suarez",
+      "first_season": 2025,
+      "service_time": 5.651162790697675,
+      "service_notation": "5.112",
+      "salary_musd": 8.8,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/Feinsand/status/1877431723270586698"
+      ]
+    },
+    {
+      "player_id": 666200,
+      "name": "Jesus Luzardo",
+      "first_season": 2025,
+      "service_time": 4.959302325581396,
+      "service_notation": "4.165",
+      "salary_musd": 6.225,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877415092482150837"
+      ]
+    },
+    {
+      "player_id": 614179,
+      "name": "Jose Ruiz",
+      "first_season": 2025,
+      "service_time": 4.8604651162790695,
+      "service_notation": "4.148",
+      "salary_musd": 1.225,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/players-avoiding-arbitration-11-22-24.html"
+      ]
+    },
+    {
+      "player_id": 624641,
+      "name": "Edmundo Sosa",
+      "first_season": 2025,
+      "service_time": 4.813953488372093,
+      "service_notation": "4.140",
+      "salary_musd": 3.0,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/AriA1exander/status/1877516053581824043"
+      ]
+    },
+    {
+      "player_id": 596117,
+      "name": "Garrett Stubbs",
+      "first_season": 2025,
+      "service_time": 4.6976744186046515,
+      "service_notation": "4.120",
+      "salary_musd": 0.925,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/players-avoiding-arbitration-11-22-24.html"
+      ]
+    },
+    {
+      "player_id": 664761,
+      "name": "Alec Bohm",
+      "first_season": 2025,
+      "service_time": 4.616279069767442,
+      "service_notation": "4.106",
+      "salary_musd": 7.7,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877449190713753692"
+      ]
+    },
+    {
+      "player_id": 669016,
+      "name": "Brandon Marsh",
+      "first_season": 2025,
+      "service_time": 3.453488372093023,
+      "service_notation": "3.078",
+      "salary_musd": 3.0,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/JonHeyman/status/1877432405184675846"
+      ]
+    },
+    {
+      "player_id": 681082,
+      "name": "Bryson Stott",
+      "first_season": 2025,
+      "service_time": 3.0,
+      "service_notation": "3.000",
+      "salary_musd": 3.2,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/Feinsand/status/1877431395217256510"
+      ]
+    },
+    {
+      "player_id": 670280,
+      "name": "David Bednar",
+      "first_season": 2025,
+      "service_time": 4.441860465116279,
+      "service_notation": "4.076",
+      "salary_musd": 5.9,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/AndrewDestin1/status/1877415281405890924"
+      ]
+    },
+    {
+      "player_id": 663698,
+      "name": "Joey Bart",
+      "first_season": 2025,
+      "service_time": 3.116279069767442,
+      "service_notation": "3.020",
+      "salary_musd": 1.175,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/AndrewDestin1/status/1877407931445956641"
+      ]
+    },
+    {
+      "player_id": 670059,
+      "name": "Colin Holderman",
+      "first_season": 2025,
+      "service_time": 2.8372093023255816,
+      "service_notation": "2.144",
+      "salary_musd": 1.5,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/AlexJStumpf/status/1877416986088464607"
+      ]
+    },
+    {
+      "player_id": 663559,
+      "name": "Bailey Falter",
+      "first_season": 2025,
+      "service_time": 2.802325581395349,
+      "service_notation": "2.138",
+      "salary_musd": 2.222,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/_NoahHiles/status/1877373502103105727"
+      ]
+    },
+    {
+      "player_id": 641680,
+      "name": "Jonah Heim",
+      "first_season": 2025,
+      "service_time": 4.563953488372093,
+      "service_notation": "4.097",
+      "salary_musd": 4.575,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/Feinsand/status/1877508836853940647"
+      ]
+    },
+    {
+      "player_id": 641540,
+      "name": "Dane Dunning",
+      "first_season": 2025,
+      "service_time": 4.453488372093023,
+      "service_notation": "4.078",
+      "salary_musd": 2.66,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/players-avoiding-arbitration-11-22-24.html"
+      ]
+    },
+    {
+      "player_id": 622250,
+      "name": "Josh Sborz",
+      "first_season": 2025,
+      "service_time": 4.319767441860465,
+      "service_notation": "4.055",
+      "salary_musd": 1.1,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/players-avoiding-arbitration-11-22-24.html"
+      ]
+    },
+    {
+      "player_id": 665750,
+      "name": "Leody Taveras",
+      "first_season": 2025,
+      "service_time": 3.7209302325581395,
+      "service_notation": "3.124",
+      "salary_musd": 4.75,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/JonHeyman/status/1877430717946253390"
+      ]
+    },
+    {
+      "player_id": 641793,
+      "name": "Zack Littell",
+      "first_season": 2025,
+      "service_time": 5.25,
+      "service_notation": "5.043",
+      "salary_musd": 5.72,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877408230118203609"
+      ]
+    },
+    {
+      "player_id": 642121,
+      "name": "Cole Sulser",
+      "first_season": 2025,
+      "service_time": 4.180232558139535,
+      "service_notation": "4.031",
+      "salary_musd": 0.9,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://apnews.com/article/topa-steward-mckenzie-sulser-contracts-3195607e2f9f396edb5a71d7fdc7afa6"
+      ]
+    },
+    {
+      "player_id": 664076,
+      "name": "Garrett Cleavinger",
+      "first_season": 2025,
+      "service_time": 3.3488372093023258,
+      "service_notation": "3.060",
+      "salary_musd": 1.2,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877393271145771403"
+      ]
+    },
+    {
+      "player_id": 666163,
+      "name": "Ben Rortvedt",
+      "first_season": 2025,
+      "service_time": 3.25,
+      "service_notation": "3.043",
+      "salary_musd": 1.125,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/TBTimes_Rays/status/1877423522646999069"
+      ]
+    },
+    {
+      "player_id": 669358,
+      "name": "Shane Baz",
+      "first_season": 2025,
+      "service_time": 2.9186046511627906,
+      "service_notation": "2.158",
+      "salary_musd": 1.45,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/AriA1exander/status/1877415838015221909"
+      ]
+    },
+    {
+      "player_id": 676979,
+      "name": "Garrett Crochet",
+      "first_season": 2025,
+      "service_time": 4.162790697674419,
+      "service_notation": "4.028",
+      "salary_musd": 3.8,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ChrisCotillo/status/1877418714225635793"
+      ]
+    },
+    {
+      "player_id": 656557,
+      "name": "Tanner Houck",
+      "first_season": 2025,
+      "service_time": 3.5813953488372094,
+      "service_notation": "3.100",
+      "salary_musd": 3.95,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ChrisCotillo/status/1877418714225635793"
+      ]
+    },
+    {
+      "player_id": 676710,
+      "name": "Kutter Crawford",
+      "first_season": 2025,
+      "service_time": 2.7906976744186047,
+      "service_notation": "2.136",
+      "salary_musd": 2.75,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/Feinsand/status/1877432506355462239"
+      ]
+    },
+    {
+      "player_id": 624431,
+      "name": "Jose Trevino",
+      "first_season": 2025,
+      "service_time": 5.366279069767442,
+      "service_notation": "5.063",
+      "salary_musd": 3.425,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/JonHeyman/status/1877422321717190702"
+      ]
+    },
+    {
+      "player_id": 663903,
+      "name": "Brady Singer",
+      "first_season": 2025,
+      "service_time": 4.906976744186046,
+      "service_notation": "4.156",
+      "salary_musd": 8.75,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/Feinsand/status/1877412730174333152"
+      ]
+    },
+    {
+      "player_id": 669289,
+      "name": "Santiago Espinal",
+      "first_season": 2025,
+      "service_time": 4.866279069767442,
+      "service_notation": "4.149",
+      "salary_musd": 2.4,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/players-avoiding-arbitration-11-22-24.html"
+      ]
+    },
+    {
+      "player_id": 666158,
+      "name": "Gavin Lux",
+      "first_season": 2025,
+      "service_time": 4.662790697674419,
+      "service_notation": "4.114",
+      "salary_musd": 3.325,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877418982606581858"
+      ]
+    },
+    {
+      "player_id": 641584,
+      "name": "Jake Fraley",
+      "first_season": 2025,
+      "service_time": 4.563953488372093,
+      "service_notation": "4.097",
+      "salary_musd": 3.125,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/GDubMLB/status/1877421544520995066"
+      ]
+    },
+    {
+      "player_id": 663886,
+      "name": "Tyler Stephenson",
+      "first_season": 2025,
+      "service_time": 4.325581395348837,
+      "service_notation": "4.056",
+      "salary_musd": 4.925,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/AriA1exander/status/1877496631626436916"
+      ]
+    },
+    {
+      "player_id": 594580,
+      "name": "Sam Moll",
+      "first_season": 2025,
+      "service_time": 3.436046511627907,
+      "service_notation": "3.075",
+      "salary_musd": 1.0075,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/GDubMLB/status/1877446677469991130"
+      ]
+    },
+    {
+      "player_id": 664747,
+      "name": "Alexis Diaz",
+      "first_season": 2025,
+      "service_time": 3.0,
+      "service_notation": "3.000",
+      "salary_musd": 4.5,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877408446401663042"
+      ]
+    },
+    {
+      "player_id": 666157,
+      "name": "Nick Lodolo",
+      "first_season": 2025,
+      "service_time": 3.0,
+      "service_notation": "3.000",
+      "salary_musd": 1.975,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/GDubMLB/status/1877420284891848768"
+      ]
+    },
+    {
+      "player_id": 596295,
+      "name": "Austin Gomber",
+      "first_season": 2025,
+      "service_time": 5.645348837209302,
+      "service_notation": "5.111",
+      "salary_musd": 6.35,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/Feinsand/status/1877412568542634022"
+      ]
+    },
+    {
+      "player_id": 656541,
+      "name": "Sam Hilliard",
+      "first_season": 2025,
+      "service_time": 4.133720930232558,
+      "service_notation": "4.023",
+      "salary_musd": 1.0,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/players-avoiding-arbitration-11-22-24.html"
+      ]
+    },
+    {
+      "player_id": 656458,
+      "name": "Lucas Gilbreath",
+      "first_season": 2025,
+      "service_time": 3.8604651162790695,
+      "service_notation": "3.148",
+      "salary_musd": 0.785,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/players-avoiding-arbitration-11-22-24.html"
+      ]
+    },
+    {
+      "player_id": 623474,
+      "name": "Jimmy Herget",
+      "first_season": 2025,
+      "service_time": 3.4011627906976742,
+      "service_notation": "3.069",
+      "salary_musd": 0.85,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/harding_at_mlb/status/1877520974439960982"
+      ]
+    },
+    {
+      "player_id": 664875,
+      "name": "Justin Lawrence",
+      "first_season": 2025,
+      "service_time": 2.9709302325581395,
+      "service_notation": "2.167",
+      "salary_musd": 0.975,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/harding_at_mlb/status/1877518023340310538"
+      ]
+    },
+    {
+      "player_id": 663372,
+      "name": "Ryan Feltner",
+      "first_season": 2025,
+      "service_time": 2.8313953488372094,
+      "service_notation": "2.143",
+      "salary_musd": 2.275,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/kileymcd/status/1877489371059757160"
+      ]
+    },
+    {
+      "player_id": 640451,
+      "name": "Hunter Harvey",
+      "first_season": 2025,
+      "service_time": 5.273255813953488,
+      "service_notation": "5.047",
+      "salary_musd": 3.7,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/anne__rogers/status/1877448248828297689"
+      ]
+    },
+    {
+      "player_id": 663460,
+      "name": "Kris Bubic",
+      "first_season": 2025,
+      "service_time": 4.784883720930233,
+      "service_notation": "4.135",
+      "salary_musd": 3.0,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/anne__rogers/status/1877448248828297689"
+      ]
+    },
+    {
+      "player_id": 657140,
+      "name": "Kyle Wright",
+      "first_season": 2025,
+      "service_time": 4.3604651162790695,
+      "service_notation": "4.062",
+      "salary_musd": 1.8,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/12/royals-kyle-wright-avoid-arbitration.html"
+      ]
+    },
+    {
+      "player_id": 670167,
+      "name": "John Schreiber",
+      "first_season": 2025,
+      "service_time": 4.156976744186046,
+      "service_notation": "4.027",
+      "salary_musd": 2.3,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/anne__rogers/status/1877448248828297689"
+      ]
+    },
+    {
+      "player_id": 672578,
+      "name": "Carlos Hernandez",
+      "first_season": 2025,
+      "service_time": 3.5755813953488373,
+      "service_notation": "3.099",
+      "salary_musd": 1.16,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/anne__rogers/status/1877448248828297689"
+      ]
+    },
+    {
+      "player_id": 664728,
+      "name": "Kyle Isbel",
+      "first_season": 2025,
+      "service_time": 3.25,
+      "service_notation": "3.043",
+      "salary_musd": 1.75,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/Feinsand/status/1877431060037767370"
+      ]
+    },
+    {
+      "player_id": 669004,
+      "name": "MJ Melendez",
+      "first_season": 2025,
+      "service_time": 2.8895348837209305,
+      "service_notation": "2.153",
+      "salary_musd": 2.65,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/anne__rogers/status/1877448248828297689"
+      ]
+    },
+    {
+      "player_id": 669373,
+      "name": "Tarik Skubal",
+      "first_season": 2025,
+      "service_time": 4.662790697674419,
+      "service_notation": "4.114",
+      "salary_musd": 10.15,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2025/01/tigers-tarik-skubal-avoid-arbitration.html?utm_source=twitter"
+      ]
+    },
+    {
+      "player_id": 663554,
+      "name": "Casey Mize",
+      "first_season": 2025,
+      "service_time": 4.645348837209302,
+      "service_notation": "4.111",
+      "salary_musd": 2.34,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/Feinsand/status/1877373363330465844"
+      ]
+    },
+    {
+      "player_id": 668670,
+      "name": "Jake Rogers",
+      "first_season": 2025,
+      "service_time": 4.232558139534884,
+      "service_notation": "4.040",
+      "salary_musd": 2.64,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877381642937053331"
+      ]
+    },
+    {
+      "player_id": 676684,
+      "name": "Will Vest",
+      "first_season": 2025,
+      "service_time": 3.5813953488372094,
+      "service_notation": "3.100",
+      "salary_musd": 1.4,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/EvanPetzold/status/1877414493535318327"
+      ]
+    },
+    {
+      "player_id": 656716,
+      "name": "Zach McKinstry",
+      "first_season": 2025,
+      "service_time": 3.5755813953488373,
+      "service_notation": "3.099",
+      "salary_musd": 1.65,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/players-avoiding-arbitration-11-22-24.html"
+      ]
+    },
+    {
+      "player_id": 671345,
+      "name": "Jason Foley",
+      "first_season": 2025,
+      "service_time": 3.191860465116279,
+      "service_notation": "3.033",
+      "salary_musd": 3.15,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/EvanPetzold/status/1877417398589911498"
+      ]
+    },
+    {
+      "player_id": 663837,
+      "name": "Matt Vierling",
+      "first_season": 2025,
+      "service_time": 3.1511627906976742,
+      "service_notation": "3.026",
+      "salary_musd": 3.005,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/EvanPetzold/status/1877422523953848765"
+      ]
+    },
+    {
+      "player_id": 628451,
+      "name": "Andy Ibanez",
+      "first_season": 2025,
+      "service_time": 2.988372093023256,
+      "service_notation": "2.170",
+      "salary_musd": 1.4,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/players-avoiding-arbitration-11-22-24.html"
+      ]
+    },
+    {
+      "player_id": 689225,
+      "name": "Beau Brieske",
+      "first_season": 2025,
+      "service_time": 2.7790697674418605,
+      "service_notation": "2.134",
+      "salary_musd": 1.025,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/EvanPetzold/status/1877514952610550018"
+      ]
+    },
+    {
+      "player_id": 650489,
+      "name": "Willi Castro",
+      "first_season": 2025,
+      "service_time": 5.098837209302325,
+      "service_notation": "5.017",
+      "salary_musd": 6.4,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/DWolfsonKSTP/status/1877412102681366724"
+      ]
+    },
+    {
+      "player_id": 680777,
+      "name": "Ryan Jeffers",
+      "first_season": 2025,
+      "service_time": 4.517441860465116,
+      "service_notation": "4.089",
+      "salary_musd": 4.55,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/DWolfsonKSTP/status/1877415634654330973"
+      ]
+    },
+    {
+      "player_id": 543859,
+      "name": "Michael Tonkin",
+      "first_season": 2025,
+      "service_time": 4.430232558139535,
+      "service_notation": "4.074",
+      "salary_musd": 1.0,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/players-avoiding-arbitration-11-22-24.html"
+      ]
+    },
+    {
+      "player_id": 641927,
+      "name": "Bailey Ober",
+      "first_season": 2025,
+      "service_time": 3.5406976744186047,
+      "service_notation": "3.093",
+      "salary_musd": 3.55,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/DanHayesMLB/status/1877415758591902187"
+      ]
+    },
+    {
+      "player_id": 592779,
+      "name": "Brock Stewart",
+      "first_season": 2025,
+      "service_time": 3.5406976744186047,
+      "service_notation": "3.093",
+      "salary_musd": 0.87,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/players-avoiding-arbitration-11-22-24.html"
+      ]
+    },
+    {
+      "player_id": 643377,
+      "name": "Griffin Jax",
+      "first_season": 2025,
+      "service_time": 3.5290697674418605,
+      "service_notation": "3.091",
+      "salary_musd": 2.365,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/Feinsand/status/1877394316504482201"
+      ]
+    },
+    {
+      "player_id": 657746,
+      "name": "Joe Ryan",
+      "first_season": 2025,
+      "service_time": 3.191860465116279,
+      "service_notation": "3.033",
+      "salary_musd": 3.0,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/DWolfsonKSTP/status/1877421318594830847"
+      ]
+    },
+    {
+      "player_id": 663616,
+      "name": "Trevor Larnach",
+      "first_season": 2025,
+      "service_time": 3.052325581395349,
+      "service_notation": "3.009",
+      "salary_musd": 2.1,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/DWolfsonKSTP/status/1877418696685048003"
+      ]
+    },
+    {
+      "player_id": 661395,
+      "name": "Jhoan Duran",
+      "first_season": 2025,
+      "service_time": 3.0,
+      "service_notation": "3.000",
+      "salary_musd": 4.125,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/DWolfsonKSTP/status/1877416188977811853"
+      ]
+    },
+    {
+      "player_id": 668904,
+      "name": "Royce Lewis",
+      "first_season": 2025,
+      "service_time": 2.8255813953488373,
+      "service_notation": "2.142",
+      "salary_musd": 1.625,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/DWolfsonKSTP/status/1877415789625483666"
+      ]
+    },
+    {
+      "player_id": 683734,
+      "name": "Andrew Vaughn",
+      "first_season": 2025,
+      "service_time": 4.0,
+      "service_notation": "4.000",
+      "salary_musd": 5.85,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/JRFegan/status/1877419007118094755"
+      ]
+    },
+    {
+      "player_id": 605121,
+      "name": "Justin Anderson",
+      "first_season": 2025,
+      "service_time": 3.7093023255813953,
+      "service_notation": "3.122",
+      "salary_musd": 0.9,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/whitesox/status/1877445365022027964"
+      ]
+    },
+    {
+      "player_id": 642136,
+      "name": "Matt Thaiss",
+      "first_season": 2025,
+      "service_time": 3.2209302325581395,
+      "service_notation": "3.038",
+      "salary_musd": 1.0,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://apnews.com/article/matt-thaiss-cubs-contract-ea13cbc95f36b16566c12da0f06ae71a"
+      ]
+    },
+    {
+      "player_id": 621051,
+      "name": "Steven Wilson",
+      "first_season": 2025,
+      "service_time": 3.0,
+      "service_notation": "3.000",
+      "salary_musd": 0.95,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877403566199156813"
+      ]
+    },
+    {
+      "player_id": 682171,
+      "name": "Penn Murfee",
+      "first_season": 2025,
+      "service_time": 2.9825581395348837,
+      "service_notation": "2.169",
+      "salary_musd": 0.78,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/JRFegan/status/1877423247223840876"
+      ]
+    },
+    {
+      "player_id": 663757,
+      "name": "Trent Grisham",
+      "first_season": 2025,
+      "service_time": 5.348837209302325,
+      "service_notation": "5.060",
+      "salary_musd": 5.0,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/players-avoiding-arbitration-11-22-24.html"
+      ]
+    },
+    {
+      "player_id": 642207,
+      "name": "Devin Williams",
+      "first_season": 2025,
+      "service_time": 5.325581395348837,
+      "service_notation": "5.056",
+      "salary_musd": 8.6,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/jorgecastillo/status/1877524512209588454"
+      ]
+    },
+    {
+      "player_id": 664141,
+      "name": "JT Brubaker",
+      "first_season": 2025,
+      "service_time": 5.0,
+      "service_notation": "5.000",
+      "salary_musd": 1.82,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://www.mlbtraderumors.com/2024/11/players-avoiding-arbitration-11-22-24.html"
+      ]
+    },
+    {
+      "player_id": 665862,
+      "name": "Jazz Chisholm Jr.",
+      "first_season": 2025,
+      "service_time": 4.436046511627907,
+      "service_notation": "4.075",
+      "salary_musd": 5.85,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877455116820746652"
+      ]
+    },
+    {
+      "player_id": 657376,
+      "name": "Clarke Schmidt",
+      "first_season": 2025,
+      "service_time": 3.8604651162790695,
+      "service_notation": "3.148",
+      "salary_musd": 3.6,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/AriA1exander/status/1877521333564686756"
+      ]
+    },
+    {
+      "player_id": 664123,
+      "name": "Scott Effross",
+      "first_season": 2025,
+      "service_time": 2.9069767441860463,
+      "service_notation": "2.156",
+      "salary_musd": 0.8,
+      "source": "https://www.mlbtraderumors.com/2025/01/2025-arbitration-tracker.html",
+      "agreement_sources": [
+        "https://x.com/ByRobertMurray/status/1877405188790636553"
+      ]
+    }
+  ],
+  "excluded": [
+    {
+      "name": "Luis Rengifo",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach agreement, figures exchanged (team announcement)"
+    },
+    {
+      "name": "Jose Quijada",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach agreement, figures exchanged (team announcement)"
+    },
+    {
+      "name": "Mickey Moniak",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach agreement, figures exchanged (team announcement)"
+    },
+    {
+      "name": "Brent Rooker",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "five-year, $60MM extension earlier this week"
+    },
+    {
+      "name": "William Conteras",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach agreement, will likely exchange figures (per Jesse Rogers of ESPN)"
+    },
+    {
+      "name": "Lars Nootbaar",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach agreement, will likely exchange figures (per Katie Woo of The Athletic)"
+    },
+    {
+      "name": "Brendan Donovan",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach agreement, will likely exchange figures (per John Denton of MLB.com)"
+    },
+    {
+      "name": "Andre Pallante",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach agreement, will likely exchange figures (per Derrick Goold of the St. Louis Post-Dispatch)"
+    },
+    {
+      "name": "Kyle Tucker",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach agreement, will exchange figures (per Jesse Rogers of ESPN)"
+    },
+    {
+      "name": "Alex Vesia",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach agreement, exchange figures (per Ardaya)"
+    },
+    {
+      "name": "Tayler Saucedo",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "$937,500 agreement today (per The Associated Press)"
+    },
+    {
+      "name": "Nathaniel Lowe",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach agreement, exchanged figures"
+    },
+    {
+      "name": "Jorge Mateo",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach agreement, likely to exchange figures (per Roch Kubatko of MASNsports.com)"
+    },
+    {
+      "name": "Tyler Wade",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "$900K agreement (w/ 2026 club option) reached in November"
+    },
+    {
+      "name": "Michael King",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach agreement, will likely exchange figures (per Kevin Acee of the San Diego Union-Tribune)"
+    },
+    {
+      "name": "Dennis Santana",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach agreement, likely to exchange figures (per Andrew Destin of the Pittsburgh Post-Gazette)"
+    },
+    {
+      "name": "Johan Oviedo",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach agreement, likely to exchange figures (per Andrew Destin of the Pittsburgh Post-Gazette)"
+    },
+    {
+      "name": "Drew Rasmussen",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "two-year, $8.5MM extension reached earlier this week"
+    },
+    {
+      "name": "Taylor Walls",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach agreement, will likely exchange figures (Per Marc Topkin of the Tampa Bay Times)"
+    },
+    {
+      "name": "Jarren Duran",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach agreement, exchanged figures (per Cotillo)"
+    },
+    {
+      "name": "Justin Topa",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "$1.225MM agreement (w/ 2026 club option) reached in November"
+    },
+    {
+      "name": "Mark Leiter Jr.",
+      "reason": "Not an identified one-year salary agreement",
+      "report": "Did not reach agreement, will likely exchange figures (per Rogers)"
+    }
+  ]
+}

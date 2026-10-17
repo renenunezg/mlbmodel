@@ -1,42 +1,80 @@
-"""What a win costs and what control years pay: fitted from the contracts table.
-
-Every quantity has a documented fallback that the fit report names when used.
-"""
+"""Dollar calibration from verified signing events, plus unsigned salary rules."""
 from __future__ import annotations
 
-import logging
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
-
-log = logging.getLogger(__name__)
+from scipy.optimize import lsq_linear, minimize, minimize_scalar
 
 # Fallbacks, each cited in the tip when used.
 FALLBACK_PRICE_MUSD = 11.0
 FALLBACK_PRICE_SOURCE = "fangraphs_2025_26"
 FALLBACK_INFLATION = 0.03
-INFLATION_CAP = 0.05
 FALLBACK_ARB_FRACTIONS = {1: 0.25, 2: 0.40, 3: 0.60, 4: 0.70}
-MIN_FREE_AGENT_CONTRACTS = 60
-MIN_ARBITRATION_PLAYERS = 15
 # CBA minimum salary by season, in millions; later seasons use the latest known.
-LEAGUE_MINIMUM_MUSD: dict[int, float] = {2024: 0.74, 2025: 0.76, 2026: 0.78}
-FREE_AGENT_OFFSEASONS = 3
+LEAGUE_MINIMUM_MUSD: dict[int, float] = {2022: 0.70, 2023: 0.72, 2024: 0.74, 2025: 0.76, 2026: 0.78}
 ARBITRATION_SERVICE = 3.0
 
 
 @dataclass(frozen=True)
 class PriceModel:
     price_musd: float
-    se: float
+    se: float | None
     inflation: float
     n: int
     source: str
+    base_season: int | None = None
+    above_minimum: bool = False
+    role_prices: dict[str, float] = field(default_factory=dict)
+    profile_prices: dict[str, float] = field(default_factory=dict)
 
-    def price_for(self, season: int, first_season: int) -> float:
-        return self.price_musd * (1.0 + self.inflation) ** max(0, season - first_season)
+    def price_for(self, season: int, first_season: int, role: str | None = None) -> float:
+        base = first_season if self.base_season is None else self.base_season
+        if self.role_prices and role not in self.role_prices:
+            raise ValueError("Role-calibrated dollars require a supported production role")
+        rate = self.role_prices[role] if self.role_prices else self.price_musd
+        return rate * (1.0 + self.inflation) ** (season - base)
+
+    def value_for(self, war: float, season: int, first_season: int, role: str | None = None) -> float:
+        if self.profile_prices:
+            raise ValueError("Market pricing requires value_for_roles with a dated usage profile")
+        return war * self.price_for(season, first_season, role) + (league_minimum(season) if self.above_minimum else 0.0)
+
+    def value_for_roles(self, wars: dict[str, float], season: int, first_season: int,
+                        profile: dict[str, float] | None = None) -> float:
+        """Price both sides of a two-way player, paying the minimum salary once."""
+        amount = sum(w * self.price_for(season, first_season, r) for r, w in wars.items())
+        if self.profile_prices:
+            if profile is None or "expected_saves" not in profile or not np.isfinite(list(profile.values())).all():
+                raise ValueError("Market pricing requires a complete dated usage profile")
+            base = first_season if self.base_season is None else self.base_season
+            extra = (self.profile_prices["expected_saves"] * profile["expected_saves"] / 10 if "RP" in wars else 0)
+            amount = max(0.0, amount + extra * (1+self.inflation)**(season-base))
+        return amount + (league_minimum(season) if self.above_minimum else 0.0)
+
+
+def replacement_present_value(first: int, years: int, discount: float) -> float:
+    """Replacement salaries cover playing years, excluding later bonus payments."""
+    return sum(league_minimum(first+i) * (1-discount)**i for i in range(years))
+
+
+def contract_roles(contract: dict, wars: dict[str, float]) -> dict[str, float]:
+    """Use a documented signing role consistently in calibration and replay.
+
+    A short injury-return relief stint does not turn a new rotation contract
+    into a relief contract. This changes pricing context, never projected WAR.
+    Historical workload remains the default when the signing report is silent.
+    """
+    role = contract.get("signing_role")
+    if role is None:
+        return wars
+    if role not in {"SP", "RP"} or not contract.get("role_source") or not contract.get("date"):
+        raise ValueError("Signing role requires a dated source and a supported pitching role")
+    if len(wars) != 1 or not set(wars) <= {"SP", "RP"}:
+        raise ValueError("Signing role conflicts with projected production roles")
+    return {role: sum(wars.values())}
 
 
 def league_minimum(season: int) -> float:
@@ -44,57 +82,168 @@ def league_minimum(season: int) -> float:
     return LEAGUE_MINIMUM_MUSD[known]
 
 
-def free_agent_signings(contracts: pd.DataFrame, current_season: int) -> pd.DataFrame:
-    """One row per free-agent contract from the last offseasons: player_id, first_season, aav_musd, years.
+def contract_present_values(contract: dict, wars: list[float], discount: float, inflation: float) -> tuple[float, float]:
+    """Compare the same guaranteed production horizon and dated cash obligations.
 
-    The contract summary on the page gives the length, total value, and first season, so a
-    deal signed two winters ago is dated to its own first season, not the page's.
+    Bonuses and buyouts belong in their payment years, including years after play
+    ends. Opt-outs and exercisable options must be valued separately, not flattened
+    into AAV. The caller supplies actual-workload WAR, never standardized WAR.
     """
-    c = contracts[(contracts["how_acquired"] == "Free Agency") & contracts["contract_start"].notna() & contracts["contract_years"].notna()]
-    c = c.drop_duplicates("player_id")
-    c = c[c["contract_start"].between(current_season - FREE_AGENT_OFFSEASONS + 1, current_season)]
-    c = c[c["contract_total_musd"].notna() & (c["contract_years"] > 0)]
-    return pd.DataFrame({
-        "player_id": c["player_id"].astype("int64").to_numpy(), "first_season": c["contract_start"].astype("int64").to_numpy(),
-        "years": c["contract_years"].astype("int64").to_numpy(),
-        "aav_musd": (c["contract_total_musd"].astype("float64") / c["contract_years"].astype("float64")).to_numpy(dtype="float64"),
-    })
+    if contract.get("transaction_type") != "free_agent_signing":
+        raise ValueError("Dollar calibration requires verified signing events, not how_acquired")
+    if contract.get("has_exercisable_option", False):
+        raise ValueError("Option contracts cannot enter the guaranteed-cash price regression")
+    if not contract.get("source") or not contract.get("date"):
+        raise ValueError("Signing event needs source and date")
+    years = int(contract["years"])
+    cash = np.asarray(contract["cash_musd"], dtype=float)
+    war = np.asarray(wars, dtype=float)
+    if years < 1 or len(war) != years or not len(cash):
+        raise ValueError("Contract and production horizons do not match")
+    if not np.isfinite(cash).all() or not np.isfinite(war).all() or (cash < 0).any() or (war < 0).any():
+        raise ValueError("Non-finite or negative contract inputs")
+    if not np.isclose(cash.sum(), contract["guarantee_musd"]):
+        raise ValueError("Cash does not reconcile to the guarantee")
+    cost = float(cash @ (1 - discount) ** np.arange(len(cash)))
+    production = float(war @ ((1 - discount) * (1 + inflation)) ** np.arange(years))
+    return cost, production
 
 
-def fit_price_per_win(signings: pd.DataFrame, projected_war: pd.DataFrame) -> PriceModel:
-    """Dollars per projected win from free-agent average annual values.
+def fit_price_per_win(present_values: pd.DataFrame, base_season: int, inflation: float = FALLBACK_INFLATION) -> PriceModel:
+    """Fit salary above replacement against production PV in base-season dollars.
 
-    ``projected_war`` has player_id, first_season, war (our projection for the first
-    contract season, made with inputs through the prior season). The fit is through the
-    origin on contracts with positive projected WAR; the fallback applies with fewer than
-    60 contracts or when a free-intercept fit's intercept is negative beyond two standard errors.
+    One row per verified signing: player_id, first_season, salary_pv_musd,
+    production_pv_wins, replacement_pv_musd. Zero-WAR contracts stay in the errors
+    and sample count. The minimum salary is an offset, not a fitted intercept.
+    No silent fallback: an unidentified or degenerate fit is an error, and a
+    successful fit still requires independent market validation before publication.
     """
-    data = signings.merge(projected_war, on=["player_id", "first_season"], how="inner")
-    data = data[data["war"] > 0].astype({"war": "float64", "aav_musd": "float64"})
-    n = len(data)
-    if n < MIN_FREE_AGENT_CONTRACTS:
-        log.info(f"price per win: {n} contracts, using the fallback")
-        return PriceModel(FALLBACK_PRICE_MUSD, float("nan"), FALLBACK_INFLATION, n, FALLBACK_PRICE_SOURCE)
-    x, y = data["war"].values, data["aav_musd"].values
+    keys = ["player_id", "first_season"]
+    if present_values.duplicated(keys).any():
+        raise ValueError("Duplicate contract in dollar calibration")
+    x = present_values["production_pv_wins"].to_numpy(float)
+    y = (present_values["salary_pv_musd"] - present_values["replacement_pv_musd"]).to_numpy(float)
+    y = y / (1 + inflation) ** (present_values["first_season"].to_numpy(int) - base_season)
+    if len(x) < 3 or not np.isfinite(x).all() or not np.isfinite(y).all() or (x < 0).any() or (y < 0).any() or x @ x <= 0:
+        raise ValueError("Insufficient identifiable contract data for dollar calibration")
     slope = float((x @ y) / (x @ x))
     resid = y - slope * x
-    se = float(np.sqrt((resid @ resid) / (n - 1) / (x @ x)))
-    design = np.column_stack([np.ones(n), x])
-    coef, *_ = np.linalg.lstsq(design, y, rcond=None)
-    free_resid = y - design @ coef
-    cov = np.linalg.inv(design.T @ design) * (free_resid @ free_resid) / (n - 2)
-    if coef[0] < -2 * np.sqrt(cov[0, 0]):
-        log.info("price per win: negative intercept beyond two standard errors, using the fallback")
-        return PriceModel(FALLBACK_PRICE_MUSD, float("nan"), FALLBACK_INFLATION, n, FALLBACK_PRICE_SOURCE)
-    by_season = data.groupby("first_season").apply(lambda g: float((g["war"] @ g["aav_musd"]) / (g["war"] @ g["war"])), include_groups=False)
-    inflation = FALLBACK_INFLATION
-    if len(by_season) >= 2:
-        growth = by_season.sort_index().pct_change().dropna()
-        if not growth.empty:
-            fitted = float(growth.mean())
-            # A fit outside the cap is not evidence of a trend; the fallback stands.
-            inflation = fitted if 0.0 <= fitted <= INFLATION_CAP else FALLBACK_INFLATION
-    return PriceModel(slope, se, inflation, n, f"fit_{int(data['first_season'].min())}_{int(data['first_season'].max())}")
+    se = float(np.sqrt((resid @ resid) / (len(x) - 1) / (x @ x)))
+    if slope <= 0:
+        raise ValueError("Dollar calibration must be positive")
+    return PriceModel(slope, se, inflation, len(x), "verified_contract_pv_above_minimum", base_season, True)
+
+
+def fit_role_prices(frame: pd.DataFrame, base_season: int, inflation: float = FALLBACK_INFLATION) -> tuple[PriceModel, dict]:
+    """Partially pool batting, starter and relief prices using verified cash PV.
+
+    Annualize each contract's production and cash PV by its playing-year annuity.
+    This retains the full guarantee without allowing an eleven-year contract to
+    receive 121 times a one-year contract's weight solely because of its length.
+    Choose pooling by leave-one-player-out error, excluding every signing by the
+    held player. Subsequent seasons, never this fit, establish market accuracy.
+    """
+    if frame.duplicated(["player_id", "first_season"]).any():
+        raise ValueError("Duplicate contract in dollar calibration")
+    roles = ["bat", "SP", "RP"]
+    if set(frame.role) != set(roles):
+        raise ValueError("Calibration requires contracts for every production role")
+    annuity = frame.annuity.to_numpy(float)
+    x = frame.production_pv_wins.to_numpy(float) / annuity
+    x *= (1+inflation)**(frame.first_season.to_numpy(int)-base_season)
+    y = (frame.salary_pv_musd-frame.replacement_pv_musd).to_numpy(float) / annuity
+    if len(x) < 10 or not np.isfinite([x, y, annuity]).all() or (annuity <= 0).any() or (x < 0).any() or (y < 0).any() or x@x <= 0:
+        raise ValueError("Invalid or insufficient role-calibration contracts")
+    X = x[:, None] * (frame.role.to_numpy()[:, None] == np.array(roles)[None, :])
+    ids = frame.player_id.to_numpy()
+
+    def fit(mask: np.ndarray, alpha: float) -> tuple[np.ndarray, float]:
+        a, b, z = x[mask], y[mask], X[mask]
+        if a@a <= 0:
+            raise ValueError("Unidentified role-price fold")
+        common = a@b/(a@a)
+        beta = np.linalg.solve(z.T@z+alpha*np.eye(len(roles)), z.T@b+alpha*common)
+        return beta, float(common)
+
+    def errors(log_alpha: float) -> np.ndarray:
+        prediction = np.empty(len(x))
+        for pid in np.unique(ids):
+            held = ids == pid
+            beta, _ = fit(~held, np.exp(log_alpha))
+            prediction[held] = X[held] @ beta
+        return prediction-y
+
+    optimum = minimize_scalar(lambda a: np.mean(errors(a)**2), bounds=(-10, 20), method="bounded")
+    if not optimum.success:
+        raise ValueError("Role-price pooling did not converge")
+    alpha = float(np.exp(optimum.x))
+    beta, common = fit(np.ones(len(x), dtype=bool), alpha)
+    if (beta <= 0).any():
+        raise ValueError("Role prices must be positive")
+    residual = errors(optimum.x)
+    price = PriceModel(common, float(np.sqrt(np.mean(residual**2)/(x@x))), inflation, len(frame),
+                       "verified_contract_pv_role_pooled", base_season, True, dict(zip(roles, beta.tolist())))
+    return price, {"pooling_alpha": alpha, "loo_annualized_rmse_musd": float(np.sqrt(np.mean(residual**2))),
+                   "weighting": "One contract per row, cash and production divided by playing-year discounted annuity",
+                   "selection": "Leave-one-player-out pooling; later seasons excluded from fitting"}
+
+
+def fit_market_prices(frame: pd.DataFrame, base_season: int,
+                      discount: float, inflation: float = FALLBACK_INFLATION) -> tuple[PriceModel, dict]:
+    """Jointly fit role WAR prices and the relief usage premium to actual cash.
+
+    Role prices pool toward each other, not toward a gross WAR price that already
+    includes closer compensation. The usage premium shrinks toward zero.
+    Leave-one-player-out selection excludes every signing by the held player.
+    Subsequent signing winters and trades never select these coefficients.
+    """
+    roles = ["bat", "SP", "RP"]
+    if frame.duplicated(["player_id", "first_season"]).any() or set(frame.role) != set(roles) or len(frame) < 10:
+        raise ValueError("Market calibration needs unique signings covering all roles")
+    x = np.zeros((len(frame), 4))
+    for j, row in enumerate(frame.itertuples()):
+        if len(row.projected_war) != row.years or len(row.projected_profiles) != row.years:
+            raise ValueError("Market profile and contract horizons differ")
+        for i, (war, profile) in enumerate(zip(row.projected_war, row.projected_profiles)):
+            factor = (1+inflation)**(row.first_season+i-base_season)*(1-discount)**i/row.annuity
+            x[j, roles.index(row.role)] += war*factor
+            x[j, 3] += profile["expected_saves"]/10*factor if row.role == "RP" else 0
+    y = (frame.salary_pv_musd-frame.replacement_pv_musd).to_numpy(float)/frame.annuity.to_numpy(float)
+    if not np.isfinite(x).all() or not np.isfinite(y).all() or (x < 0).any() or (y < 0).any() or (frame.annuity <= 0).any():
+        raise ValueError("Non-finite or invalid cash calibration data")
+    ids = frame.player_id.to_numpy()
+
+    def fit(mask, pars):
+        reg = np.zeros((4, 4))
+        reg[:3, :3] = np.sqrt(np.exp(pars[0]))*(np.eye(3)-np.ones((3, 3))/3)
+        reg[3, 3] = np.sqrt(np.exp(pars[1]))
+        result = lsq_linear(np.vstack([x[mask], reg]), np.r_[y[mask], np.zeros(4)], bounds=(0, np.inf))
+        if not result.success:
+            raise ValueError("Contract price fit did not converge")
+        return result.x
+
+    def errors(pars):
+        prediction = np.empty(len(y))
+        for pid in np.unique(ids):
+            held = ids == pid
+            prediction[held] = x[held]@fit(~held, pars)
+        return prediction-y
+
+    optimum = minimize(lambda p: np.mean(errors(p)**2), [3, 0], method="Powell", bounds=[(-10, 20)]*2,
+                       options={"xtol": 1e-4, "ftol": 1e-7})
+    if not optimum.success:
+        raise ValueError("Market price penalty selection did not converge")
+    beta = fit(np.ones(len(y), dtype=bool), optimum.x)
+    residual = errors(optimum.x)
+    price = PriceModel(float(np.mean(beta[:3])), None, inflation, len(frame),
+                       "verified_contract_war_and_relief_usage", base_season, True,
+                       dict(zip(roles, beta[:3].tolist())), {"expected_saves": float(beta[3])})
+    return price, {"pooling_alpha": float(np.exp(optimum.x[0])),
+                   "profile_alpha": float(np.exp(optimum.x[1])),
+                   "loo_annualized_rmse_musd": float(np.sqrt(np.mean(residual**2))),
+                   "selection": "Leave-one-player-out penalties; subsequent signing winters excluded",
+                   "weighting": "One signing per row, annualized discounted cash",
+                   "profile_units": {"expected_saves": "Ten expected saves"}}
 
 
 def arbitration_start(service_time: float, service_season: int, arbitration_seasons: Iterable[int]) -> float:
@@ -107,26 +256,3 @@ def arbitration_year(service_time: float, first_service: float = ARBITRATION_SER
     if service_time != service_time:
         return 1
     return int(max(1, min(4, np.floor(service_time - first_service) + 1)))
-
-
-def fit_arbitration_fractions(contracts: pd.DataFrame, projected_war: pd.DataFrame, price: PriceModel, season: int) -> dict[int, float]:
-    """Median share of market value paid in each arbitration year, from this season's arbitration salaries.
-
-    ``projected_war`` has player_id and war for ``season``. Years with fewer than 15 players fall back.
-    """
-    arb = contracts[(contracts["season"] == season) & (contracts["salary_kind"] == "guaranteed") & contracts["service_time"].between(2.0, 6.0)
-                    & (contracts["how_acquired"] != "Free Agency")]
-    data = arb.merge(projected_war[["player_id", "war"]], on="player_id", how="inner")
-    data = data[data["war"] > 0.5]
-    starts = {
-        pid: arbitration_start(float(g["service_time"].iloc[0]), int(g["season"].min()),
-                               g.loc[g["salary_kind"].eq("arbitration") | g.get("declined_to", pd.Series(index=g.index, dtype=object)).eq("arbitration"), "season"])
-        for pid, g in contracts.groupby("player_id")
-    }
-    data["arb_year"] = [arbitration_year(r.service_time, starts[r.player_id]) for r in data.itertuples()]
-    data["fraction"] = data["salary_musd"] / (data["war"] * price.price_musd)
-    out = dict(FALLBACK_ARB_FRACTIONS)
-    for year, g in data.groupby("arb_year"):
-        if len(g) >= MIN_ARBITRATION_PLAYERS:
-            out[int(year)] = float(np.clip(g["fraction"].median(), 0.05, 1.0))
-    return out

@@ -1,0 +1,251 @@
+{
+  "contracts": [
+    {
+      "player_id": 660271,
+      "name": "Shohei Ohtani",
+      "date": "2023-12-11",
+      "first_season": 2024,
+      "years": 10,
+      "guarantee_musd": 700,
+      "payroll_summary_musd": 282.17,
+      "source": "https://www.mlb.com/news/shohei-ohtani-dodgers-deal-deferrals-explained",
+      "cash_source": "https://www.mlb.com/news/shohei-ohtani-dodgers-deal-deferrals-explained",
+      "earned_cash": {
+        "2024": [
+          [
+            2024,
+            2
+          ],
+          [
+            2034,
+            68
+          ]
+        ],
+        "2025": [
+          [
+            2025,
+            2
+          ],
+          [
+            2035,
+            68
+          ]
+        ],
+        "2026": [
+          [
+            2026,
+            2
+          ],
+          [
+            2036,
+            68
+          ]
+        ],
+        "2027": [
+          [
+            2027,
+            2
+          ],
+          [
+            2037,
+            68
+          ]
+        ],
+        "2028": [
+          [
+            2028,
+            2
+          ],
+          [
+            2038,
+            68
+          ]
+        ],
+        "2029": [
+          [
+            2029,
+            2
+          ],
+          [
+            2039,
+            68
+          ]
+        ],
+        "2030": [
+          [
+            2030,
+            2
+          ],
+          [
+            2040,
+            68
+          ]
+        ],
+        "2031": [
+          [
+            2031,
+            2
+          ],
+          [
+            2041,
+            68
+          ]
+        ],
+        "2032": [
+          [
+            2032,
+            2
+          ],
+          [
+            2042,
+            68
+          ]
+        ],
+        "2033": [
+          [
+            2033,
+            2
+          ],
+          [
+            2043,
+            68
+          ]
+        ]
+      },
+      "liability_scope": "Future service earns its own deferred payments. Amounts earned before the valuation season are not charged again as acquisition costs. Cash retained in a specific trade is separate."
+    },
+    {
+      "player_id": 665742,
+      "name": "Juan Soto",
+      "date": "2024-12-11",
+      "first_season": 2025,
+      "years": 15,
+      "guarantee_musd": 765,
+      "source": "https://www.mlb.com/news/juan-soto-agrees-to-contract-with-mets-sources",
+      "cash_source": "https://apnews.com/article/9160d4eda264b72c75cb0b5a805387e8",
+      "cash_musd": [
+        121.875,
+        46.875,
+        42.5,
+        46.875,
+        46.875,
+        46,
+        46,
+        46,
+        46,
+        46,
+        46,
+        46,
+        46,
+        46,
+        46
+      ],
+      "opt_out_before": 2030,
+      "retention_raise_musd": 4,
+      "liability_scope": "The 75 million signing bonus is paid in 2025, not amortized into future acquisition costs. The club may negate the post-2029 opt-out by adding 4 million to each remaining annual salary."
+    },
+    {
+      "player_id": 665489,
+      "name": "Vladimir Guerrero Jr.",
+      "date": "2025-04-14",
+      "first_season": 2026,
+      "years": 14,
+      "guarantee_musd": 500,
+      "source": "https://ny1.com/nyc/all-boroughs/ap-top-news/2025/04/14/montreal-born-vladimir-guerrero-jr-signs-500-million-14-year-deal-to-stay-in-second-house",
+      "cash_source": "https://www.sportsnet.ca/mlb/article/how-blue-jays-guerrero-jr-both-benefit-from-bonus-heavy-contract/",
+      "earned_cash": {
+        "2025": [
+          [
+            2025,
+            20
+          ]
+        ],
+        "2026": [
+          [
+            2026,
+            30
+          ]
+        ],
+        "2027": [
+          [
+            2027,
+            31
+          ]
+        ],
+        "2028": [
+          [
+            2028,
+            32
+          ]
+        ],
+        "2029": [
+          [
+            2029,
+            33
+          ]
+        ],
+        "2030": [
+          [
+            2030,
+            34.5
+          ]
+        ],
+        "2031": [
+          [
+            2031,
+            34.5
+          ]
+        ],
+        "2032": [
+          [
+            2032,
+            34.5
+          ]
+        ],
+        "2033": [
+          [
+            2033,
+            34.5
+          ]
+        ],
+        "2034": [
+          [
+            2034,
+            34.5
+          ]
+        ],
+        "2035": [
+          [
+            2035,
+            34.5
+          ]
+        ],
+        "2036": [
+          [
+            2036,
+            34.5
+          ]
+        ],
+        "2037": [
+          [
+            2037,
+            36
+          ]
+        ],
+        "2038": [
+          [
+            2038,
+            37.5
+          ]
+        ],
+        "2039": [
+          [
+            2039,
+            39
+          ]
+        ]
+      },
+      "liability_scope": "The 20 million signing payment in 2025 is outside future control costs. Remaining bonus installments and salaries follow the reported payment schedule; the separate 2025 arbitration salary is excluded from this extension."
+    }
+  ]
+}

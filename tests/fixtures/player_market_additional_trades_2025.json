@@ -1,0 +1,196 @@
+{
+  "first_season": 2025,
+  "scope": "Additional trades selected after freezing production model structure and contract calibration population. No trade outcome or package gap enters fitting. Retrospective same-offseason diagnostics, not a forward market holdout. The current chronological replay prices these trades using signing cohorts ending before November 2024.",
+  "contracts": [],
+  "trades": [
+    {
+      "name": "Singer for India and Wiemer",
+      "date": "2024-11-22",
+      "source": "https://www.mlb.com/press-release/press-release-royals-acquire-infielder-jonathan-india-and-outfielder-joey-wiemer-from-reds-for-pitcher-brady-singer",
+      "left": [
+        {
+          "kind": "mlb",
+          "name": "Brady Singer",
+          "player_id": 663903,
+          "service_time": 4.906,
+          "service_season": 2025,
+          "contract": [
+            {
+              "season": 2023,
+              "salary_kind": "arbitration",
+              "salary_musd": null,
+              "option_musd": null
+            },
+            {
+              "season": 2025,
+              "salary_kind": "arbitration",
+              "salary_musd": 8.8,
+              "option_musd": null,
+              "tendered": true
+            },
+            {
+              "season": 2026,
+              "salary_kind": "arbitration",
+              "salary_musd": null,
+              "option_musd": null,
+              "tendered": false
+            }
+          ],
+          "salary_note": "First arbitration season 2023 retained as a historical marker for the four-year Super Two sequence; only 2025 onward contributes trade cash.",
+          "arbitration_source": "https://www.mlb.com/news/royals-arbitration-deadline-agreements-2023"
+        }
+      ],
+      "right": [
+        {
+          "kind": "mlb",
+          "name": "Jonathan India",
+          "player_id": 663697,
+          "service_time": 4,
+          "service_season": 2025,
+          "contract": [
+            {
+              "season": 2025,
+              "salary_kind": "guaranteed",
+              "salary_musd": 5,
+              "option_musd": null,
+              "tendered": true
+            },
+            {
+              "season": 2026,
+              "salary_kind": "arbitration",
+              "salary_musd": null,
+              "option_musd": null,
+              "tendered": false
+            }
+          ]
+        },
+        {
+          "kind": "mlb",
+          "name": "Joey Wiemer",
+          "player_id": 686894,
+          "service_time": 1,
+          "service_season": 2025,
+          "contract": [
+            {
+              "season": 2025,
+              "salary_kind": "pre_arb",
+              "salary_musd": null,
+              "option_musd": null,
+              "tendered": false
+            },
+            {
+              "season": 2026,
+              "salary_kind": "pre_arb",
+              "salary_musd": null,
+              "option_musd": null,
+              "tendered": false
+            },
+            {
+              "season": 2027,
+              "salary_kind": "arbitration",
+              "salary_musd": null,
+              "option_musd": null,
+              "tendered": false
+            },
+            {
+              "season": 2028,
+              "salary_kind": "arbitration",
+              "salary_musd": null,
+              "option_musd": null,
+              "tendered": false
+            },
+            {
+              "season": 2029,
+              "salary_kind": "arbitration",
+              "salary_musd": null,
+              "option_musd": null,
+              "tendered": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Lowe for Garcia",
+      "date": "2024-12-22",
+      "source": "https://www.mlb.com/news/robert-garcia-nathaniel-lowe-trade-rangers-nationals",
+      "left": [
+        {
+          "kind": "mlb",
+          "name": "Nathaniel Lowe",
+          "player_id": 663993,
+          "service_time": 4.843,
+          "service_season": 2025,
+          "contract": [
+            {
+              "season": 2025,
+              "salary_kind": "arbitration",
+              "salary_musd": 10.7,
+              "option_musd": null,
+              "tendered": true
+            },
+            {
+              "season": 2026,
+              "salary_kind": "arbitration",
+              "salary_musd": null,
+              "option_musd": null,
+              "tendered": false
+            }
+          ]
+        }
+      ],
+      "right": [
+        {
+          "kind": "mlb",
+          "name": "Robert Garcia",
+          "player_id": 676395,
+          "service_time": 1,
+          "service_season": 2025,
+          "contract": [
+            {
+              "season": 2025,
+              "salary_kind": "pre_arb",
+              "salary_musd": null,
+              "option_musd": null,
+              "tendered": false
+            },
+            {
+              "season": 2026,
+              "salary_kind": "pre_arb",
+              "salary_musd": null,
+              "option_musd": null,
+              "tendered": false
+            },
+            {
+              "season": 2027,
+              "salary_kind": "arbitration",
+              "salary_musd": null,
+              "option_musd": null,
+              "tendered": false
+            },
+            {
+              "season": 2028,
+              "salary_kind": "arbitration",
+              "salary_musd": null,
+              "option_musd": null,
+              "tendered": false
+            },
+            {
+              "season": 2029,
+              "salary_kind": "arbitration",
+              "salary_musd": null,
+              "option_musd": null,
+              "tendered": false
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "salary_source": "https://www.mlbtraderumors.com/2024/10/projected-arbitration-salaries-for-2025.html",
+  "india_salary_source": "https://www.mlb.com/news/jonathan-india-reds-avoid-arbitration-with-two-year-deal",
+  "limitations": [
+    "Service fractions rounded where only full control years verified. Future arbitration salaries are projections.",
+    "Trades reveal exchanged assets, not observed dollar prices; no requirement that estimated packages balance exactly."
+  ]
+}

@@ -21,7 +21,7 @@ import pandas as pd
 from backend.db import writes_allowed
 from backend.log import setup_logging
 from v2.data.pa_dataset import OUTCOMES
-from v2.players import aging, bio, features, inputs, value
+from v2.players import aging, bio, features, inputs, production, value, workload
 from v2.players.contracts import estimated_schedule, load_contracts
 from v2.players.model import ValueModel, load_latest_from_db
 from v2.players.pricing import league_minimum
@@ -33,11 +33,8 @@ CACHE_DIR = Path(__file__).resolve().parents[2] / "cache" / "players"
 LAST_SCORED = CACHE_DIR / "last_scored.json"
 WINDOW_SEASONS = 3
 DRAWS = 30
-# Playing-time shrinkage: pseudo-sample toward the group norm, and the norms.
-PLAYING_TIME_K = 300.0
+# Fallback display volume for players without an MLB workload history.
 PLAYING_TIME_NORM = {"hitter": 450.0, "SP": 150.0 * 4.37, "RP": 60.0 * 4.37}  # PA or batters faced
-SEASON_DAYS = 186.0
-MAX_IL_REDUCTION = 0.5
 HEADSHOT = "https://img.mlbstatic.com/mlb-photos/image/upload/w_213,q_auto:best/v1/people/{player_id}/headshot/67/current"
 FADED_FREE_AGENT_SEASONS = 2
 CATCHER_RUN_INPUTS = ("reliability.framing_runs", "reliability.blocking_runs", "arm.cs_above_average")
@@ -69,39 +66,26 @@ def window_weights_by_season(model: ValueModel, last_season: int) -> dict[int, f
 
 
 def fingerprint(as_of: date, population: pd.DataFrame, contracts: pd.DataFrame, model: ValueModel, seasons: list[int]) -> str:
-    parts = [model.model_version, model.fitted_at, json.dumps(bio.FIELD_POSITIONS, sort_keys=True)]
+    parts = [model.model_version, model.fitted_at, json.dumps(bio.FIELD_POSITIONS, sort_keys=True),
+             json.dumps(model.price, sort_keys=True), json.dumps(model.workload, sort_keys=True)]
+    if model.production:
+        from v2.players import cash
+
+        parts.extend(hashlib.sha256(path.read_bytes()).hexdigest() for path in cash.sources())
+        parts.append(json.dumps(model.production, sort_keys=True))
+        parts.extend(hashlib.sha256(path.read_bytes()).hexdigest()
+                     for path in production.source_paths(max(seasons)))
+        for path in [bio.CACHE_DIR / "tommy_john_surgeries.csv",
+                     *[bio.CACHE_DIR / f"roster_oct1_{year}.parquet" for year in (max(seasons)-1, max(seasons))],
+                     *[bio.CACHE_DIR / f"aaa_season_{year}.json" for year in (max(seasons)-1, max(seasons))]]:
+            if path.exists():
+                parts.append(hashlib.sha256(path.read_bytes()).hexdigest())
     for season in seasons:
         path = inputs.STATCAST_DIR / f"statcast_{season}.parquet"
         parts.append(str(pd.read_parquet(path, columns=["game_date"])["game_date"].max()) if path.exists() else "none")
     parts.append(str(contracts["fetched_at"].max()) if "fetched_at" in contracts and len(contracts) else "no-contracts")
     parts.extend(f"{r.player_id}:{r.status}:{r.team}" for r in population.sort_values("player_id").itertuples())
     return hashlib.sha256("|".join(parts).encode()).hexdigest()
-
-
-def _playing_time(counts_by_season: dict[int, pd.DataFrame], weights: dict[int, float], groups: pd.Series, il: pd.DataFrame) -> pd.DataFrame:
-    """Projected PA (hitters) or batters faced (pitchers) for a full season, one row per player-role."""
-    parts = []
-    for season, frame in counts_by_season.items():
-        w = weights.get(season, 0.0)
-        if w <= 0:
-            continue
-        f = frame[["player_id", "role"]].copy()
-        f["n"] = frame[list(OUTCOMES)].sum(axis=1)
-        f["w"] = w
-        parts.append(f)
-    stacked = pd.concat(parts, ignore_index=True)
-    stacked["wn"] = stacked["w"] * stacked["n"]
-    agg = stacked.groupby(["player_id", "role"]).agg(wn=("wn", "sum"), w=("w", "sum")).reset_index()
-    agg["raw"] = agg["wn"] / agg["w"]
-    group = agg["player_id"].map(groups)
-    norm_key = np.where(agg["role"].eq("pit"), group.fillna("RP"), "hitter")
-    norm = pd.Series([PLAYING_TIME_NORM.get(k, PLAYING_TIME_NORM["hitter"]) for k in norm_key], index=agg.index)
-    agg["pa"] = (agg["raw"] * agg["wn"] + norm * PLAYING_TIME_K) / (agg["wn"] + PLAYING_TIME_K)
-    if not il.empty:
-        il_total = il.groupby("player_id")["il_days"].sum()
-        reduction = (agg["player_id"].map(il_total).fillna(0) / (WINDOW_SEASONS * SEASON_DAYS)).clip(upper=MAX_IL_REDUCTION)
-        agg["pa"] = agg["pa"] * (1 - reduction)
-    return agg[["player_id", "role", "pa"]]
 
 
 def _contract_years(rows: pd.DataFrame) -> list[value.ContractYear]:
@@ -117,8 +101,11 @@ def assemble_values(
     population: pd.DataFrame, groups: pd.DataFrame, rates: pd.DataFrame, inputs: pd.DataFrame, il_days: pd.DataFrame,
     playing_time: pd.DataFrame, contracts: pd.DataFrame, model: ValueModel, next_season: int,
     actual: pd.DataFrame | None = None, draws: np.ndarray | None = None, as_of: date | None = None,
+    projection_details: list[dict] | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """From already-computed frames to the player_values and player_traits frames."""
+    if model.production and model.production.get("method") != production.METHOD:
+        raise ValueError("Economic production requires a fitted fWAR model")
     pop = population.merge(groups, on="player_id", how="left")
     pop["position_group"] = pop["position_group"].fillna(pop["listed_position"].map(lambda p: "RP" if p in ("P", "SP", "RP", "TWP") else ("LF" if p == "OF" else p))).fillna("DH")
     pop = pop.set_index("player_id")
@@ -169,10 +156,31 @@ def assemble_values(
     band = features.reliability_band(sample, k_grade.astype(float).fillna(0.0))
 
     # Playing time and WAR by season.
-    pt = features.role_rows(playing_time, group).set_index("player_id")["pa"].reindex(pop.index)
+    first_pt = playing_time[playing_time["season"].eq(next_season)] if "season" in playing_time else playing_time
+    pt = features.role_rows(first_pt, group).set_index("player_id")["pa"].reindex(pop.index)
     pt = pt.fillna(pd.Series([PLAYING_TIME_NORM["RP"] if g == "RP" else PLAYING_TIME_NORM["SP"] if g == "SP" else PLAYING_TIME_NORM["hitter"] for g in group], index=pop.index))
     per_unit = pd.Series(np.where(role_series.eq("bat"), FULL_SEASON_PA, np.where(group.eq("SP"), STARTER_INNINGS, RELIEVER_INNINGS) * model.pa_per_ip), index=pop.index)
-    scale = pt / per_unit
+    future_pt = playing_time.set_index(["player_id", "role", "season"])["pa"] if "season" in playing_time else None
+    future_shift = (playing_time.set_index(["player_id", "role", "season"])["run_shift"]
+                    if "run_shift" in playing_time else None)
+    future_war = (playing_time.set_index(["player_id", "role", "season"])["expected_war"]
+                  if "expected_war" in playing_time else None)
+    pricing_role = (playing_time.set_index(["player_id", "role", "season"])["pricing_role"]
+                    if "pricing_role" in playing_time else None)
+    profiles = None
+    if model.price.get("profile_prices"):
+        from v2.players.market_inputs import PROFILE_COLUMNS
+
+        if not set(PROFILE_COLUMNS) <= set(playing_time):
+            raise ValueError("Market pricing requires dated workload profiles")
+        profiles = playing_time.groupby(["player_id", "season"])[PROFILE_COLUMNS].sum().to_dict("index")
+    if price_roles := model.price.get("role_prices"):
+        if pricing_role is None or set(price_roles) != {"bat", "SP", "RP"}:
+            raise ValueError("Role-calibrated scoring requires dated production roles")
+    if model.production and future_war is None:
+        raise ValueError("WAR model requires dated production forecasts")
+    if not model.production and model.production_aging and future_shift is None:
+        raise ValueError("Production aging model requires dated horizon projections")
     rpw = model.runs_per_win
     age_next = pop["age"].astype("float64")
     curve_name = pd.Series(np.where(role_series.eq("bat"), "bat_runs_600", "pitch_runs_180"), index=pop.index)
@@ -190,20 +198,64 @@ def assemble_values(
         last_season = max(next_season, int(rows["season"].max())) if rows is not None and len(rows) else next_season
         years = list(range(next_season, last_season + 1))
         base = float(full_runs[pid]) if pd.notna(full_runs[pid]) else np.nan
-        war_by_season, ages = {}, {}
+        war_by_season, ages, scales = {}, {}, {}
         for y in years:
             a = int(age_next[pid]) + (y - next_season) if pd.notna(age_next[pid]) else 27
             ages[y] = a
+            volume = float(future_pt.get((pid, role_series[pid], y), 0.0)) if future_pt is not None else float(pt[pid])
+            scales[y] = volume / float(per_unit[pid])
+            if model.production:
+                primary = future_war.get((pid, role_series[pid], y), np.nan)
+                other = future_war.get((pid, "pit", y), np.nan) if pid in two_way_ids else 0.0
+                war_by_season[y] = max(0.0, float(primary + other)) if pd.notna(primary + other) else np.nan
+                continue
             shift = 0.0
-            if curves and curve_name[pid] in curves and pd.notna(age_next[pid]):
+            if future_shift is not None:
+                shift = float(future_shift.get((pid, role_series[pid], y), 0.0))
+                if g == "RP":
+                    shift *= RELIEVER_INNINGS / STARTER_INNINGS
+            elif curves and curve_name[pid] in curves and pd.notna(age_next[pid]):
                 shift = aging.apply(0.0, curve_name[pid], int(age_next[pid]), a, curves)
                 if g == "RP":
                     shift *= RELIEVER_INNINGS / STARTER_INNINGS
+            # Two-way pitching uses its own BF forecast, never the hitter's PA multiplier.
+            pit_volume = (float(future_pt.get((pid, "pit", y), 0.0)) if future_pt is not None
+                          else float(first_pt.loc[(first_pt["player_id"] == pid) & (first_pt["role"] == "pit"), "pa"].sum()))
+            pit_shift = float(future_shift.get((pid, "pit", y), 0.0)) if future_shift is not None and pid in two_way_ids else 0.0
+            pitching = (float(two_way_runs[pid]) + pit_shift) * pit_volume / (STARTER_INNINGS * model.pa_per_ip)
+            batting_or_pitching = base - float(two_way_runs[pid])
             # A player projected below replacement is replaced: WAR floors at zero, as in the draws.
-            war_by_season[y] = max(0.0, (base + shift) * float(scale[pid]) / rpw) if pd.notna(base) else np.nan
+            war_by_season[y] = max(0.0, ((batting_or_pitching + shift) * scales[y] + pitching) / rpw) if pd.notna(base) else np.nan
+        war_by_role = {y: {str(role_series[pid]): war_by_season[y]} for y in years}
+        if model.production:
+            for y in years:
+                roles = ("bat", "pit") if pid in two_way_ids else (str(role_series[pid]),)
+                war_by_role[y] = {}
+                for r in roles:
+                    fallback_role = "bat" if r == "bat" else g if g in ("SP", "RP") else "SP"
+                    pr = pricing_role.get((pid, r, y), fallback_role) if pricing_role is not None else fallback_role
+                    pr = fallback_role if pd.isna(pr) else pr
+                    w = float(future_war.get((pid, r, y), np.nan))
+                    war_by_role[y][pr] = max(0.0, w) if pd.notna(w) else np.nan
+                war_by_season[y] = sum(war_by_role[y].values())
+        production_known = all(pd.notna(w) for w in war_by_season.values())
+        if production_known and profiles is not None and any((pid, y) not in profiles for y in years):
+            raise ValueError("Supported WAR forecast is missing its market workload profile")
+        market_profiles = ({y: profiles.get((pid, y), {"expected_saves": 0.0, "bat_pa": 0.0, "pit_pa": 0.0}) for y in years}
+                           if profiles is not None else None)
+        if projection_details is not None:
+            # Unrounded production for market replay, including explicitly labelled
+            # thin-sample estimates. This does not weaken the public grade gate.
+            projection_details.append({"player_id": int(pid), "sample": float(sample[pid]),
+                                       "war_by_season": war_by_season, "war_by_role": war_by_role, "production_supported": production_known, "market_profiles": market_profiles})
         contract_status, service_time, fa_year = "unknown", np.nan, None
+        cash_metadata = {"basis": "Payroll schedule; actual cash timing not verified", "verified": False}
         if rows is not None and len(rows):
             contract = _contract_years(rows)
+            if model.production:
+                from v2.players import cash
+
+                contract, cash_metadata = cash.apply(rows, contract, as_of)
             service_time = float(rows["service_time"].iloc[0]) if pd.notna(rows["service_time"].iloc[0]) else np.nan
             fa_year = int(rows["fa_year"].dropna().iloc[0]) if rows["fa_year"].notna().any() else None
             contract_status = "estimated" if (rows["how_acquired"] == "estimated").all() else "contract"
@@ -220,32 +272,34 @@ def assemble_values(
             contract = [value.ContractYear(next_season, "free_agent", None, None)]
             contract_status = "free_agent"
         war_known = {y: (0.0 if pd.isna(w) else w) for y, w in war_by_season.items()}
+        known_roles = {y: {r: max(0.0, w) if pd.notna(w) else 0.0 for r, w in wars.items()}
+                       for y, wars in war_by_role.items()}
         graded = bool(gradeable[pid]) and pd.notna(grade[pid])
         service_season = int(rows["season"].min()) if rows is not None and len(rows) and contract_status != "free_agent" else next_season
-        # Contract facts (control years, money owed) hold whether or not he is graded; dollar
-        # projections need a grade.
-        outlook = value.project_outlook(war_known, ages, contract, price, model.arb_fractions, service_time, next_season, service_season=service_season) if contract else []
+        # Preserve unsigned control when production is unknown; do not infer a non-tender
+        # from a missing grade. Dollar projections require a grade.
+        outlook = value.project_outlook(war_known, ages, contract, price, model.arb_fractions, service_time, next_season, service_season=service_season, allow_non_tender=graded and production_known, war_by_role=known_roles, market_profiles=market_profiles, arbitration_model=model.arbitration) if contract else []
         control_years = sum(1 for o in outlook if o.in_control)
         tv = value.trade_value(outlook) if outlook else np.nan
         # Market value is what his next season would fetch, whatever his contract says about it.
-        mv = war_known.get(next_season, 0.0) * price.price_for(next_season, next_season)
-        if pd.isna(base) or contract_status == "unknown" or not graded:
+        mv = price.value_for_roles(known_roles[next_season], next_season, next_season,
+                                   market_profiles[next_season] if market_profiles is not None else None)
+        if pd.isna(base) or contract_status == "unknown" or not graded or not production_known:
             tv = mv = np.nan
         # Draws for the range.
         tv_low = tv_high = np.nan
-        if draws is not None and pid in draws.index and pd.notna(tv):
+        if not model.production and draws is not None and pid in draws.index and pd.notna(tv):
             d = draws.loc[pid]
             tv_draws = []
             for delta in d:
-                shift = float(delta) * float(scale[pid]) / rpw
-                war_d = {y: max(0.0, war_known[y] + shift) for y in years}
+                war_d = {y: max(0.0, war_known[y] + float(delta) * scales[y] / rpw) for y in years}
                 tv_draws.append(value.trade_value(value.project_outlook(war_d, ages, contract, price, model.arb_fractions, service_time, next_season, service_season=service_season)))
             tv_low, tv_high = float(np.percentile(tv_draws, 10)), float(np.percentile(tv_draws, 90))
         shown = [o for o in outlook if o.in_control or o.salary_kind == "buyout"]
         faded = [o for o in outlook if not (o.in_control or o.salary_kind == "buyout")][:FADED_FREE_AGENT_SEASONS]
         outlook_json = [
-            {"season": o.season, "age": o.age, "war": round(o.war, 2) if graded else None, "salary_musd": round(o.salary_musd, 2), "salary_kind": o.salary_kind,
-             "surplus_musd": round(o.surplus_musd, 1) if graded else None, "in_control": o.in_control}
+            {"season": o.season, "age": o.age, "war": round(o.war, 2) if graded and production_known else None, "salary_musd": round(o.salary_musd, 2), "salary_kind": o.salary_kind,
+             "surplus_musd": round(o.surplus_musd, 1) if graded and production_known else None, "in_control": o.in_control}
             for o in shown + faded
         ]
         owed = float(sum(o.salary_musd for o in shown))
@@ -259,15 +313,29 @@ def assemble_values(
                 current_salary = league_minimum(next_season)
         if current_salary is None and outlook and outlook[0].season == next_season and outlook[0].in_control:
             current_salary = round(outlook[0].salary_musd, 2)
+        if cash_metadata["verified"] and outlook and outlook[0].season == next_season and outlook[0].in_control:
+            current_salary = round(outlook[0].salary_musd, 2)
         impact_war = impact_runs = np.nan
         if actual is not None and pid in actual.index:
             impact_runs = float(actual.at[pid, "runs"])
             impact_war = impact_runs / rpw
+        role_prices = {r: price.price_for(next_season, next_season, r) for r in known_roles[next_season]}
+        total_war = sum(known_roles[next_season].values())
+        effective_price = (sum(w * role_prices[r] for r, w in known_roles[next_season].items()) / total_war
+                           if total_war > 0 else next(iter(role_prices.values())) if len(role_prices) == 1 else None)
         tip = {
+            "production_source": model.production.get("method", "legacy_trait_runs"),
+            "production_supported": production_known,
             "projected_runs": None if pd.isna(projected[pid]) else round(float(projected[pid]), 1),
             "positional_adjustment": round(float(pos_adj[pid]), 1), "replacement_runs": round(float(replacement[pid]), 1),
-            "playing_time": round(float(pt[pid]), 0), "runs_per_win": round(rpw, 2), "price_per_win_musd": round(price.price_musd, 2),
+            "playing_time": round(float(pt[pid]), 0), "runs_per_win": round(rpw, 2),
+            "price_per_win_musd": round(effective_price, 2) if effective_price is not None else None,
             "price_source": price.source, "inflation": round(price.inflation, 3), "discount": value.DISCOUNT_PER_YEAR,
+            "prices_by_role_musd": {r: round(p, 2) for r, p in role_prices.items()},
+            "market_usage": market_profiles[next_season] if market_profiles is not None else None,
+            "relief_usage_price_musd": price.profile_prices.get("expected_saves"),
+            "arbitration_source": model.arbitration.get("method", "fallback_market_fractions"),
+            "contract_cash": cash_metadata,
             "sample": round(float(sample[pid]), 0), "shrunk_runs": None if pd.isna(shrunk[pid]) else round(float(shrunk[pid]), 1),
             "two_way_pitching_runs": round(float(two_way_runs[pid]), 1) if pid in two_way_ids else None,
         }
@@ -363,6 +431,8 @@ def _actual_runs(season: int, model: ValueModel, groups: pd.Series, lev: pd.Seri
 
 def gather(as_of: date, model: ValueModel, season: int | None = None) -> dict:
     """Everything assemble_values needs, from the caches, the API, and the contracts table."""
+    if not model.workload:
+        raise ValueError("Model has no fitted workload projection; refit and validate before scoring")
     season = season or current_season(as_of)
     nxt = next_season(as_of, season)
     model.validate(nxt)
@@ -379,7 +449,6 @@ def gather(as_of: date, model: ValueModel, season: int | None = None) -> dict:
     group_of = groups.set_index("player_id")["position_group"]
     rates = inputs.shrunk_rates(wc, group_of, model.shrink_strength)
     il = bio.il_days(seasons, as_of)
-    pt = _playing_time(counts, weights, group_of, il)
     contracts = load_contracts(season)
     # Players Baseball-Reference does not list yet (this year's debuts) get an
     # estimated pre-arbitration schedule from their debut date.
@@ -392,8 +461,32 @@ def gather(as_of: date, model: ValueModel, season: int | None = None) -> dict:
     extra = [e for e in extra if len(e)]
     if extra:
         contracts = pd.concat([contracts, *extra], ignore_index=True)
+    workload_lines = workload.load_lines(list(range(nxt - 5, nxt)))
+    retained = set(population.loc[population["status"].ne("free_agent"), "player_id"])
+    history = workload.history(workload_lines, nxt, retained)
+    history = history[history["player_id"].isin(population["player_id"])]
+    pt = workload.predict(history, population.set_index("player_id")["age"], model.workload,
+                          nxt, max(nxt, int(contracts["season"].max())) if len(contracts) else nxt)
+    if model.production:
+        # Only the active season can change daily. Historical snapshots remain
+        # stable unless explicitly refreshed for a new evaluation revision.
+        current_source = production.source_paths(season)[-1]
+        if not current_source.exists() or date.fromtimestamp(current_source.stat().st_mtime) < as_of:
+            production.load_war(season, refresh=True)
+        if "surgery_features" in model.production:
+            surgery_source = bio.CACHE_DIR / "tommy_john_surgeries.csv"
+            if not surgery_source.exists() or date.fromtimestamp(surgery_source.stat().st_mtime) < as_of:
+                bio.surgery_dates(refresh=True)
+        pt = production.add_forecasts(pt, model.production, nxt, int(pt["season"].max()))
+        if model.price.get("profile_prices"):
+            from v2.players.market_inputs import add_profiles
+
+            pt = add_profiles(pt, nxt)
+    else:
+        pt = aging.add_projection_shifts(pt, history, population.set_index("player_id")["age"], model.production_aging, nxt)
     lev = win[win["input"] == "workload.leverage"].set_index("player_id")["value"]
-    actual = _actual_runs(season, model, group_of, lev)
+    actual = (production.actual_war(season).mul(model.runs_per_win).rename("runs").to_frame() if model.production
+              else _actual_runs(season, model, group_of, lev))
     # Draws of outcome rates, as run deltas against the shrunk point estimate, one row per player.
     wc_role = features.role_rows(wc, group_of).reset_index(drop=True)
     draws = features.dirichlet_draws(wc_role, group_of, model.shrink_strength, DRAWS)
@@ -413,6 +506,8 @@ def gather(as_of: date, model: ValueModel, season: int | None = None) -> dict:
 
 
 def score(as_of: date, model: ValueModel, *, write: bool, force: bool = False, players: list[int] | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if write:
+        model.require_market_validation()
     data = gather(as_of, model)
     seasons = data.pop("seasons")
     fp = fingerprint(as_of, data["population"], data["contracts"], model, seasons)

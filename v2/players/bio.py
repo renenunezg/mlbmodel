@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date, timedelta
+from io import StringIO
 from pathlib import Path
 
 import numpy as np
@@ -23,6 +24,7 @@ CACHE_DIR = Path(__file__).resolve().parents[2] / "cache" / "players"
 STATCAST_DIR = Path(__file__).resolve().parents[2] / "cache"
 PEOPLE_BATCH = 100
 TIMEOUT = 60
+SURGERY_SOURCE = "https://docs.google.com/spreadsheets/d/1gQujXQQGOVNaiuwSN680Hq-FDVsCwvN-3AazykOBON0/export?format=csv&gid=0"
 # Statcast uses standard defensive numbering: third base is 5, shortstop is 6.
 FIELD_POSITIONS = {2: "C", 3: "1B", 4: "2B", 5: "3B", 6: "SS", 7: "LF", 8: "CF", 9: "RF"}
 POSITION_GROUPS = ("C", "1B", "2B", "SS", "3B", "LF", "CF", "RF", "DH", "SP", "RP")
@@ -264,3 +266,111 @@ def season_lines(player_ids: list[int], group: str) -> pd.DataFrame:
         log.info(f"season_lines[{group}]: fetched {len(missing)} players")
     cached["player_id"] = cached["player_id"].astype("int64")
     return cached[cached["season"] > 0]
+
+
+def league_season_lines(seasons: list[int], group: str, *, refresh: bool = False) -> pd.DataFrame:
+    """Complete MLB seasons, including players no longer in today's population.
+
+    Career histories fetched for current players are not a historical league
+    sample. Cache each complete regular season independently and reject truncation.
+    """
+    if group not in {"hitting", "pitching"}:
+        raise ValueError("Unsupported season-line group")
+    frames = []
+    for season in seasons:
+        path = CACHE_DIR / f"league_{group}_{season}.parquet"
+        if path.exists() and not refresh:
+            frame = pd.read_parquet(path)
+        else:
+            blocks = _get("stats", stats="season", group=group, season=season,
+                          sportIds=1, playerPool="ALL", limit=10000, gameType="R")["stats"]
+            block, = blocks
+            splits = block["splits"]
+            if len(splits) != block["totalSplits"] or not splits:
+                raise ValueError(f"Incomplete MLB {group} season {season}")
+            frame = pd.DataFrame([{**s["stat"], "player_id": s["player"]["id"],
+                                   "season": int(s["season"])} for s in splits])
+            if frame["player_id"].duplicated().any() or not frame["season"].eq(season).all():
+                raise ValueError(f"Ambiguous MLB {group} totals for {season}")
+            CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            frame.to_parquet(path, index=False)
+        frames.append(frame)
+    return pd.concat(frames, ignore_index=True)
+
+
+def offseason_roster(season: int) -> pd.DataFrame:
+    """Dated January 1 reserve roster, before the target season's outcomes.
+
+    Offseason reserve lists include injured players. Unlike observed MLB playing
+    time, membership does not condition on surviving or returning during the year.
+    """
+    path = CACHE_DIR / f"roster_jan1_{season}.parquet"
+    if path.exists():
+        return pd.read_parquet(path)
+    rows = []
+    for team_id in TEAM_ID_BY_CODE.values():
+        roster = _get(f"teams/{team_id}/roster", rosterType="40Man", date=f"{season}-01-01")["roster"]
+        if not 15 <= len(roster) <= 45:
+            raise ValueError(f"Unexpected historical roster coverage: {team_id}, {season}")
+        rows.extend({"player_id": r["person"]["id"], "team_id": team_id,
+                     "status": r["status"]["code"], "season": season} for r in roster)
+    frame = pd.DataFrame(rows)
+    # Historical transfers can appear on both clubs. Membership is the union;
+    # never count a player twice when constructing a projection population.
+    frame = frame.drop_duplicates(["player_id", "team_id", "status"])
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    frame.to_parquet(path, index=False)
+    return frame
+
+
+def october_roster(season: int) -> pd.DataFrame:
+    """Reserve and injured membership before November free agency and trades.
+
+    MLB's dated 40Man response includes 60-day IL players, so its historical
+    count can exceed 40. January membership would use post-signing information.
+    """
+    if season < 2009 or date(season, 10, 1) > date.today():
+        raise ValueError("October roster is outside the verified historical coverage")
+    path = CACHE_DIR / f"roster_oct1_{season}.parquet"
+    if path.exists():
+        return pd.read_parquet(path)
+    rows = []
+    for team_id in sorted(set(TEAM_ID_BY_CODE.values())):
+        roster = _get(f"teams/{team_id}/roster", rosterType="40Man", date=f"{season}-10-01")["roster"]
+        if not 20 <= len(roster) <= 70:
+            raise ValueError(f"Unexpected October roster coverage: {team_id}, {season}")
+        rows.extend({"player_id": r["person"]["id"], "team_id": team_id,
+                     "status": r["status"]["code"], "note": r.get("note", ""), "season": season} for r in roster)
+    frame = pd.DataFrame(rows).drop_duplicates(["player_id", "team_id", "status"])
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    frame.to_parquet(path, index=False)
+    return frame
+
+
+def surgery_dates(*, refresh: bool = False) -> pd.DataFrame:
+    """Documented TJ operations, never future return dates or recovery outcomes.
+
+    Jon Roegele's public history is also cited by MLB. Some historical dates are
+    approximate. Absence from this list does not establish that a player is healthy.
+    """
+    path = CACHE_DIR / "tommy_john_surgeries.csv"
+    if path.exists() and not refresh:
+        raw = path.read_text()
+    else:
+        response = requests.get(SURGERY_SOURCE, timeout=TIMEOUT)
+        response.raise_for_status()
+        raw = response.text
+    f = pd.read_csv(StringIO(raw), skiprows=1, usecols=["mlbamid", "TJ Surgery Date"])
+    f["player_id"] = pd.to_numeric(f.pop("mlbamid"), errors="raise")
+    f["date"] = pd.to_datetime(f.pop("TJ Surgery Date"), format="%m/%d/%Y", errors="raise")
+    if len(f) < 1000 or f.date.isna().any() or f.date.gt(pd.Timestamp(date.today())).any():
+        raise ValueError("Incomplete or future-dated surgery source")
+    f = f.dropna(subset=["player_id"]).astype({"player_id": int})
+    if f.duplicated(["player_id", "date"]).any():
+        raise ValueError("Duplicate surgery event")
+    if refresh or not path.exists():
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        pending = path.with_suffix(".tmp")
+        pending.write_text(raw)
+        pending.replace(path)
+    return f

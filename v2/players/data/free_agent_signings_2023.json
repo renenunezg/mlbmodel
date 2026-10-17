@@ -1,0 +1,382 @@
+{
+  "first_season": 2023,
+  "cutoff": "2022-12-31",
+  "cohort_source": "https://www.mlb.com/news/mlb-2022-23-free-agents-by-position",
+  "selection": "All November/December one-year signings in the official season tracker, fixed before prediction review. Exclude exercisable options, retained reserve rights, split salaries and unresolved cash; keep all exclusions. Mutual options enter as guaranteed buyouts.",
+  "cash_convention": "Salary and signing bonus in first playing year; mutual-option buyouts in the following year. Incentives excluded. No reported deferrals in included announcements.",
+  "contracts": [
+    {
+      "player_id": 572287,
+      "name": "Mike Zunino",
+      "first_season": 2023,
+      "date": "2022-12-15",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 6,
+      "cash_musd": [
+        6
+      ],
+      "source": "https://www.mlb.com/news/mike-zunino-deal-with-guardians"
+    },
+    {
+      "player_id": 571912,
+      "name": "Luke Maile",
+      "first_season": 2023,
+      "date": "2022-11-28",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 1.175,
+      "cash_musd": [
+        1.175
+      ],
+      "source": "https://www.mlb.com/news/reds-sign-luke-maile-to-one-year-deal"
+    },
+    {
+      "player_id": 595978,
+      "name": "Austin Hedges",
+      "first_season": 2023,
+      "date": "2022-12-20",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 5,
+      "cash_musd": [
+        5
+      ],
+      "source": "https://www.mlb.com/pirates/news/austin-hedges-deal-with-pirates"
+    },
+    {
+      "player_id": 467793,
+      "name": "Carlos Santana",
+      "first_season": 2023,
+      "date": "2022-11-29",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 6.725,
+      "cash_musd": [
+        6.725
+      ],
+      "source": "https://www.mlb.com/news/free-agent-carlos-santana-to-pirates"
+    },
+    {
+      "player_id": 624428,
+      "name": "Adam Frazier",
+      "first_season": 2023,
+      "date": "2022-12-15",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 8,
+      "cash_musd": [
+        8
+      ],
+      "source": "https://www.mlb.com/orioles/news/adam-frazier-orioles-deal"
+    },
+    {
+      "player_id": 608336,
+      "name": "Joey Gallo",
+      "first_season": 2023,
+      "date": "2022-12-20",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 11,
+      "cash_musd": [
+        11
+      ],
+      "source": "https://www.mlb.com/twins/news/joey-gallo-twins-deal"
+    },
+    {
+      "player_id": 595281,
+      "name": "Kevin Kiermaier",
+      "first_season": 2023,
+      "date": "2022-12-15",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 9,
+      "cash_musd": [
+        9
+      ],
+      "source": "https://www.mlb.com/news/kevin-kiermaier-blue-jays-deal"
+    },
+    {
+      "player_id": 571976,
+      "name": "Wil Myers",
+      "first_season": 2023,
+      "date": "2022-12-22",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 7.5,
+      "cash_musd": [
+        6,
+        1.5
+      ],
+      "source": "https://www.mlb.com/news/wil-myers-signs-with-reds"
+    },
+    {
+      "player_id": 502110,
+      "name": "J.D. Martinez",
+      "first_season": 2023,
+      "date": "2022-12-29",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 10,
+      "cash_musd": [
+        10
+      ],
+      "source": "https://www.mlb.com/news/j-d-martinez-dodgers-deal"
+    },
+    {
+      "player_id": 488726,
+      "name": "Michael Brantley",
+      "first_season": 2023,
+      "date": "2022-12-21",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 12,
+      "cash_musd": [
+        12
+      ],
+      "source": "https://www.mlb.com/news/michael-brantley-astros-agree-to-deal"
+    },
+    {
+      "player_id": 477132,
+      "name": "Clayton Kershaw",
+      "first_season": 2023,
+      "date": "2022-12-05",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 20,
+      "cash_musd": [
+        20
+      ],
+      "source": "https://www.mlb.com/news/clayton-kershaw-dodgers-deal-2023"
+    },
+    {
+      "player_id": 592789,
+      "name": "Noah Syndergaard",
+      "first_season": 2023,
+      "date": "2022-12-16",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 13,
+      "cash_musd": [
+        13
+      ],
+      "source": "https://www.mlb.com/dodgers/news/noah-syndergaard-dodgers-deal"
+    },
+    {
+      "player_id": 571510,
+      "name": "Matthew Boyd",
+      "first_season": 2023,
+      "date": "2022-12-14",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 10,
+      "cash_musd": [
+        10
+      ],
+      "source": "https://www.mlb.com/news/matthew-boyd-tigers-deal"
+    },
+    {
+      "player_id": 547179,
+      "name": "Michael Lorenzen",
+      "first_season": 2023,
+      "date": "2022-12-20",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 8.5,
+      "cash_musd": [
+        8.5
+      ],
+      "source": "https://www.mlb.com/tigers/news/michael-lorenzen-tigers-deal"
+    },
+    {
+      "player_id": 605182,
+      "name": "Mike Clevinger",
+      "first_season": 2023,
+      "date": "2022-12-04",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 12,
+      "cash_musd": [
+        8,
+        4
+      ],
+      "source": "https://www.mlb.com/news/mike-clevinger-white-sox-deal"
+    },
+    {
+      "player_id": 502202,
+      "name": "Brad Boxberger",
+      "first_season": 2023,
+      "date": "2022-12-15",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 2.8,
+      "cash_musd": [
+        2,
+        0.8
+      ],
+      "source": "https://www.mlb.com/cubs/news/brad-boxberger-deal-with-cubs"
+    },
+    {
+      "player_id": 572955,
+      "name": "Pierce Johnson",
+      "first_season": 2023,
+      "date": "2022-12-13",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 5,
+      "cash_musd": [
+        5
+      ],
+      "source": "https://www.mlb.com/news/pierce-johnson-rockies-deal"
+    },
+    {
+      "player_id": 502085,
+      "name": "David Robertson",
+      "first_season": 2023,
+      "date": "2022-12-09",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 10,
+      "cash_musd": [
+        10
+      ],
+      "source": "https://www.mlb.com/news/mets-brandon-nimmo-contract"
+    },
+    {
+      "player_id": 543507,
+      "name": "Trevor May",
+      "first_season": 2023,
+      "date": "2022-12-16",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 7,
+      "cash_musd": [
+        7
+      ],
+      "source": "https://www.mlb.com/news/trevor-may-signs-with-athletics"
+    },
+    {
+      "player_id": 592826,
+      "name": "Vince Velasquez",
+      "first_season": 2023,
+      "date": "2022-12-13",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 3.15,
+      "cash_musd": [
+        3.15
+      ],
+      "source": "https://www.mlb.com/pirates/news/jarlin-garcia-pirates-agree-to-deal"
+    },
+    {
+      "player_id": 571946,
+      "name": "Shelby Miller",
+      "first_season": 2023,
+      "date": "2022-12-02",
+      "transaction_type": "free_agent_signing",
+      "years": 1,
+      "guarantee_musd": 1.5,
+      "cash_musd": [
+        1.5
+      ],
+      "source": "https://www.mlb.com/dodgers/news/shelby-miller-dodgers-deal"
+    }
+  ],
+  "excluded": [
+    {
+      "name": "Omar Narv\u00e1ez",
+      "source": "https://www.mlb.com/mets/news/omar-narvaez-mets-deal",
+      "reason": "Player, club, or vesting option"
+    },
+    {
+      "name": "Tucker Barnhart",
+      "source": "https://www.mlb.com/news/tucker-barnhart-deal-with-cubs",
+      "reason": "Player, club, or vesting option"
+    },
+    {
+      "name": "Curt Casali",
+      "source": "https://www.mlb.com/news/mike-moustakas-designated-for-assignment-reds-sign-curt-casali",
+      "reason": "Guaranteed cash timing or exact amount unresolved in the linked announcement"
+    },
+    {
+      "name": "Danny Mendick",
+      "source": "https://www.mlb.com/mets/news/danny-mendick-mets-deal",
+      "reason": "Retained reserve rights or split salary; not a pure one-year free-agent purchase"
+    },
+    {
+      "name": "Jeimer Candelario",
+      "source": "https://www.mlb.com/news/jeimer-candelario-deal-with-nationals",
+      "reason": "Guaranteed cash timing or exact amount unresolved in the linked announcement"
+    },
+    {
+      "name": "Cody Bellinger",
+      "source": "https://www.mlb.com/news/cody-bellinger-cubs-deal",
+      "reason": "Guaranteed cash timing or exact amount unresolved in the linked announcement"
+    },
+    {
+      "name": "Matt Carpenter",
+      "source": "https://www.mlb.com/news/matt-carpenter-deal-with-padres",
+      "reason": "Player, club, or vesting option"
+    },
+    {
+      "name": "Kyle Gibson",
+      "source": "https://www.mlb.com/news/kyle-gibson-orioles-deal",
+      "reason": "Guaranteed cash timing or exact amount unresolved in the linked announcement"
+    },
+    {
+      "name": "Ryan Yarbrough",
+      "source": "https://www.mlb.com/news/ryan-yarbrough-signs-with-royals",
+      "reason": "Retained reserve rights or split salary; not a pure one-year free-agent purchase"
+    },
+    {
+      "name": "Jos\u00e9 Ure\u00f1a",
+      "source": "https://www.mlb.com/news/jose-urena-signs-one-year-deal-with-rockies-for-2023",
+      "reason": "Player, club, or vesting option"
+    },
+    {
+      "name": "Adam Ottavino",
+      "source": "https://www.mlb.com/news/adam-ottavino-returns-to-mets",
+      "reason": "Player, club, or vesting option"
+    },
+    {
+      "name": "Joely Rodr\u00edguez",
+      "source": "https://www.mlb.com/news/joely-rodriguez-signs-one-year-deal-with-red-sox",
+      "reason": "Player, club, or vesting option"
+    },
+    {
+      "name": "Seth Lugo",
+      "source": "https://www.mlb.com/news/seth-lugo-padres-agree-to-deal",
+      "reason": "Player, club, or vesting option"
+    },
+    {
+      "name": "Erasmo Ram\u00edrez",
+      "source": "https://www.mlb.com/news/erasmo-ramirez-returns-to-nationals",
+      "reason": "Guaranteed cash timing or exact amount unresolved in the linked announcement"
+    },
+    {
+      "name": "Mychal Givens",
+      "source": "https://www.mlb.com/news/mychal-givens-orioles-deal-2023",
+      "reason": "Guaranteed cash timing or exact amount unresolved in the linked announcement"
+    },
+    {
+      "name": "Jarl\u00edn Garc\u00eda",
+      "source": "https://www.mlb.com/news/jarlin-garcia-pirates-agree-to-deal",
+      "reason": "Player, club, or vesting option"
+    },
+    {
+      "name": "Miguel Castro",
+      "source": "https://www.mlb.com/press-release/press-release-d-backs-agree-to-terms-with-miguel-castro-on-a-1-year-contract",
+      "reason": "Player, club, or vesting option"
+    },
+    {
+      "name": "Trevor Gott",
+      "source": "https://www.mlb.com/news/trevor-gott-signs-one-year-deal-with-mariners",
+      "reason": "Retained reserve rights or split salary; not a pure one-year free-agent purchase"
+    },
+    {
+      "name": "Nick Anderson",
+      "source": "https://www.mlb.com/news/nick-anderson-braves-one-year-deal-2023",
+      "reason": "Retained reserve rights or split salary; not a pure one-year free-agent purchase"
+    }
+  ]
+}

@@ -1,0 +1,493 @@
+{
+  "first_season": 2025,
+  "scope": "Diagnostic cases selected across hitters, starters, relievers and contract lengths. Not a representative market calibration sample.",
+  "contracts": [
+    {
+      "player_id": 608331,
+      "name": "Max Fried",
+      "date": "2024-12-17",
+      "years": 8,
+      "guarantee_musd": 218,
+      "cash_musd": [
+        22,
+        22,
+        29,
+        29,
+        29,
+        29,
+        29,
+        29
+      ],
+      "source": "https://www.mlb.com/news/max-fried-yankees-contract",
+      "cash_source": "https://www.nbcsports.com/mlb/news/report-left-hander-max-fried-agrees-to-eight-year-218-million-contract-with-yankees"
+    },
+    {
+      "player_id": 572233,
+      "name": "Christian Walker",
+      "date": "2024-12-23",
+      "years": 3,
+      "guarantee_musd": 60,
+      "source": "https://www.mlb.com/news/christian-walker-contract-with-astros"
+    },
+    {
+      "player_id": 543135,
+      "name": "Nathan Eovaldi",
+      "date": "2024-12-12",
+      "years": 3,
+      "guarantee_musd": 75,
+      "cash_musd": [
+        18,
+        31,
+        20,
+        6
+      ],
+      "source": "https://www.mlb.com/news/nathan-eovaldi-rangers-contract",
+      "cash_source": "https://www.clickondetroit.com/sports/2024/12/13/texas-rangers-and-rhp-nathan-eovaldi-finalize-75-million-3-year-contract/"
+    },
+    {
+      "player_id": 579328,
+      "name": "Yusei Kikuchi",
+      "date": "2024-11-27",
+      "years": 3,
+      "guarantee_musd": 63,
+      "cash_musd": [
+        21,
+        21,
+        21
+      ],
+      "source": "https://www.mlb.com/angels/press-release/press-release-angels-sign-lhp-yusei-kikuchi"
+    },
+    {
+      "player_id": 656546,
+      "name": "Jeff Hoffman",
+      "date": "2025-01-10",
+      "years": 3,
+      "guarantee_musd": 33,
+      "source": "https://www.mlb.com/bluejays/news/jeff-hoffman-contract-with-blue-jays"
+    },
+    {
+      "player_id": 502671,
+      "name": "Paul Goldschmidt",
+      "date": "2024-12-30",
+      "years": 1,
+      "guarantee_musd": 12.5,
+      "cash_musd": [
+        12.5
+      ],
+      "source": "https://www.mlb.com/yankees/news/paul-goldschmidt-contract-with-yankees"
+    }
+  ],
+  "trades": [
+    {
+      "date": "2024-12-17",
+      "name": "Bellinger to Yankees",
+      "left": [
+        {
+          "player_id": 641355,
+          "name": "Cody Bellinger",
+          "kind": "mlb",
+          "service_time": 7,
+          "contract": [
+            {
+              "season": 2025,
+              "salary_kind": "guaranteed",
+              "salary_musd": 27.5,
+              "option_musd": null
+            },
+            {
+              "season": 2026,
+              "salary_kind": "buyout",
+              "salary_musd": 5,
+              "option_musd": 25,
+              "option_kind": "player"
+            }
+          ],
+          "contract_source": "https://www.mlb.com/news/cody-bellinger-cody-poteet-cubs-yankees-trade",
+          "service_season": 2025
+        },
+        {
+          "kind": "cash",
+          "name": "Cubs cash paid to Yankees",
+          "cash_musd": [
+            2.5,
+            2.5
+          ],
+          "source": "https://www.espn.com.au/mlb/story/_/id/43028167/sources-cubs-trade-cody-bellinger-yankees"
+        }
+      ],
+      "right": [
+        {
+          "player_id": 547001,
+          "name": "Cody Poteet",
+          "kind": "mlb",
+          "service_time": 2.552325581395349,
+          "contract": [
+            {
+              "season": 2025,
+              "salary_kind": "pre_arb",
+              "salary_musd": null,
+              "option_musd": null
+            },
+            {
+              "season": 2026,
+              "salary_kind": "arbitration",
+              "salary_musd": null,
+              "option_musd": null
+            },
+            {
+              "season": 2027,
+              "salary_kind": "arbitration",
+              "salary_musd": null,
+              "option_musd": null
+            },
+            {
+              "season": 2028,
+              "salary_kind": "arbitration",
+              "salary_musd": null,
+              "option_musd": null
+            }
+          ],
+          "contract_source": "https://www.fangraphs.com/roster-resource/offseason-tracker/red-sox?season=2025&teamchange=&transactiontype=trade",
+          "contract_note": "2.095 service at the trade, four remaining seasons assuming full service; thin MLB sample",
+          "service_season": 2025
+        }
+      ],
+      "unpriced_assets": [],
+      "source": "https://www.mlb.com/news/cody-bellinger-cody-poteet-cubs-yankees-trade",
+      "benchmark_kind": "development_diagnostic",
+      "notes": [
+        "Trade equality is a diagnostic, not an assumption that teams have identical valuations. Unsigned salaries after the first season use fallback arbitration fractions."
+      ]
+    },
+    {
+      "date": "2024-12-21",
+      "name": "Naylor to Arizona",
+      "left": [
+        {
+          "player_id": 647304,
+          "name": "Josh Naylor",
+          "kind": "mlb",
+          "service_time": 5,
+          "contract": [
+            {
+              "season": 2024,
+              "salary_kind": "arbitration",
+              "salary_musd": 6.55,
+              "option_musd": null
+            },
+            {
+              "season": 2025,
+              "salary_kind": "arbitration",
+              "salary_musd": 12,
+              "option_musd": null,
+              "tendered": true
+            }
+          ],
+          "contract_source": "https://www.mlbtraderumors.com/2024/10/projected-arbitration-salaries-for-2025.html",
+          "service_season": 2025
+        }
+      ],
+      "right": [
+        {
+          "player_id": 677944,
+          "name": "Slade Cecconi",
+          "kind": "mlb",
+          "service_time": 0.8,
+          "contract": [
+            {
+              "season": 2025,
+              "salary_kind": "pre_arb",
+              "salary_musd": null,
+              "option_musd": null
+            },
+            {
+              "season": 2026,
+              "salary_kind": "pre_arb",
+              "salary_musd": null,
+              "option_musd": null
+            },
+            {
+              "season": 2027,
+              "salary_kind": "pre_arb",
+              "salary_musd": null,
+              "option_musd": null
+            },
+            {
+              "season": 2028,
+              "salary_kind": "arbitration",
+              "salary_musd": null,
+              "option_musd": null
+            },
+            {
+              "season": 2029,
+              "salary_kind": "arbitration",
+              "salary_musd": null,
+              "option_musd": null
+            },
+            {
+              "season": 2030,
+              "salary_kind": "arbitration",
+              "salary_musd": null,
+              "option_musd": null
+            }
+          ],
+          "contract_source": "https://www.si.com/mlb/diamondbacks/onsi/arizona-diamondbacks-2024-player-review-slade-cecconi-01j9ynpzv3gj",
+          "contract_note": "Less than one service year entering 2025, six control seasons assuming full service; Super Two uncertainty not valued",
+          "service_season": 2025
+        },
+        {
+          "kind": "draft_pick",
+          "name": "2025 Competitive Balance Round B pick",
+          "pick_range": [
+            70,
+            80
+          ],
+          "source": "https://www.mlb.com/press-release/press-release-guardians-diamondbacks-complete-trade",
+          "note": "Late-second-round location band, not the identity or eventual outcome of the drafted player; tail extrapolation from published 2019 picks 51-70."
+        }
+      ],
+      "unpriced_assets": [],
+      "source": "https://www.mlb.com/press-release/press-release-guardians-diamondbacks-complete-trade",
+      "benchmark_kind": "development_diagnostic",
+      "notes": [
+        "Trade equality is a diagnostic, not an assumption that teams have identical valuations. Unsigned salaries after the first season use fallback arbitration fractions."
+      ]
+    },
+    {
+      "date": "2024-12-10",
+      "name": "Gimenez and Sandlin to Toronto",
+      "left": [
+        {
+          "player_id": 665926,
+          "name": "Andres Gimenez",
+          "kind": "mlb",
+          "service_time": 4,
+          "contract": [
+            {
+              "season": 2025,
+              "salary_kind": "guaranteed",
+              "salary_musd": 10,
+              "option_musd": null
+            },
+            {
+              "season": 2026,
+              "salary_kind": "guaranteed",
+              "salary_musd": 15,
+              "option_musd": null
+            },
+            {
+              "season": 2027,
+              "salary_kind": "guaranteed",
+              "salary_musd": 23,
+              "option_musd": null
+            },
+            {
+              "season": 2028,
+              "salary_kind": "guaranteed",
+              "salary_musd": 23,
+              "option_musd": null
+            },
+            {
+              "season": 2029,
+              "salary_kind": "guaranteed",
+              "salary_musd": 23,
+              "option_musd": null
+            },
+            {
+              "season": 2030,
+              "salary_kind": "buyout",
+              "salary_musd": 2.5,
+              "option_musd": 23,
+              "option_kind": "team"
+            }
+          ],
+          "contract_source": "https://www.foxsports.com/articles/mlb/gimenez-gets-4m-signing-bonus-in-1065m-guardians-deal",
+          "contract_note": "Signing bonus already paid before trade, not charged again",
+          "service_season": 2025
+        },
+        {
+          "player_id": 680704,
+          "name": "Nick Sandlin",
+          "kind": "mlb",
+          "service_time": 3.9127906976744184,
+          "contract": [
+            {
+              "season": 2024,
+              "salary_kind": "arbitration",
+              "salary_musd": 1.075,
+              "option_musd": null
+            },
+            {
+              "season": 2025,
+              "salary_kind": "arbitration",
+              "salary_musd": 1.6,
+              "option_musd": null,
+              "tendered": true
+            },
+            {
+              "season": 2026,
+              "salary_kind": "arbitration",
+              "salary_musd": null,
+              "option_musd": null
+            },
+            {
+              "season": 2027,
+              "salary_kind": "arbitration",
+              "salary_musd": null,
+              "option_musd": null
+            }
+          ],
+          "contract_source": "https://www.mlbtraderumors.com/2024/10/projected-arbitration-salaries-for-2025.html",
+          "service_season": 2025
+        }
+      ],
+      "right": [
+        {
+          "player_id": 687462,
+          "name": "Spencer Horwitz",
+          "kind": "mlb",
+          "service_time": 0.8,
+          "contract": [
+            {
+              "season": 2025,
+              "salary_kind": "pre_arb",
+              "salary_musd": null,
+              "option_musd": null
+            },
+            {
+              "season": 2026,
+              "salary_kind": "pre_arb",
+              "salary_musd": null,
+              "option_musd": null
+            },
+            {
+              "season": 2027,
+              "salary_kind": "pre_arb",
+              "salary_musd": null,
+              "option_musd": null
+            },
+            {
+              "season": 2028,
+              "salary_kind": "arbitration",
+              "salary_musd": null,
+              "option_musd": null
+            },
+            {
+              "season": 2029,
+              "salary_kind": "arbitration",
+              "salary_musd": null,
+              "option_musd": null
+            },
+            {
+              "season": 2030,
+              "salary_kind": "arbitration",
+              "salary_musd": null,
+              "option_musd": null
+            }
+          ],
+          "contract_source": "https://www.mlb.com/news/spencer-horwitz-trade-pirates-guardians",
+          "contract_note": "Six control years reported at trade; assumes three pre-arb seasons; Super Two uncertainty not valued",
+          "service_season": 2025
+        },
+        {
+          "player_id": null,
+          "name": "Nick Mitchell",
+          "kind": "prospect",
+          "fv": "35+",
+          "role": "bat",
+          "grade_source": "https://blogs.fangraphs.com/pack-your-passport-andres-blue-jays-acquire-gimenez-from-guardians-to-anchor-defense/",
+          "grade_as_of": "2024-12-11"
+        }
+      ],
+      "unpriced_assets": [],
+      "source": "https://www.mlb.com/press-release/press-release-blue-jays-acquire-gimenez-and-sandlin",
+      "benchmark_kind": "development_diagnostic",
+      "notes": [
+        "Trade equality is a diagnostic, not an assumption that teams have identical valuations. Unsigned salaries after the first season use fallback arbitration fractions."
+      ]
+    },
+    {
+      "date": "2024-12-11",
+      "name": "Crochet to Boston",
+      "left": [
+        {
+          "player_id": 676979,
+          "name": "Garrett Crochet",
+          "kind": "mlb",
+          "service_time": 4,
+          "contract": [
+            {
+              "season": 2024,
+              "salary_kind": "arbitration",
+              "salary_musd": 0.8,
+              "option_musd": null
+            },
+            {
+              "season": 2025,
+              "salary_kind": "arbitration",
+              "salary_musd": 2.9,
+              "option_musd": null,
+              "tendered": true
+            },
+            {
+              "season": 2026,
+              "salary_kind": "arbitration",
+              "salary_musd": null,
+              "option_musd": null
+            }
+          ],
+          "contract_source": "https://www.mlbtraderumors.com/2024/10/projected-arbitration-salaries-for-2025.html",
+          "service_season": 2025
+        }
+      ],
+      "right": [
+        {
+          "player_id": 691019,
+          "name": "Kyle Teel",
+          "kind": "prospect",
+          "fv": "50",
+          "role": "bat",
+          "grade_source": "https://www.fangraphs.com/prospects/the-board/2024-in-season-prospect-list/scouting-position?filter=&org=bos&pos=&search=",
+          "grade_season": 2024,
+          "grade_note": "Historical 2024 board/report; exact pre-trade snapshot timestamp not independently archived."
+        },
+        {
+          "player_id": 695731,
+          "name": "Braden Montgomery",
+          "kind": "prospect",
+          "fv": "45+",
+          "role": "bat",
+          "grade_source": "https://www.fangraphs.com/prospects/the-board/2024-in-season-prospect-list/scouting-position?filter=&org=bos&pos=&search=",
+          "grade_season": 2024,
+          "grade_note": "Historical 2024 board/report; exact pre-trade snapshot timestamp not independently archived."
+        },
+        {
+          "player_id": 805367,
+          "name": "Chase Meidroth",
+          "kind": "prospect",
+          "fv": "40",
+          "role": "bat",
+          "grade_source": "https://www.fangraphs.com/prospects/the-board/2024-in-season-prospect-list/scouting-position?filter=&org=bos&pos=&search=",
+          "grade_season": 2024,
+          "grade_note": "Historical 2024 board/report; exact pre-trade snapshot timestamp not independently archived."
+        },
+        {
+          "player_id": 682790,
+          "name": "Wikelman Gonzalez",
+          "kind": "prospect",
+          "fv": "40+",
+          "role": "pit",
+          "grade_source": "https://blogs.fangraphs.com/boston-red-sox-top-47-prospects/",
+          "grade_season": 2024,
+          "grade_note": "Historical 2024 board/report; exact pre-trade snapshot timestamp not independently archived."
+        }
+      ],
+      "unpriced_assets": [],
+      "source": "https://www.mlb.com/news/garrett-crochet-traded-to-red-sox-white-sox",
+      "benchmark_kind": "development_diagnostic",
+      "notes": [
+        "Trade equality is a diagnostic, not an assumption that teams have identical valuations. Unsigned salaries after the first season use fallback arbitration fractions."
+      ]
+    }
+  ]
+}

@@ -14,6 +14,9 @@ py-modules = ["pipeline"]
 [tool.setuptools.packages.find]
 include = ["backend*", "v2*"]
 
+[tool.setuptools.package-data]
+"v2.players" = ["data/*.json"]
+
 [tool.ruff]
 line-length = 120
 target-version = "py311"
