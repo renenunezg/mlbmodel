@@ -69,7 +69,7 @@ def window_weights_by_season(model: ValueModel, last_season: int) -> dict[int, f
 
 
 def fingerprint(as_of: date, population: pd.DataFrame, contracts: pd.DataFrame, model: ValueModel, seasons: list[int]) -> str:
-    parts = [model.model_version, model.fitted_at]
+    parts = [model.model_version, model.fitted_at, json.dumps(bio.FIELD_POSITIONS, sort_keys=True)]
     for season in seasons:
         path = inputs.STATCAST_DIR / f"statcast_{season}.parquet"
         parts.append(str(pd.read_parquet(path, columns=["game_date"])["game_date"].max()) if path.exists() else "none")

@@ -2,8 +2,8 @@
 import pandas as pd
 import pytest
 
+from v2.players import bio, score
 from v2.players import inputs as inputs_mod
-from v2.players import score
 from v2.players.model import ValueModel
 from v2.players.pricing import PriceModel
 from v2.players.value import ContractYear, market_value, project_outlook, trade_value
@@ -41,6 +41,30 @@ def test_free_agent_has_market_value_only():
 # Scoring guards.
 EMPTY = ValueModel.empty(dev_seasons=[2021, 2022, 2023, 2024], holdout_pair=(2025, 2026))
 NO_CONTRACTS = pd.DataFrame(columns=["player_id", "season", "salary_kind", "salary_musd", "option_musd", "option_kind", "service_time", "fa_year", "how_acquired"])
+
+
+def test_statcast_third_base_and_shortstop_reach_scoring_correctly(monkeypatch):
+    # Statcast fielding slots: 5 is third base, 6 is shortstop.
+    pitches = pd.DataFrame([
+        {"game_pk": 1, "inning": inning, "inning_topbot": "Top", "home_team": "SD", "away_team": "KC",
+         "batter": 99, "pitcher": 100, "events": "field_out",
+         **{f"fielder_{slot}": None for slot in range(2, 10)},
+         "fielder_5": 592518 if inning < 3 else 677951,
+         "fielder_6": 677951 if inning < 3 else 592518}
+        for inning in (1, 2, 3)
+    ])
+    monkeypatch.setattr(bio, "_load_pitches", lambda season, columns: pitches)
+    groups = bio.primary_position(bio.positions([2026]), {2026: 1.0}).set_index("player_id")
+    assert groups.loc[592518, "position_group"] == "3B"
+    assert groups.loc[677951, "position_group"] == "SS"
+    assert groups.loc[592518, "secondary_positions"] == ["SS"]
+    assert groups.loc[677951, "secondary_positions"] == ["3B"]
+    data = one_hitter("forty_man", pa=600)
+    data["groups"] = groups.loc[[592518]].reset_index().assign(player_id=1)
+    values, _ = score.assemble_values(**data, contracts=NO_CONTRACTS, model=EMPTY, next_season=2027)
+    assert values.iloc[0].position_group == "3B"
+    assert values.iloc[0].secondary_positions == ["SS"]
+    assert values.iloc[0].tip["positional_adjustment"] == EMPTY.positional_adjustment["3B"]
 
 
 def one_hitter(status: str, pa: float) -> dict:

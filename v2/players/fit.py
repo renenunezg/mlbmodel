@@ -43,7 +43,7 @@ MARCEL_REGRESSION_PA = 1200.0
 WOBA = {"BB": 0.69, "HBP": 0.72, "1B": 0.89, "2B": 1.27, "3B": 1.62, "HR": 2.10}
 PRICE_FIRST_SEASONS = (2024, 2025, 2026)
 # The OAA board filters by Statcast position code, not abbreviation.
-POSITIONS_FOR_ADJUSTMENT = {"C": "2", "1B": "3", "2B": "4", "3B": "5", "SS": "6", "LF": "7", "CF": "8", "RF": "9"}
+POSITIONS_FOR_ADJUSTMENT = {position: str(slot) for slot, position in bio.FIELD_POSITIONS.items()}
 # Trait target: (source, name, sign) where source is counts or inputs; sign orients higher-is-better.
 TRAIT_TARGETS = {
     "contact": ("counts", "k_rate", -1.0), "power": ("counts", "iso", 1.0), "discipline": ("counts", "bb_rate", 1.0),

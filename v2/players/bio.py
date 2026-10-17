@@ -23,7 +23,8 @@ CACHE_DIR = Path(__file__).resolve().parents[2] / "cache" / "players"
 STATCAST_DIR = Path(__file__).resolve().parents[2] / "cache"
 PEOPLE_BATCH = 100
 TIMEOUT = 60
-FIELD_POSITIONS = {2: "C", 3: "1B", 4: "2B", 5: "SS", 6: "3B", 7: "LF", 8: "CF", 9: "RF"}
+# Statcast uses standard defensive numbering: third base is 5, shortstop is 6.
+FIELD_POSITIONS = {2: "C", 3: "1B", 4: "2B", 5: "3B", 6: "SS", 7: "LF", 8: "CF", 9: "RF"}
 POSITION_GROUPS = ("C", "1B", "2B", "SS", "3B", "LF", "CF", "RF", "DH", "SP", "RP")
 # A pitcher is a starter when at least this share of his appearances opened the game.
 STARTER_SHARE = 0.5
