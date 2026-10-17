@@ -13,10 +13,8 @@ ALTER TABLE mlb.live_win_probability ENABLE ROW LEVEL SECURITY;
 GRANT SELECT ON mlb.live_win_probability TO anon, authenticated;
 DROP POLICY IF EXISTS live_win_probability_read ON mlb.live_win_probability;
 CREATE POLICY live_win_probability_read ON mlb.live_win_probability FOR SELECT USING (true);
+-- Live snapshots are served from the site's CDN window and must not revalidate pages.
 DROP TRIGGER IF EXISTS live_win_probability_revalidate ON mlb.live_win_probability;
-CREATE TRIGGER live_win_probability_revalidate
-    AFTER INSERT OR UPDATE OR DELETE OR TRUNCATE ON mlb.live_win_probability
-    FOR EACH STATEMENT EXECUTE FUNCTION public.site_revalidate();
 
 -- Check only local serving tables overnight. The final snapshot takes priority
 -- over games.status, which can retain its pregame value until the nightly job.
