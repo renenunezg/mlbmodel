@@ -225,7 +225,8 @@ def assemble_values(
         outlook = value.project_outlook(war_known, ages, contract, price, model.arb_fractions, service_time, next_season, service_season=service_season) if contract else []
         control_years = sum(1 for o in outlook if o.in_control)
         tv = value.trade_value(outlook) if outlook else np.nan
-        mv = value.market_value(outlook) if outlook else np.nan
+        # Market value is what his next season would fetch, whatever his contract says about it.
+        mv = war_known.get(next_season, 0.0) * price.price_for(next_season, next_season)
         if pd.isna(base) or contract_status == "unknown" or not graded:
             tv = mv = np.nan
         # Draws for the range.

@@ -146,7 +146,8 @@ All tables live in the `mlb` schema and key off `game_pk`, the integer ID from t
 | `model_outputs`, `model_outputs_season` | v2 daily and rolling per-team predictions. |
 | `model_outputs_v1_archive`, `model_outputs_season_v1_archive` | Frozen v1 history pre-cutover. |
 | `model_evaluation`, `model_calibration`, `model_edge_buckets` | Running accuracy across the full season (v1 + v2 stitched). |
-| `posterior_skills`, `posterior_sigmas` | Top-N xwOBA leaderboard and per-outcome σ rows, written after each refit. |
+| `posterior_sigmas` | Per-outcome σ rows, written after each refit. |
+| `player_values`, `player_traits`, `player_contracts`, `player_value_models` | Player valuation: Grade, Trade value, Impact and explained traits per 40-man player (`v2/players/`), scored nightly; contracts from Baseball-Reference weekly; the fitted model as one jsonb row. |
 
 Row-level security is on for every table with one policy, `public_read`, granting SELECT to `anon` and `authenticated`.
 The site reads through that policy; this pipeline writes through `DATABASE_URL` as `postgres`.
@@ -161,7 +162,7 @@ The site also grades a game the moment it goes final so the dashboard updates wi
 
 | Workflow | Cron (UTC) | Purpose |
 |---|---|---|
-| `train-v2.yml` | `7 11 * * *` (~4 AM PT) | Nightly NUTS refit of all three Bayesian models, then `write_posterior_summaries` populates the diagnostics tables. |
+| `train-v2.yml` | `7 11 * * *` (~4 AM PT) | Nightly NUTS refit of all three Bayesian models, then `write_posterior_summaries` populates the sigma table; also scores player values (and refreshes contracts on Mondays) before training. |
 | `daily-pipeline-v2.yml` | `workflow_run` on train-v2 success | Schedule → bullpen → odds → score → verify. Chained off train to guarantee fresh posteriors. |
 | `refresh-lineups-v2.yml` | `repository_dispatch` from Supabase pg_cron, every 20 min ~5 AM-7:40 PM PT | Re-scores games whose posted lineup hash changed. |
 | `nightly-eval.yml` | `repository_dispatch` at 12:01 AM PT, `37 8 * * *` fallback | Eval yesterday + write tomorrow's predictions. |
