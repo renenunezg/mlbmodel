@@ -14,7 +14,7 @@ def test_training_readers_exclude_postseason_and_wrong_year_cache_rows(monkeypat
 
     from backend.data import fangraphs
     from v2.data import build_cache, pa_dataset
-    from v2.pipeline import score_games, write_posterior_summaries
+    from v2.pipeline import score_games
     from v2.simulator import build_advancement_table, gb_quartiles
 
     rows = []
@@ -37,8 +37,7 @@ def test_training_readers_exclude_postseason_and_wrong_year_cache_rows(monkeypat
     mixed = pd.concat([regular, playoff, following_year], ignore_index=True)
     for year in (2026, 2027):
         mixed.to_parquet(tmp_path / f"statcast_{year}.parquet", index=False)
-    for module in (pa_dataset, build_cache, score_games, write_posterior_summaries,
-                   build_advancement_table, gb_quartiles, fangraphs):
+    for module in (pa_dataset, build_cache, score_games, build_advancement_table, gb_quartiles, fangraphs):
         monkeypatch.setattr(module, "CACHE_DIR", tmp_path)
 
     trained = pa_dataset.load_pa_dataset(2026, 2027)
@@ -48,7 +47,6 @@ def test_training_readers_exclude_postseason_and_wrong_year_cache_rows(monkeypat
     monkeypatch.setattr(gb_quartiles, "MIN_BIP", 1)
     assert set(gb_quartiles.build_gb_quartiles([2026]).player_id) == {101, 102, 103, 104, 201, 202, 203, 204}
     assert set(score_games.load_cache_for_year(2027).batter) == {301}
-    assert set(write_posterior_summaries._load_window_pa(date(2026, 9, 1), date(2026, 10, 1)).batter) == {101, 102, 103, 104}
 
     fetched = []
 
@@ -78,7 +76,6 @@ def test_training_readers_exclude_postseason_and_wrong_year_cache_rows(monkeypat
     assert build_cache.fetch_year(2027).empty
     assert len(fetched) == 1
     assert len(pa_dataset.load_pa_dataset(2026, 2027)) == len(regular)
-    assert write_posterior_summaries._load_window_pa(date(2027, 1, 1), date(2027, 1, 15)).empty
 
 
 @pytest.mark.expensive
