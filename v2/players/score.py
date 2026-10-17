@@ -43,6 +43,22 @@ FADED_FREE_AGENT_SEASONS = 2
 CATCHER_RUN_INPUTS = ("reliability.framing_runs", "reliability.blocking_runs", "arm.cs_above_average")
 
 
+def season_for(as_of: date, starts: dict[int, date]) -> int:
+    """The scored season: the latest season whose regular season has started by ``as_of``."""
+    started = [s for s, start in starts.items() if start <= as_of]
+    return max(started) if started else min(starts)
+
+
+def current_season(as_of: date) -> int:
+    starts = {}
+    for season in (as_of.year, as_of.year - 1):
+        try:
+            starts[season], _ = bio.season_dates(season)
+        except Exception:  # the next season's dates are not published yet
+            continue
+    return season_for(as_of, starts)
+
+
 def next_season(as_of: date, season: int) -> int:
     _, end = bio.season_dates(season)
     return season if as_of <= end else season + 1
@@ -103,7 +119,7 @@ def assemble_values(
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """From already-computed frames to the player_values and player_traits frames."""
     pop = population.merge(groups, on="player_id", how="left")
-    pop["position_group"] = pop["position_group"].fillna(pop["listed_position"].map(lambda p: "SP" if p in ("P", "SP", "TWP") else ("RP" if p == "RP" else p))).fillna("DH")
+    pop["position_group"] = pop["position_group"].fillna(pop["listed_position"].map(lambda p: "RP" if p in ("P", "SP", "RP", "TWP") else ("LF" if p == "OF" else p))).fillna("DH")
     pop = pop.set_index("player_id")
     group = pop["position_group"]
     pool = pd.Series(features.pool_of(group), index=pop.index)
@@ -118,12 +134,26 @@ def assemble_values(
 
     # Shrunk runs and the projection.
     role_series = pd.Series(np.where(group.isin(features.PITCHER_GROUPS), "pit", "bat"), index=pop.index)
+    leverage = values_wide["workload.leverage"] if "workload.leverage" in values_wide.columns else None
     rates_pop = features.role_rows(rates[rates["role"].isin(["bat", "pit"])], group)
-    shrunk = features.shrunk_runs(rates_pop, model, group) if not rates_pop.empty else pd.Series(dtype="float64")
+    shrunk = features.shrunk_runs(rates_pop, model, group, leverage) if not rates_pop.empty else pd.Series(dtype="float64")
     shrunk = shrunk.reindex(pop.index)
+    # Two-way players: the pitching side (a starter's workload) is added to the hitter's projection
+    # through the shrunk-runs path, since one row per player carries one set of traits.
+    pit_rows = rates[(rates["role"] == "pit") & (rates["n"] >= features.MIN_GRADE_SAMPLE)]
+    two_way = pit_rows[pit_rows["player_id"].isin(pop.index[~group.isin(features.PITCHER_GROUPS)])]
+    two_way_runs = pd.Series(0.0, index=pop.index)
+    if not two_way.empty:
+        sp_role = pd.Series("SP", index=two_way["player_id"].values)
+        gw = model.grade_weight_frame()
+        sp = gw[gw["pool"] == "SP"].set_index("feature")["coefficient"] if not gw.empty else pd.Series(dtype="float64")
+        pit_runs = features.pitching_runs_for(two_way, model, sp_role, leverage)
+        projected_pit = float(sp.get("intercept", 0.0)) + float(sp.get("shrunk_runs", 1.0)) * pit_runs - model.replacement.get("SP", 0.0)
+        two_way_runs.loc[projected_pit.index] = projected_pit.values
     sample = rates_pop.set_index("player_id")["n"] if not rates_pop.empty else pd.Series(dtype="float64")
     sample = sample.reindex(pop.index).fillna(0.0)
     design = features.grade_features(composites, shrunk, pool)
+    two_way_ids = set(two_way["player_id"]) if not two_way.empty else set()
     projected = features.project_runs(design, group, model)
     has_fit = bool(model.grade_weights)
     if not has_fit:
@@ -131,7 +161,7 @@ def assemble_values(
     gradeable = sample >= features.MIN_GRADE_SAMPLE
     pos_adj = group.map(model.positional_adjustment).fillna(0.0).where(role_series.eq("bat"), 0.0)
     replacement = group.map(model.replacement).fillna(0.0)
-    full_runs = projected + pos_adj - replacement  # per 600 PA or per 180/65 IP
+    full_runs = projected + pos_adj - replacement + two_way_runs  # per 600 PA or per 180/65 IP
     grade_raw = full_runs.where(gradeable)
     grade = features.to_grade_scale(grade_raw, group)
     k_grade = pd.Series([model.reliability_k.get(f"grade_{p}", 0.0) for p in np.where(group.isin(features.PITCHER_GROUPS), group, "hitter")], index=pop.index)
@@ -150,6 +180,8 @@ def assemble_values(
     by_player = {pid: g for pid, g in contracts.groupby("player_id")} if len(contracts) else {}
     out_rows, trait_rows = [], []
     curves = model.age_curves
+    gwf = model.grade_weight_frame()
+    in_grade_traits = set(gwf.loc[gwf["coefficient"] > 0, "feature"]) if not gwf.empty else set(features.TRAITS)
     for pid in pop.index:
         g = str(group[pid])
         status = pop.at[pid, "status"]
@@ -164,7 +196,8 @@ def assemble_values(
                 shift = aging.apply(0.0, curve_name[pid], int(age_next[pid]), a, curves)
                 if g == "RP":
                     shift *= RELIEVER_INNINGS / STARTER_INNINGS
-            war_by_season[y] = (base + shift) * float(scale[pid]) / rpw if pd.notna(base) else np.nan
+            # A player projected below replacement is replaced: WAR floors at zero, as in the draws.
+            war_by_season[y] = max(0.0, (base + shift) * float(scale[pid]) / rpw) if pd.notna(base) else np.nan
         rows = by_player.get(pid)
         contract_status, service_time, fa_year = "unknown", np.nan, None
         if rows is not None and len(rows):
@@ -186,14 +219,15 @@ def assemble_values(
             contract_status = "free_agent"
         war_known = {y: (0.0 if pd.isna(w) else w) for y, w in war_by_season.items()}
         graded = bool(gradeable[pid]) and pd.notna(grade[pid])
-        if not graded:
-            contract = []  # no projection, no dollar figures
-        outlook = value.project_outlook(war_known, ages, contract, price, model.arb_fractions, service_time, next_season) if contract else []
+        service_season = int(rows["season"].min()) if rows is not None and len(rows) and contract_status != "free_agent" else next_season
+        # Contract facts (control years, money owed) hold whether or not he is graded; dollar
+        # projections need a grade.
+        outlook = value.project_outlook(war_known, ages, contract, price, model.arb_fractions, service_time, next_season, service_season=service_season) if contract else []
         control_years = sum(1 for o in outlook if o.in_control)
         tv = value.trade_value(outlook) if outlook else np.nan
         mv = value.market_value(outlook) if outlook else np.nan
         if pd.isna(base) or contract_status == "unknown" or not graded:
-            tv = np.nan
+            tv = mv = np.nan
         # Draws for the range.
         tv_low = tv_high = np.nan
         if draws is not None and pid in draws.index and pd.notna(tv):
@@ -202,13 +236,13 @@ def assemble_values(
             for delta in d:
                 shift = float(delta) * float(scale[pid]) / rpw
                 war_d = {y: max(0.0, war_known[y] + shift) for y in years}
-                tv_draws.append(value.trade_value(value.project_outlook(war_d, ages, contract, price, model.arb_fractions, service_time, next_season)))
+                tv_draws.append(value.trade_value(value.project_outlook(war_d, ages, contract, price, model.arb_fractions, service_time, next_season, service_season=service_season)))
             tv_low, tv_high = float(np.percentile(tv_draws, 10)), float(np.percentile(tv_draws, 90))
         shown = [o for o in outlook if o.in_control or o.salary_kind == "buyout"]
         faded = [o for o in outlook if not (o.in_control or o.salary_kind == "buyout")][:FADED_FREE_AGENT_SEASONS]
         outlook_json = [
-            {"season": o.season, "age": o.age, "war": round(o.war, 2), "salary_musd": round(o.salary_musd, 2), "salary_kind": o.salary_kind,
-             "surplus_musd": round(o.surplus_musd, 1), "in_control": o.in_control}
+            {"season": o.season, "age": o.age, "war": round(o.war, 2) if graded else None, "salary_musd": round(o.salary_musd, 2), "salary_kind": o.salary_kind,
+             "surplus_musd": round(o.surplus_musd, 1) if graded else None, "in_control": o.in_control}
             for o in shown + faded
         ]
         owed = float(sum(o.salary_musd for o in shown))
@@ -232,6 +266,7 @@ def assemble_values(
             "playing_time": round(float(pt[pid]), 0), "runs_per_win": round(rpw, 2), "price_per_win_musd": round(price.price_musd, 2),
             "price_source": price.source, "inflation": round(price.inflation, 3), "discount": value.DISCOUNT_PER_YEAR,
             "sample": round(float(sample[pid]), 0), "shrunk_runs": None if pd.isna(shrunk[pid]) else round(float(shrunk[pid]), 1),
+            "two_way_pitching_runs": round(float(two_way_runs[pid]), 1) if pid in two_way_ids else None,
         }
         out_rows.append({
             "player_id": int(pid), "player_name": pop.at[pid, "player_name"], "team": pop.at[pid, "team"],
@@ -270,7 +305,7 @@ def assemble_values(
             kind = "physical" if len(tw) == 1 and features.INPUT_KIND.get(tw[0][0]) == "physical" else "measured"
             trait_rows.append({
                 "player_id": int(pid), "trait": trait, "panel": spec.panel, "value": None if pd.isna(comp) else round(float(comp), 4),
-                "in_grade": bool(any(w > 0 for _, w, _ in tw)), "kind": kind, "sample": int(trait_sample), "inputs": inputs_json,
+                "in_grade": bool(any(w > 0 for _, w, _ in tw)) and trait in in_grade_traits, "kind": kind, "sample": int(trait_sample), "inputs": inputs_json,
                 "as_of": as_of, "model_version": model.model_version,
             })
     values_frame = pd.DataFrame(out_rows)
@@ -325,7 +360,7 @@ def _actual_runs(season: int, model: ValueModel, groups: pd.Series, lev: pd.Seri
 
 def gather(as_of: date, model: ValueModel, season: int | None = None) -> dict:
     """Everything assemble_values needs, from the caches, the API, and the contracts table."""
-    season = season or as_of.year
+    season = season or current_season(as_of)
     nxt = next_season(as_of, season)
     model.validate(nxt)
     seasons = [season - b for b in range(WINDOW_SEASONS)]
@@ -333,10 +368,9 @@ def gather(as_of: date, model: ValueModel, season: int | None = None) -> dict:
     population = bio.population(season, as_of)
     pos = bio.positions([s for s in seasons if (inputs.STATCAST_DIR / f"statcast_{s}.parquet").exists()])
     groups = bio.primary_position(pos, weights)
+    # The current season is recomputed every run (Statcast cache and Savant boards); past seasons come from cache.
     frames = {s: inputs.season_inputs(s, refresh=(s == season)) for s in seasons if (inputs.STATCAST_DIR / f"statcast_{s}.parquet").exists()}
-    counts = {s: inputs.outcome_counts(s) for s in frames}
-    if season in counts:
-        counts[season] = inputs.outcome_counts(season) if (CACHE_DIR / f"outcomes_{season}.parquet").exists() else counts[season]
+    counts = {s: inputs.outcome_counts(s, refresh=(s == season)) for s in frames}
     win = inputs.window(frames, weights)
     wc = inputs.window_counts(counts, weights)
     group_of = groups.set_index("player_id")["position_group"]
@@ -349,7 +383,7 @@ def gather(as_of: date, model: ValueModel, season: int | None = None) -> dict:
     _, season_end = bio.season_dates(season)
     listed = set(contracts["player_id"])
     extra = [
-        estimated_schedule(int(r.player_id), r.mlb_debut, season, season_end)
+        estimated_schedule(int(r.player_id), r.mlb_debut, season, season_end, as_of)
         for r in population.itertuples() if r.player_id not in listed and r.status != "free_agent"
     ]
     extra = [e for e in extra if len(e)]
@@ -423,8 +457,14 @@ def main() -> None:
     ap.add_argument("--player", type=int, nargs="*")
     args = ap.parse_args()
     as_of = date.fromisoformat(args.as_of)
-    model = ValueModel.load(args.model) if args.model else load_latest_from_db()
-    write = not args.no_write and writes_allowed()
+    try:
+        model = ValueModel.load(args.model) if args.model else load_latest_from_db()
+    except RuntimeError as exc:
+        log.warning(f"{exc}; nothing scored")
+        return
+    write = not args.no_write and writes_allowed() and not args.player
+    if args.player and not args.no_write and writes_allowed():
+        log.info("--player given; not writing")
     values_frame, traits_frame = score(as_of, model, write=write, force=args.force, players=args.player)
     if values_frame.empty:
         return

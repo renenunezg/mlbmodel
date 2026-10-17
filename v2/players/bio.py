@@ -65,11 +65,18 @@ def _transactions(start: date, end: date) -> list[dict]:
     return out
 
 
+_TRANSACTIONS: dict[tuple[int, date], pd.DataFrame] = {}
+
+
 def _season_transactions(season: int, as_of: date) -> pd.DataFrame:
+    key = (season, as_of)
+    if key in _TRANSACTIONS:
+        return _TRANSACTIONS[key]
     path = CACHE_DIR / f"transactions_{season}.parquet"
     end = min(as_of, date(season, 12, 31))
     if path.exists() and season < as_of.year:
-        return pd.read_parquet(path)
+        _TRANSACTIONS[key] = pd.read_parquet(path)
+        return _TRANSACTIONS[key]
     rows = [
         {
             "player_id": t.get("person", {}).get("id"),
@@ -86,6 +93,7 @@ def _season_transactions(season: int, as_of: date) -> pd.DataFrame:
     if season < as_of.year:
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
         frame.to_parquet(path, index=False)
+    _TRANSACTIONS[key] = frame
     return frame
 
 
@@ -174,9 +182,16 @@ def positions(seasons: list[int]) -> pd.DataFrame:
         long["position"] = long["slot"].str.slice(8).astype(int).map(FIELD_POSITIONS)
         fielded = long.groupby(["player_id", "position"]).size().rename("innings").reset_index()
         fielded["player_id"] = fielded["player_id"].astype("int64")
-        batters = pitches.loc[pitches["events"].notna(), "batter"].dropna().astype("int64").unique()
-        dh = pd.DataFrame({"player_id": np.setdiff1d(batters, fielded["player_id"].unique()), "position": "DH"})
-        dh["innings"] = pitches[pitches["batter"].isin(dh["player_id"]) & pitches["events"].notna()].groupby("batter").size().reindex(dh["player_id"]).fillna(0).values / 4.5
+        # A DH game: the batter had a plate appearance but neither fielded nor pitched in that game.
+        batter_games = pitches.loc[pitches["events"].notna(), ["game_pk", "batter"]].dropna().drop_duplicates()
+        batter_games = batter_games.rename(columns={"batter": "player_id"}).astype({"player_id": "int64"})
+        fielded_games = long[["game_pk", "player_id"]].drop_duplicates().astype({"player_id": "int64"})
+        pitched_games = pitches[["game_pk", "pitcher"]].dropna().drop_duplicates().rename(columns={"pitcher": "player_id"}).astype({"player_id": "int64"})
+        busy = pd.concat([fielded_games, pitched_games]).drop_duplicates()
+        dh_games = batter_games.merge(busy, on=["game_pk", "player_id"], how="left", indicator=True)
+        dh_games = dh_games[dh_games["_merge"] == "left_only"]
+        dh = dh_games.groupby("player_id").size().mul(9.0).rename("innings").reset_index()
+        dh["position"] = "DH"
         roles = _pitcher_roles(pitches)
         frame = pd.concat([fielded, dh, roles], ignore_index=True)
         frame["season"] = season

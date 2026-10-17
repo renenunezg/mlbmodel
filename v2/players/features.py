@@ -129,8 +129,11 @@ def role_rows(rates: pd.DataFrame, group: pd.Series) -> pd.DataFrame:
     return rates[rates["role"].values == expected]
 
 
-def shrunk_runs(rates: pd.DataFrame, model: ValueModel, roles: pd.Series) -> pd.Series:
-    """Runs per 600 PA (hitters) or runs prevented per 180/65 IP (pitchers) from shrunk rates."""
+def shrunk_runs(rates: pd.DataFrame, model: ValueModel, roles: pd.Series, leverage: pd.Series | None = None) -> pd.Series:
+    """Runs per 600 PA (hitters) or runs prevented per 180/65 IP (pitchers) from shrunk rates.
+
+    ``leverage`` (per player, league mean 1) scales relievers' runs.
+    """
     lw = model.linear_weights
     rates = role_rows(rates, roles)
     bat = rates[rates["role"] == "bat"].set_index("player_id")
@@ -140,8 +143,16 @@ def shrunk_runs(rates: pd.DataFrame, model: ValueModel, roles: pd.Series) -> pd.
         out = pd.concat([out, runs_mod.batting_runs(bat, lw)])
     if not pit.empty:
         role = roles.reindex(pit.index).fillna("RP")
-        out = pd.concat([out, runs_mod.pitching_runs(pit, lw, role, model.pa_per_ip)])
+        out = pd.concat([out, runs_mod.pitching_runs(pit, lw, role, model.pa_per_ip, leverage)])
     return out
+
+
+def pitching_runs_for(rates: pd.DataFrame, model: ValueModel, role: pd.Series, leverage: pd.Series | None = None) -> pd.Series:
+    """Runs prevented from a frame of pitching rate rows regardless of position group (two-way players)."""
+    pit = rates[rates["role"] == "pit"].set_index("player_id")
+    if pit.empty:
+        return pd.Series(dtype="float64")
+    return runs_mod.pitching_runs(pit, model.linear_weights, role.reindex(pit.index).fillna("SP"), model.pa_per_ip, leverage)
 
 
 def grade_features(composites: pd.DataFrame, shrunk: pd.Series, pool: pd.Series) -> pd.DataFrame:

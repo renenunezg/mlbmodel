@@ -9,6 +9,7 @@ CREATE TABLE mlb.player_contracts (
   salary_kind text NOT NULL CHECK (salary_kind IN ('guaranteed', 'option', 'buyout', 'arbitration', 'pre_arb', 'free_agent')),
   option_musd numeric,
   option_kind text,
+  declined_to text,
   service_time numeric,
   how_acquired text,
   fa_year integer,

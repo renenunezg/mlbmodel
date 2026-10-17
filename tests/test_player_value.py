@@ -70,3 +70,45 @@ def test_insufficient_sample_has_no_grade():
 def test_pending_free_agent_rows():
     values, _ = score.assemble_values(**one_hitter("free_agent", pa=600), contracts=NO_CONTRACTS, model=EMPTY, next_season=2027)
     assert (values.control_years == 0).all() and (values.trade_value_musd == 0).all() and values.market_value_musd.notna().all()
+
+
+# Fix pass after review.
+from v2.players import inputs as inputs_mod
+
+
+def test_window_counts_stay_in_plate_appearance_units():
+    counts = {2026: pd.DataFrame([{"player_id": 1, "role": "bat", "K": 5, "BB": 2, "HBP": 0, "1B": 4, "2B": 1, "3B": 0, "HR": 1, "OUT": 7, "season": 2026}])}
+    wc = inputs_mod.window_counts(counts, {2026: 5.0, 2025: 4.0, 2024: 3.0})
+    assert wc[["K", "BB", "HBP", "1B", "2B", "3B", "HR", "OUT"]].sum(axis=1).iloc[0] == pytest.approx(20.0)
+
+
+def test_arbitration_year_counts_seasons_since_the_page():
+    # Service 3.000 before 2026; the 2027 season is his second arbitration year.
+    contract = [ContractYear(2026, "guaranteed", 3.48, None), ContractYear(2027, "arbitration", None, None), ContractYear(2028, "free_agent", None, None)]
+    out = project_outlook({2027: 3.0}, {2027: 26}, contract, PRICE, ARB, service_time=3.0, first_season=2027, service_season=2026)
+    assert out[0].salary_kind == "arbitration" and out[0].salary_musd == pytest.approx(0.40 * 30.0)
+
+
+def test_arbitration_estimate_never_falls_below_prior_salary_floor():
+    contract = [ContractYear(2026, "guaranteed", 3.48, None), ContractYear(2027, "arbitration", None, None), ContractYear(2028, "free_agent", None, None)]
+    out = project_outlook({2027: 0.2}, {2027: 26}, contract, PRICE, ARB, service_time=3.0, first_season=2027, service_season=2026)
+    assert out[0].salary_musd == pytest.approx(0.8 * 3.48)
+
+
+def test_mutual_option_defaults_to_the_buyout():
+    contract = [ContractYear(2027, "buyout", 2.0, 15.0, "mutual")]
+    out = project_outlook({2027: 3.0}, {2027: 30}, contract, PRICE, ARB, 8.0, 2027)
+    assert out[0].salary_kind == "buyout" and out[0].in_control is False
+
+
+def test_declined_option_to_arbitration_keeps_control():
+    contract = [ContractYear(2027, "buyout", 0.5, 15.0, "team", "arbitration"), ContractYear(2028, "arbitration", None, None), ContractYear(2029, "free_agent", None, None)]
+    out = project_outlook({2027: 0.5, 2028: 0.5}, {2027: 27, 2028: 28}, contract, PRICE, ARB, 4.0, 2027, service_season=2026)
+    assert out[0].salary_kind == "arbitration" and out[0].in_control and out[1].in_control
+
+
+def test_scored_season_is_the_latest_that_has_started():
+    from datetime import date as d
+
+    assert score.season_for(d(2027, 1, 15), {2027: d(2027, 3, 26), 2026: d(2026, 3, 25)}) == 2026
+    assert score.season_for(d(2027, 4, 1), {2027: d(2027, 3, 26), 2026: d(2026, 3, 25)}) == 2027

@@ -252,7 +252,7 @@ def _statcast_inputs(pitches: pd.DataFrame, season: int) -> pd.DataFrame:
     return pd.concat(out, ignore_index=True)
 
 
-def _board_inputs(season: int) -> pd.DataFrame:
+def _board_inputs(season: int, refresh: bool = False) -> pd.DataFrame:
     out: list[pd.DataFrame] = []
 
     def add(frame: pd.DataFrame, column: str, sample: str | None, name: str, scale: float = 1.0) -> None:
@@ -264,7 +264,8 @@ def _board_inputs(season: int) -> pd.DataFrame:
         n.index = frame["player_id"].values
         out.append(_rows("board", s.groupby(level=0).mean(), n.groupby(level=0).sum(), name, season))
 
-    oaa = load_board("oaa", season)
+    board = lambda name: load_board(name, season, refresh=refresh)  # noqa: E731
+    oaa = board("oaa")
     if not oaa.empty:
         # The board has no chances column; innings are unknown here, so OAA is per season
         # and the window weighting handles exposure. Sample is the attempt proxy: |OAA| rows.
@@ -274,23 +275,23 @@ def _board_inputs(season: int) -> pd.DataFrame:
         add(oaa, "outs_above_average_infront", "sample", "range.oaa_infront")
         add(oaa, "lateral", "sample", "range.oaa_lateral")
         add(oaa, "outs_above_average_behind", "sample", "range.oaa_behind")
-    arm = load_board("arm_strength", season)
+    arm = board("arm_strength")
     add(arm, "arm_overall", "total_throws", "arm.strength")
-    throwing = load_board("catcher_throwing", season)
+    throwing = board("catcher_throwing")
     add(throwing, "caught_stealing_above_average", "sb_attempts", "arm.cs_above_average")
     add(throwing, "pop_time", "sb_attempts", "arm.pop_time")
-    blocking = load_board("catcher_blocking", season)
+    blocking = board("catcher_blocking")
     add(blocking, "catcher_blocking_runs", "pitches", "reliability.blocking_runs")
-    framing = load_board("catcher_framing", season)
+    framing = board("catcher_framing")
     add(framing, "rv_tot", "pitches", "reliability.framing_runs")
-    running = load_board("baserunning", season)
+    running = board("baserunning")
     if not running.empty:
         running = running.assign(sb=pd.to_numeric(running["runner_runs_SB2"], errors="coerce") + pd.to_numeric(running["runner_runs_SB3"], errors="coerce"))
     add(running, "runner_runs_tot", "N_runner_moved", "baserunning.runs")
     add(running, "sb", "N_runner_moved", "baserunning.sb_runs")
-    sprint = load_board("sprint_speed", season)
+    sprint = board("sprint_speed")
     add(sprint, "sprint_speed", "competitive_runs", "speed.sprint_speed")
-    arsenal = load_board("pitch_arsenal_stats", season)
+    arsenal = board("pitch_arsenal_stats")
     if not arsenal.empty:
         arsenal = arsenal.assign(rv=pd.to_numeric(arsenal["run_value"], errors="coerce"), n=pd.to_numeric(arsenal["pitches"], errors="coerce"))
         per = arsenal.groupby("player_id").agg(rv=("rv", "sum"), n=("n", "sum"))
@@ -304,7 +305,7 @@ def season_inputs(season: int, *, refresh: bool = False) -> pd.DataFrame:
     if path.exists() and not refresh:
         return pd.read_parquet(path)
     pitches = _load(season)
-    frame = pd.concat([_statcast_inputs(pitches, season), _board_inputs(season)], ignore_index=True)
+    frame = pd.concat([_statcast_inputs(pitches, season), _board_inputs(season, refresh=refresh)], ignore_index=True)
     frame = frame.astype({"player_id": "int64", "season": "int64", "value": "float64", "sample": "float64"})
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     frame.to_parquet(path, index=False)
@@ -312,10 +313,10 @@ def season_inputs(season: int, *, refresh: bool = False) -> pd.DataFrame:
     return frame
 
 
-def outcome_counts(season: int) -> pd.DataFrame:
+def outcome_counts(season: int, *, refresh: bool = False) -> pd.DataFrame:
     """Plate-appearance outcome counts per player-season for batters (with vs-LHP split) and pitchers."""
     path = CACHE_DIR / f"outcomes_{season}.parquet"
-    if path.exists():
+    if path.exists() and not refresh:
         return pd.read_parquet(path)
     p = _load(season)
     pa = p[p["events"].notna() & ~p["events"].isin(NON_PA_EVENTS)].copy()
@@ -340,12 +341,24 @@ def outcome_counts(season: int) -> pd.DataFrame:
     return out
 
 
+def _normalized(weights: dict[int, float], present: set[int]) -> dict[int, float]:
+    """Weights over the seasons that exist, scaled to sum to one.
+
+    A rookie's single season then counts in full, and weighted samples stay in
+    plate-appearance units.
+    """
+    total = sum(w for s, w in weights.items() if w > 0 and s in present)
+    return {s: (w / total if total > 0 and s in present else 0.0) for s, w in weights.items()}
+
+
 def window(frames_by_season: dict[int, pd.DataFrame], weights: dict[int, float]) -> pd.DataFrame:
     """Sample-and-season-weighted mean of each input over the window.
 
-    ``weights`` maps season to weight. Each (player, role, input) value is the mean
-    of season values weighted by ``weight × sample``; ``sample`` is the weighted sum.
+    ``weights`` maps season to weight and is normalized to sum to one. Each
+    (player, role, input) value is the mean of season values weighted by
+    ``weight × sample``; ``sample`` is the weighted sum, a season-equivalent sample.
     """
+    weights = _normalized(weights, {s for s, f in frames_by_season.items() if not f.empty})
     parts = []
     for season, frame in frames_by_season.items():
         w = weights.get(season, 0.0)
@@ -366,7 +379,8 @@ def window(frames_by_season: dict[int, pd.DataFrame], weights: dict[int, float])
 
 
 def window_counts(counts_by_season: dict[int, pd.DataFrame], weights: dict[int, float]) -> pd.DataFrame:
-    """Season-weighted outcome counts per (player, role)."""
+    """Season-weighted outcome counts per (player, role), with weights normalized to sum to one."""
+    weights = _normalized(weights, {s for s, f in counts_by_season.items() if not f.empty})
     parts = []
     for season, frame in counts_by_season.items():
         w = weights.get(season, 0.0)

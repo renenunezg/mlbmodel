@@ -180,7 +180,8 @@ def build_pair(data: SeasonData, t: int, model: ValueModel) -> dict:
     z = features.oriented_z(values, pool)
     sample = features.role_rows(rates, group).set_index("player_id")["n"].reindex(values.index).fillna(0.0)
     traits_next, target_next = data.targets(t + 1, groups)
-    shrunk = features.shrunk_runs(rates, model, group).reindex(values.index)
+    leverage = values["workload.leverage"] if "workload.leverage" in values.columns else None
+    shrunk = features.shrunk_runs(rates, model, group, leverage).reindex(values.index)
     return {"t": t, "values": values, "samples": samples, "z": z, "pool": pool, "group": group, "rates": rates,
             "sample": sample, "traits_next": traits_next, "target_next": target_next, "shrunk": shrunk, "counts": counts}
 

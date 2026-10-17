@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import re
 import time
@@ -66,7 +67,7 @@ assert set(BBREF_TEAMS) == set(TEAM_ID_BY_CODE)
 
 CONTRACT_FRAME_COLUMNS = [
     "bbref_id", "player_name", "season", "salary_musd", "salary_kind", "option_musd",
-    "option_kind", "service_time", "how_acquired", "fa_year",
+    "option_kind", "declined_to", "service_time", "how_acquired", "fa_year",
     "contract_start", "contract_years", "contract_total_musd",
 ]
 # "9 yrs/$360M (23-31)" or "1 yr/$2M (26)": length, total value, first and last season.
@@ -131,17 +132,17 @@ def _cell_text(cell) -> str:
     return " ".join(cell.get_text(" ", strip=True).split())
 
 
-def _parse_cell(cell) -> tuple[str, float | None, float | None, str | None]:
-    """One future-season cell -> (salary_kind, salary_musd, option_musd, option_kind)."""
+def _parse_cell(cell) -> tuple[str, float | None, float | None, str | None, str | None]:
+    """One future-season cell -> (salary_kind, salary_musd, option_musd, option_kind, declined_to)."""
     raw = _cell_text(cell)
     if raw == "":
-        return "blank", None, None, None
+        return "blank", None, None, None, None
     if raw.startswith("FA"):
-        return "free_agent", None, None, None
+        return "free_agent", None, None, None, None
     if raw.startswith("Arb"):
-        return "arbitration", None, None, None
+        return "arbitration", None, None, None, None
     if raw.startswith("Pre-Arb"):
-        return "pre_arb", None, None, None
+        return "pre_arb", None, None, None, None
     salary = _money_musd(raw)
     if salary is None and re.fullmatch(r"[\d.]+", raw):
         salary = float(raw)  # a bare "0": a season with nothing owed
@@ -152,8 +153,9 @@ def _parse_cell(cell) -> tuple[str, float | None, float | None, str | None]:
         tip = tooltip["data-tip"]
         kind_match = _OPTION_KIND.search(tip)
         kind = kind_match.group(1).lower() if kind_match else "team"
-        return "buyout", salary, _money_musd(tip), "club" if kind == "club" else kind
-    return "guaranteed", salary, None, None
+        declined_to = "arbitration" if "[Arb" in raw else "free_agent"
+        return "buyout", salary, _money_musd(tip), "team" if kind == "club" else kind, declined_to
+    return "guaranteed", salary, None, None, None
 
 
 def _extend_schedule(parsed: list[tuple], service_time: float, season: int) -> list[tuple]:
@@ -165,13 +167,17 @@ def _extend_schedule(parsed: list[tuple], service_time: float, season: int) -> l
     """
     visible = [row for row in parsed if row[1] != "blank" or any(r[1] != "blank" for r in parsed[parsed.index(row):])]
     out: list[tuple] = []
-    for yr, kind, salary, option, option_kind in visible:
+    last_marker = None
+    for yr, kind, salary, option, option_kind, declined_to in visible:
         if kind == "free_agent":
-            out.append((yr, kind, salary, option, option_kind))
+            out.append((yr, kind, salary, option, option_kind, declined_to))
             return out
         if kind == "blank":
-            kind = "pre_arb"
-        out.append((yr, kind, salary, option, option_kind))
+            # A blank before any marker is pre-arbitration; a blank after an arbitration cell stays arbitration.
+            kind = "arbitration" if last_marker == "arbitration" else "pre_arb"
+        else:
+            last_marker = kind
+        out.append((yr, kind, salary, option, option_kind, declined_to))
     if service_time != service_time:  # NaN: nothing to extend from
         return out
     last_year = out[-1][0] if out else season - 1
@@ -179,19 +185,35 @@ def _extend_schedule(parsed: list[tuple], service_time: float, season: int) -> l
     year = last_year + 1
     while projected_service < FREE_AGENT_SERVICE:
         kind = "arbitration" if projected_service >= ARBITRATION_SERVICE else "pre_arb"
-        out.append((year, kind, None, None, None))
+        out.append((year, kind, None, None, None, None))
         projected_service += 1.0
         year += 1
-    out.append((year, "free_agent", None, None, None))
+    out.append((year, "free_agent", None, None, None, None))
     return out
 
 
-def parse_team_page(html: str, season: int) -> pd.DataFrame:
-    """One row per player per contract season from a team's payroll table."""
+def page_season(soup: BeautifulSoup) -> int | None:
+    """The season of the page's first contract column, from its header label."""
+    header = soup.find("th", attrs={"data-stat": "contract_y0"})
+    if header is None:
+        return None
+    label = header.get("aria-label") or header.get_text(strip=True)
+    return int(label) if label and label.isdigit() else None
+
+
+def parse_team_page(html: str, season: int | None = None) -> pd.DataFrame:
+    """One row per player per contract season from a team's payroll table.
+
+    The first contract column's season comes from the page header; ``season`` is only a
+    fallback for a page without one.
+    """
     soup = BeautifulSoup(html.replace("<!--", "").replace("-->", ""), "lxml")
     table = soup.find("table", id="payroll")
     if table is None:
         raise ValueError("No payroll table in page")
+    season = page_season(soup) or season
+    if season is None:
+        raise ValueError("No season header on the payroll page")
     rows: list[dict] = []
     for tr in table.find("tbody").find_all("tr"):
         cells = {td["data-stat"]: td for td in tr.find_all(["td", "th"]) if td.has_attr("data-stat")}
@@ -216,11 +238,11 @@ def parse_team_page(html: str, season: int) -> pd.DataFrame:
             parsed.append((season + offset, *_parse_cell(cells[column])))
         parsed = _extend_schedule(parsed, service_time, season)
         fa_year = next((yr for yr, kind, *_ in parsed if kind == "free_agent"), None)
-        for yr, kind, salary, option, option_kind in parsed:
+        for yr, kind, salary, option, option_kind, declined_to in parsed:
             rows.append({
                 "bbref_id": bbref_id, "player_name": player_name, "season": yr,
                 "salary_musd": salary, "salary_kind": kind, "option_musd": option,
-                "option_kind": option_kind, "service_time": service_time,
+                "option_kind": option_kind, "declined_to": declined_to, "service_time": service_time,
                 "how_acquired": how_acquired, "fa_year": fa_year,
                 "contract_start": contract_start, "contract_years": contract_years, "contract_total_musd": contract_total,
             })
@@ -252,7 +274,7 @@ def chadwick_map() -> dict[str, int]:
     return dict(zip(frame["key_bbref"], frame["key_mlbam"], strict=True))
 
 
-def build_contracts(season: int, teams: list[str] | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
+def build_contracts(season: int | None = None, teams: list[str] | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
     """All teams' contract rows with MLBAM ids, plus the rows that could not be matched."""
     mapping = chadwick_map()
     frames = []
@@ -265,7 +287,7 @@ def build_contracts(season: int, teams: list[str] | None = None) -> tuple[pd.Dat
     rows = pd.concat(frames, ignore_index=True)
     rows["player_id"] = rows["bbref_id"].map(mapping).astype("Int64")
     unmatched = rows[rows["player_id"].isna()][["bbref_id", "player_name", "team"]].drop_duplicates()
-    share = len(rows[rows["player_id"].isna()]) / max(1, len(rows))
+    share = len(unmatched) / max(1, rows["bbref_id"].nunique())
     if share > MAX_UNMATCHED_SHARE:
         raise RuntimeError(f"{share:.1%} of contract rows lack an MLBAM id: {unmatched.player_name.tolist()}")
     matched = rows.dropna(subset=["player_id"]).copy()
@@ -278,24 +300,22 @@ def build_contracts(season: int, teams: list[str] | None = None) -> tuple[pd.Dat
 def publish_contracts(frame: pd.DataFrame) -> None:
     """Replace the contracts table with this fetch, in one transaction."""
     columns = [
-        "player_id", "season", "salary_musd", "salary_kind", "option_musd", "option_kind",
+        "player_id", "season", "salary_musd", "salary_kind", "option_musd", "option_kind", "declined_to",
         "service_time", "how_acquired", "fa_year", "contract_start", "contract_years", "contract_total_musd",
         "team", "player_name", "source_url",
     ]
     payload = frame[columns].astype(object).where(frame[columns].notna(), None)
-    fetched_at = datetime.now(UTC)
-    records = [dict(zip(columns, row, strict=True), fetched_at=fetched_at) for row in payload.itertuples(index=False)]
-    insert = text(
-        "INSERT INTO player_contracts (" + ", ".join(columns) + ", fetched_at, updated_at) VALUES ("
-        + ", ".join(f":{c}" for c in columns) + ", :fetched_at, now())"
-    )
+    fetched_at = datetime.now(UTC).isoformat()
+    records = [dict(zip(columns, row, strict=True), fetched_at=fetched_at, updated_at=fetched_at) for row in payload.itertuples(index=False)]
+    # One statement: the rows travel as a single jsonb array.
+    insert = text("INSERT INTO player_contracts SELECT * FROM jsonb_populate_recordset(NULL::player_contracts, CAST(:rows AS jsonb))")
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM player_contracts"))
-        conn.execute(insert, records)
+        conn.execute(insert, {"rows": json.dumps(records, default=str)})
     log.info(f"contracts: published {len(records)} rows")
 
 
-def estimated_schedule(player_id: int, mlb_debut: str | None, season: int, season_end: date) -> pd.DataFrame:
+def estimated_schedule(player_id: int, mlb_debut: str | None, season: int, season_end: date, as_of: date | None = None) -> pd.DataFrame:
     """Pre-arbitration schedule for a 40-man player Baseball-Reference does not list yet.
 
     Service time is estimated from the debut date: a full year for each completed
@@ -308,13 +328,13 @@ def estimated_schedule(player_id: int, mlb_debut: str | None, season: int, seaso
     partial = min(1.0, max(0.0, (first_end - debut).days / 172.0))
     completed = max(0, min(season, season_end.year) - debut.year)
     service = min(partial + completed, FREE_AGENT_SERVICE) if debut.year < season else 0.0
-    next_season = season + 1 if season_end <= date.today() else season
+    next_season = season + 1 if season_end <= (as_of or date.today()) else season
     schedule = _extend_schedule([], service, next_season)
     rows = [{
         "bbref_id": "", "player_name": "", "season": yr, "salary_musd": salary, "salary_kind": kind,
-        "option_musd": option, "option_kind": option_kind, "service_time": round(service, 3),
+        "option_musd": option, "option_kind": option_kind, "declined_to": declined_to, "service_time": round(service, 3),
         "how_acquired": "estimated", "fa_year": None, "contract_start": None, "contract_years": None, "contract_total_musd": None,
-    } for yr, kind, salary, option, option_kind in schedule]
+    } for yr, kind, salary, option, option_kind, declined_to in schedule]
     frame = pd.DataFrame(rows, columns=CONTRACT_FRAME_COLUMNS)
     frame["fa_year"] = next((yr for yr, kind, *_ in schedule if kind == "free_agent"), None)
     frame["player_id"] = player_id
@@ -337,7 +357,7 @@ def load_contracts(season: int) -> pd.DataFrame:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Fetch Baseball-Reference contracts into mlb.player_contracts.")
-    ap.add_argument("--season", type=int, default=date.today().year)
+    ap.add_argument("--season", type=int, default=None, help="Fallback only; the page header names its season")
     ap.add_argument("--no-write", action="store_true")
     args = ap.parse_args()
     probe = requests.get(f"{BBREF}/robots.txt", headers={"User-Agent": USER_AGENT}, timeout=30)

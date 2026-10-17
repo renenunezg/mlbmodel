@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import UTC, datetime
 
 import pandas as pd
 from sqlalchemy import text
@@ -30,13 +31,18 @@ JSON_COLUMNS = {"outlook", "tip", "inputs"}
 ARRAY_COLUMNS = {"secondary_positions"}
 
 
+# A publish must look like a population, not a filtered slice.
+MIN_VALUE_ROWS = 500
+
+
 def _records(frame: pd.DataFrame, columns: list[str]) -> list[dict]:
+    now = datetime.now(UTC).isoformat()
     out = []
     for row in frame[columns].to_dict("records"):
-        rec = {}
+        rec = {"updated_at": now}
         for key, val in row.items():
             if key in JSON_COLUMNS:
-                rec[key] = json.dumps(val, default=str)
+                rec[key] = val if val is not None else ([] if key != "tip" else {})
             elif key in ARRAY_COLUMNS:
                 rec[key] = list(val) if isinstance(val, (list, tuple)) else []
             elif val is None or (isinstance(val, float) and val != val) or val is pd.NaT:
@@ -49,19 +55,19 @@ def _records(frame: pd.DataFrame, columns: list[str]) -> list[dict]:
     return out
 
 
-def _insert(table: str, columns: list[str]) -> str:
-    placeholders = ", ".join(f"CAST(:{c} AS jsonb)" if c in JSON_COLUMNS else f":{c}" for c in columns)
-    return f"INSERT INTO {table} ({', '.join(columns)}, updated_at) VALUES ({placeholders}, now())"
+def _insert(table: str) -> str:
+    """One INSERT per table: the rows travel as a single jsonb array."""
+    return f"INSERT INTO {table} SELECT * FROM jsonb_populate_recordset(NULL::{table}, CAST(:rows AS jsonb))"
 
 
 def publish(values: pd.DataFrame, traits: pd.DataFrame) -> None:
+    if len(values) < MIN_VALUE_ROWS:
+        raise ValueError(f"refusing to publish {len(values)} player_values rows (under {MIN_VALUE_ROWS})")
     value_rows = _records(values, VALUE_COLUMNS)
     trait_rows = _records(traits, TRAIT_COLUMNS)
     with engine.begin() as conn:
         conn.execute(text("DELETE FROM player_traits"))
         conn.execute(text("DELETE FROM player_values"))
-        if value_rows:
-            conn.execute(text(_insert("player_values", VALUE_COLUMNS)), value_rows)
-        if trait_rows:
-            conn.execute(text(_insert("player_traits", TRAIT_COLUMNS)), trait_rows)
+        conn.execute(text(_insert("player_values")), {"rows": json.dumps(value_rows, default=str)})
+        conn.execute(text(_insert("player_traits")), {"rows": json.dumps(trait_rows, default=str)})
     log.info(f"published {len(value_rows)} player_values rows and {len(trait_rows)} player_traits rows")

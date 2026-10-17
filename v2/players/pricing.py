@@ -90,7 +90,9 @@ def fit_price_per_win(signings: pd.DataFrame, projected_war: pd.DataFrame) -> Pr
     if len(by_season) >= 2:
         growth = by_season.sort_index().pct_change().dropna()
         if not growth.empty:
-            inflation = float(np.clip(growth.mean(), -INFLATION_CAP, INFLATION_CAP))
+            fitted = float(growth.mean())
+            # A fit outside the cap is not evidence of a trend; the fallback stands.
+            inflation = fitted if 0.0 <= fitted <= INFLATION_CAP else FALLBACK_INFLATION
     return PriceModel(slope, se, inflation, n, f"fit_{int(data['first_season'].min())}_{int(data['first_season'].max())}")
 
 

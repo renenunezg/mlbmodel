@@ -37,3 +37,20 @@ def test_money_cells_in_thousands():
     from v2.players.contracts import _money_musd
 
     assert _money_musd("$750k") == 0.75 and _money_musd("$750,000") == 0.75 and _money_musd("$0") == 0.0
+
+
+def test_page_season_comes_from_the_header():
+    rows = parse_team_page(FIXTURE)
+    assert rows.season.min() == 2026
+
+
+def test_blank_after_arbitration_is_arbitration():
+    html = (
+        '<table id="payroll"><thead><tr><th data-stat="contract_y0" aria-label="2026"></th></tr></thead><tbody><tr>'
+        '<th data-stat="player"><a href="/players/x/testpl01.shtml">Test Player</a></th>'
+        '<td data-stat="service_time">2.100</td><td data-stat="how_acquired">Amateur Draft</td>'
+        '<td data-stat="contract_y0">Arb</td><td data-stat="contract_y1"></td><td data-stat="contract_y2"></td>'
+        '</tr></tbody></table>'
+    )
+    rows = parse_team_page(html)
+    assert rows.salary_kind.tolist()[:3] == ["arbitration", "arbitration", "arbitration"]
