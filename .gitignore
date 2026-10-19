@@ -11,3 +11,4 @@ cache/
 models/
 v2/bayesian/posteriors/*
 !v2/bayesian/posteriors/.gitkeep
+build/
