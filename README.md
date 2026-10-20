@@ -147,7 +147,7 @@ All tables live in the `mlb` schema and key off `game_pk`, the integer ID from t
 | `model_outputs_v1_archive`, `model_outputs_season_v1_archive` | Frozen v1 history pre-cutover. |
 | `model_evaluation`, `model_calibration`, `model_edge_buckets` | Running accuracy across the full season (v1 + v2 stitched). |
 | `posterior_sigmas` | Per-outcome σ rows, written after each refit. |
-| `player_values`, `player_traits`, `player_contracts`, `player_value_models` | Player valuation: Grade, Trade value, Impact and explained traits per 40-man player (`v2/players/`), scored nightly; contracts from Baseball-Reference weekly; the fitted model as one jsonb row. |
+| `player_values`, `player_details`, `player_traits`, `player_contracts`, `player_value_models` | Player valuation: Grade, Trade value, Impact, the per-player outlook and tip, and explained traits per 40-man player (`v2/players/`), scored nightly; contracts from Baseball-Reference weekly; the fitted model as one jsonb row. |
 
 Row-level security is on for every table with one policy, `public_read`, granting SELECT to `anon` and `authenticated`.
 The site reads through that policy; this pipeline writes through `DATABASE_URL` as `postgres`.

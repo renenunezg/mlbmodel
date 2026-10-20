@@ -25,7 +25,7 @@ VALUE_COLUMNS = [
     "status", "as_of", "model_version", "season", "grade", "grade_low", "grade_high", "grade_percentile", "grade_reason",
     "projected_war", "trade_value_musd", "trade_value_low", "trade_value_high", "market_value_musd", "impact_war", "impact_runs",
     "playing_time", "service_time", "contract_status", "fa_year", "control_years", "salary_current_musd",
-    "owed_through_control_musd", "outlook", "tip", "headshot_url",
+    "owed_through_control_musd", "headshot_url",
 ]
 DETAIL_COLUMNS = ["player_id", "outlook", "tip"]
 TRAIT_COLUMNS = [
