@@ -396,7 +396,7 @@ def test_chronological_acceptance_rejects_hindsight_forecasts():
     assert len(validated_forecasts(extreme)) == 1  # Do not hide overconfident errors.
 
 
-def test_postseason_probability_mass_and_completed_series():
+def test_postseason_probability_mass_and_completed_series(monkeypatch):
     """Protect bracket topology, exact series math, and absorbing completed results."""
     from v2.postseason.bracket import forecast, series_outcomes
 
@@ -428,3 +428,22 @@ def test_postseason_probability_mass_and_completed_series():
         series_outcomes([float('nan')] * 3)
     with pytest.raises(ValueError):
         forecast(teams, lambda a, b, home, n: [.5] * n, {'AL-WC45': {'NL4': 2, 'NL5': 1}})
+
+    # MLB's postponed ALCS Game 4 placeholder was also marked abstract Final.
+    # Its rescheduled final must count once, even if the placeholder comes later.
+    from v2.postseason import publish
+
+    official_teams = [dict(t, id=i) for i, t in enumerate(teams)]
+    game = dict(
+        gamePk=849817, gameType="L", seriesGameNumber=4,
+        status=dict(abstractGameState="Final", detailedState="Final"),
+        teams=dict(home=dict(team=dict(id=1), score=1), away=dict(team=dict(id=0), score=3)),
+    )
+    postponed = dict(
+        game, status=dict(abstractGameState="Final", detailedState="Postponed"),
+        teams=dict(home=dict(team=dict(id=1)), away=dict(team=dict(id=0))),
+    )
+    monkeypatch.setattr(publish, "api", lambda *a, **kw: {"dates": [{"games": [game, postponed]}]})
+    completed, scheduled = publish.schedule_context(official_teams, 2026)
+    assert completed == {"AL-CS": {"AL2": 0, "AL1": 1}}
+    assert scheduled == {("AL-CS", "AL2", "AL1", 4): game}

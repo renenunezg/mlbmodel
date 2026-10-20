@@ -151,6 +151,9 @@ def schedule_context(teams: list[dict], year: int) -> tuple[dict, dict]:
     nodes = {n["id"]: n for n in bracket_nodes(teams)}
     completed, scheduled = {}, {}
     for game in games:
+        # Postponed placeholders can have abstract state Final without a score.
+        if game["status"].get("detailedState") in {"Postponed", "Cancelled", "Canceled", "If Necessary"}:
+            continue
         sides = [game["teams"][s] for s in ("home", "away")]
         if any(s["team"]["id"] not in by_id for s in sides):
             continue  # Unassigned future opponents have placeholder team ids.
