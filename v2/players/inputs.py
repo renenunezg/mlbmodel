@@ -51,6 +51,7 @@ STATCAST_COLUMNS = [
     "zone", "pitch_type", "pitch_number", "type", "release_speed", "pfx_x", "pfx_z",
     "launch_speed", "launch_angle", "bb_type", "hc_x", "hc_y", "estimated_woba_using_speedangle", "bat_speed",
     "woba_value", "woba_denom", "inning", "inning_topbot", "home_team", "away_team", "delta_home_win_exp",
+    "release_spin_rate", "release_extension",
 ]
 
 
@@ -95,6 +96,9 @@ INPUTS: dict[str, InputSpec] = {s.name: s for s in [
     InputSpec("baserunning.sb_runs", "run", "baserunning", True, "board:baserunning"),
     InputSpec("speed.sprint_speed", "run", "speed", True, "board:sprint_speed"),
     InputSpec("stuff.velo", "pit", "stuff", True, "statcast"),
+    InputSpec("stuff.fastball_spin", "pit", "stuff", True, "statcast"),
+    InputSpec("stuff.fastball_ride", "pit", "stuff", True, "statcast"),
+    InputSpec("stuff.extension", "pit", "stuff", True, "statcast"),
     InputSpec("stuff.movement_vs_fb", "pit", "stuff", True, "statcast"),
     InputSpec("stuff.arsenal_rv100", "pit", "stuff", True, "board:pitch_arsenal_stats"),
     InputSpec("stuff.whiff_rate", "pit", "stuff", True, "statcast"),
@@ -123,8 +127,8 @@ def load_pitches(season: int, level: str = "mlb") -> pd.DataFrame:
     frame = regular_season_pitches(pd.read_parquet(path, columns=STATCAST_COLUMNS), season)
     for col in ("batter", "pitcher", "zone", "pitch_number", "launch_angle"):
         frame[col] = pd.to_numeric(frame[col], errors="coerce").astype("float64")
-    for col in ("release_speed", "pfx_x", "pfx_z", "launch_speed", "hc_x", "hc_y",
-                "estimated_woba_using_speedangle", "woba_value", "woba_denom", "bat_speed", "delta_home_win_exp"):
+    for col in ("release_speed", "pfx_x", "pfx_z", "launch_speed", "hc_x", "hc_y", "estimated_woba_using_speedangle",
+                "woba_value", "woba_denom", "bat_speed", "delta_home_win_exp", "release_spin_rate", "release_extension"):
         frame[col] = pd.to_numeric(frame[col], errors="coerce").astype("float64")
     return frame
 
@@ -226,6 +230,9 @@ def statcast_inputs(pitches: pd.DataFrame, season: int) -> pd.DataFrame:
     fastball = p[p["pitch_type"].isin(FASTBALLS)].groupby("pitcher")
     fb_mean = fastball[["pfx_x", "pfx_z"]].mean()
     out.append(_rows("pitcher", fastball["release_speed"].mean(), fastball.size(), "stuff.velo", season))
+    out.append(_rows("pitcher", fastball["release_spin_rate"].mean(), fastball["release_spin_rate"].count(), "stuff.fastball_spin", season))
+    out.append(_rows("pitcher", fastball["pfx_z"].mean(), fastball["pfx_z"].count(), "stuff.fastball_ride", season))
+    out.append(_rows("pitcher", gp["release_extension"].mean(), gp["release_extension"].count(), "stuff.extension", season))
     secondary = p[~p["pitch_type"].isin(FASTBALLS) & p["pfx_x"].notna()].join(fb_mean, on="pitcher", rsuffix="_fb")
     sep = np.hypot(secondary["pfx_x"] - secondary["pfx_x_fb"], secondary["pfx_z"] - secondary["pfx_z_fb"])
     sep_g = sep.groupby(secondary["pitcher"])
@@ -300,11 +307,20 @@ def _board_inputs(season: int, refresh: bool = False) -> pd.DataFrame:
     return pd.concat(out, ignore_index=True) if out else pd.DataFrame(columns=LONG_COLUMNS)
 
 
+def statcast_input_names() -> set[str]:
+    """Inputs the Statcast builder always produces when pitch tracking exists (bat tracking is newer than some caches)."""
+    return {n for n, s in INPUTS.items() if s.source == "statcast" and not n.startswith(("power.bat_speed", "power.hard_swing", "contact.squared_up"))}
+
+
 def season_inputs(season: int, *, refresh: bool = False) -> pd.DataFrame:
     """Long input frame for one season, cached at cache/players/inputs_{season}.parquet."""
     path = CACHE_DIR / f"inputs_{season}.parquet"
     if path.exists() and not refresh:
-        return pd.read_parquet(path)
+        cached = pd.read_parquet(path)
+        # A cache written before an input existed is rebuilt, so every season carries the same inputs.
+        if statcast_input_names() <= set(cached["input"]):
+            return cached
+        log.info(f"inputs[{season}]: cache lacks newer inputs; rebuilding")
     pitches = load_pitches(season)
     frame = pd.concat([statcast_inputs(pitches, season), _board_inputs(season, refresh=refresh)], ignore_index=True)
     frame = frame.astype({"player_id": "int64", "season": "int64", "value": "float64", "sample": "float64"})
