@@ -116,6 +116,7 @@ class SeasonData:
         self.inputs = {s: inputs.season_inputs(s) for s in seasons}
         self.counts = {s: inputs.outcome_counts(s) for s in seasons}
         self.pseudo = {s: minors.pseudo_counts(s) for s in seasons}
+        self.aaa_inputs = {s: minors.season_inputs(s) for s in seasons}
         self.positions = bio.positions(seasons)
         self.linear_weights = {s: runs_mod.linear_weights(s) for s in seasons}
         self.pa_per_ip = {s: runs_mod.pa_per_inning(s) for s in seasons}
@@ -126,12 +127,18 @@ class SeasonData:
             self._ages[season] = bio.ages(season)
         return self._ages[season]
 
-    def window(self, t: int, offsets: dict[int, float], aaa_scale: float) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.DataFrame | None]:
-        """(inputs, MLB counts, position groups, Triple-A prior counts) over the window ending in ``t``."""
-        weights = {t - back: w for back, w in offsets.items() if t - back in self.inputs}
-        win = inputs.window({s: self.inputs[s] for s in weights}, weights)
+    def window(self, t: int, model: ValueModel) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.DataFrame | None]:
+        """(inputs, MLB counts, position groups, Triple-A prior counts) over the window ending in ``t``.
+
+        The model supplies the window weights, the Triple-A scale and input offsets, and the shrink strength.
+        """
+        weights = {t - back: w for back, w in model.window_weights.items() if t - back in self.inputs}
+        players = pd.Index(pd.concat([self.inputs[s]["player_id"] for s in weights]).unique())
+        frames = {s: pd.concat([self.inputs[s], minors.translated_inputs(self.aaa_inputs[s], model.aaa_input_offsets, model.shrink_strength, model.aaa_scale, players)],
+                               ignore_index=True) for s in weights}
+        win = inputs.window(frames, weights)
         counts = inputs.window_counts({s: self.counts[s] for s in weights}, weights)
-        prior = minors.prior_counts(self.pseudo, weights, set(weights), aaa_scale)
+        prior = minors.prior_counts(self.pseudo, weights, set(weights), model.aaa_scale)
         pos = self.positions[self.positions["season"].isin(weights)]
         groups = bio.primary_position(pos, weights).set_index("player_id")["position_group"]
         return win, counts, groups, prior
@@ -188,7 +195,7 @@ def _z_within(values: pd.Series, key: pd.Series) -> pd.Series:
 
 def build_pair(data: SeasonData, t: int, model: ValueModel) -> dict:
     """Everything a development pair (t, t+1) contributes: features at t, targets at t+1."""
-    win, counts, groups, prior = data.window(t, model.window_weights, model.aaa_scale)
+    win, counts, groups, prior = data.window(t, model)
     values, samples = features.wide_inputs(win)
     group = groups.reindex(values.index).fillna("DH")
     rates = inputs.shrunk_rates(counts, groups, model.shrink_strength, prior)
@@ -206,6 +213,7 @@ def build_pair(data: SeasonData, t: int, model: ValueModel) -> dict:
 def choose_window_and_shrink(data: SeasonData, dev_first: list[int]) -> tuple[dict[int, float], float, float]:
     """Window, shrink, and Triple-A scale by next-season multinomial log-likelihood of shrunk rates over the development pairs."""
     best, best_ll = None, -np.inf
+    candidate = ValueModel.empty([], (0, 0))
     # Every candidate is judged on the same players: those with counts in season t
     # (the single-season window's population) and a full sample in t+1.
     targets = {}
@@ -217,7 +225,8 @@ def choose_window_and_shrink(data: SeasonData, dev_first: list[int]) -> tuple[di
     for cand in WINDOW_CANDIDATES:
         offsets = {i: w for i, w in enumerate(cand)}
         for aaa_scale in minors.SCALE_CANDIDATES:
-            windows = {t: data.window(t, offsets, aaa_scale) for t in dev_first}
+            candidate.window_weights, candidate.aaa_scale = offsets, aaa_scale
+            windows = {t: data.window(t, candidate) for t in dev_first}
             for strength in SHRINK_CANDIDATES:
                 ll = 0.0
                 for t in dev_first:
@@ -449,6 +458,7 @@ def fit(last_dev_season: int = 2024, holdout_pair: tuple[int, int] | None = None
 
     offsets, strength, aaa_scale = choose_window_and_shrink(data, dev_first)
     model.window_weights, model.shrink_strength, model.aaa_scale = offsets, strength, aaa_scale
+    model.aaa_input_offsets = minors.input_offsets({s: data.inputs[s] for s in dev_seasons}, {s: data.aaa_inputs[s] for s in dev_seasons})
     model.linear_weights = data.linear_weights[last_dev_season]
     model.pa_per_ip = data.pa_per_ip[last_dev_season]
     model.runs_per_win = runs_mod.runs_per_win(last_dev_season)

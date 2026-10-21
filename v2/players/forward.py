@@ -102,6 +102,7 @@ def grade_models(last_dev_season: int) -> tuple[ValueModel, ValueModel]:
     data = SeasonData(seasons)
     model = ValueModel.empty(list(range(FIRST_PAIR_SEASON, last_dev_season + 2)), (last_dev_season + 1, last_dev_season + 2))
     model.window_weights, model.shrink_strength, model.aaa_scale = choose_window_and_shrink(data, dev_first)
+    model.aaa_input_offsets = minors.input_offsets(data.inputs, data.aaa_inputs)
     model.linear_weights = data.linear_weights[last_dev_season]
     model.pa_per_ip = data.pa_per_ip[last_dev_season]
     pairs = [build_pair(data, t, model) for t in dev_first]
@@ -129,6 +130,7 @@ class SeasonMaterial:
         self.pitches["game_date"] = pd.to_datetime(self.pitches["game_date"]).dt.date
         self.prior = [s for s in (season - 1, season - 2) if _has_statcast(s)]
         self.prior_inputs = {s: inputs.season_inputs(s) for s in self.prior}
+        self.prior_aaa_inputs = {s: minors.season_inputs(s) for s in self.prior}
         self.prior_counts = {s: inputs.outcome_counts(s) for s in self.prior}
         self.prior_positions = bio.positions(self.prior)
         self.prior_pseudo = {s: minors.pseudo_counts(s) for s in self.prior}
@@ -159,6 +161,9 @@ def grade_as_of(m: SeasonMaterial, as_of: date) -> pd.DataFrame:
         frames[m.season] = inputs.statcast_inputs(before, m.season)
         counts[m.season] = inputs.count_outcomes(before, m.season)
         pos = pd.concat([pos, bio.positions([m.season], before=as_of)], ignore_index=True)
+    players = pd.Index(pd.concat([f["player_id"] for f in frames.values()]).unique())
+    for s in m.prior:
+        frames[s] = pd.concat([frames[s], minors.translated_inputs(m.prior_aaa_inputs[s], m.model.aaa_input_offsets, m.model.shrink_strength, m.model.aaa_scale, players)], ignore_index=True)
     win = inputs.window(frames, weights)
     wc = inputs.window_counts(counts, weights)
     prior = minors.prior_counts(m.prior_pseudo, weights, set(frames), m.model.aaa_scale)

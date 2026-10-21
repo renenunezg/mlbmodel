@@ -448,6 +448,9 @@ def gather(as_of: date, model: ValueModel, season: int | None = None) -> dict:
     _, season_end = bio.season_dates(season)
     completed = [s for s in frames if s < season or as_of > season_end]
     prior = minors.prior_counts({s: minors.pseudo_counts(s) for s in completed}, weights, set(frames), model.aaa_scale)
+    players = pd.Index(pd.concat([f["player_id"] for f in frames.values()]).unique())
+    for s in completed:
+        frames[s] = pd.concat([frames[s], minors.translated_inputs(minors.season_inputs(s), model.aaa_input_offsets, model.shrink_strength, model.aaa_scale, players)], ignore_index=True)
     win = inputs.window(frames, weights)
     wc = inputs.window_counts(counts, weights)
     group_of = groups.set_index("player_id")["position_group"]

@@ -24,7 +24,7 @@ def historical_projection(model: ValueModel, first: int, last: int) -> pd.DataFr
     # Do not load target-season inputs or filter on today's roster.
     seasons = list(range(first - 3, first))
     data = fit.SeasonData(seasons)
-    win, counts, groups, prior = data.window(first - 1, model.window_weights, model.aaa_scale)
+    win, counts, groups, prior = data.window(first - 1, model)
     rates = inputs.shrunk_rates(counts, groups, model.shrink_strength, prior)
     lines = cached_lines()
     prior = lines[lines["season"] < first].dropna(subset=["age"]).sort_values("season").drop_duplicates("player_id", keep="last")

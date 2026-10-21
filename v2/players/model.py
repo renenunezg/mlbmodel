@@ -51,6 +51,7 @@ class ValueModel:
     window_weights: dict[int, float] = field(default_factory=lambda: dict(DEFAULT_WINDOW))  # seasons back -> weight
     shrink_strength: float = DEFAULT_SHRINK
     aaa_scale: float = 0.0  # Triple-A plate appearances per MLB plate appearance in the outcome window
+    aaa_input_offsets: dict[str, float] = field(default_factory=dict)  # input -> MLB level minus Triple-A level
     # One row per (pool, trait, input): weight within the trait, status.
     trait_weights: list[dict] = field(default_factory=list)
     # One row per (pool, feature): coefficient on the z-scored feature, plus the intercept rows.

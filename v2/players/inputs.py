@@ -115,9 +115,9 @@ INPUTS: dict[str, InputSpec] = {s.name: s for s in [
 LONG_COLUMNS = ["player_id", "season", "role", "input", "value", "sample"]
 
 
-def load_pitches(season: int) -> pd.DataFrame:
-    """Regular-season pitches of one season from the Statcast cache, typed for input building."""
-    path = STATCAST_DIR / f"statcast_{season}.parquet"
+def load_pitches(season: int, level: str = "mlb") -> pd.DataFrame:
+    """Regular-season pitches of one season from the MLB or Triple-A (``level="aaa"``) Statcast cache, typed for input building."""
+    path = STATCAST_DIR / (f"statcast_{season}.parquet" if level == "mlb" else f"statcast_aaa_{season}.parquet")
     if not path.exists():
         raise FileNotFoundError(f"Missing {path}; run python -m v2.data.build_cache --years {season}")
     frame = regular_season_pitches(pd.read_parquet(path, columns=STATCAST_COLUMNS), season)
