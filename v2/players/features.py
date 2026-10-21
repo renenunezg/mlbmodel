@@ -13,7 +13,7 @@ import pandas as pd
 
 from v2.data.pa_dataset import OUTCOMES
 from v2.players import runs as runs_mod
-from v2.players.inputs import INPUTS
+from v2.players.inputs import INPUTS, prior_rates
 from v2.players.model import ValueModel
 
 Z_CAP = 3.0
@@ -22,6 +22,9 @@ MIN_INPUT_AVAILABILITY = 0.5
 HITTER_POOL, PITCHER_POOL = "hitter", "pitcher"
 PITCHER_GROUPS = {"SP", "RP"}
 CATCHER_INPUTS = {"arm.cs_above_average", "arm.pop_time", "reliability.blocking_runs", "reliability.framing_runs"}
+# Seasonal age in the projected season enters the grade as (age - 28) and its square; unknown counts as 28.
+AGE_CENTER = 28.0
+AGE_FEATURES = ("age", "age2")
 
 
 @dataclass(frozen=True)
@@ -155,10 +158,12 @@ def pitching_runs_for(rates: pd.DataFrame, model: ValueModel, role: pd.Series, l
     return runs_mod.pitching_runs(pit, model.linear_weights, role.reindex(pit.index).fillna("SP"), model.pa_per_ip, leverage)
 
 
-def grade_features(composites: pd.DataFrame, shrunk: pd.Series, pool: pd.Series) -> pd.DataFrame:
-    """The design matrix for the group grade: trait composites plus the shrunk-runs feature."""
+def grade_features(composites: pd.DataFrame, shrunk: pd.Series, pool: pd.Series, age: pd.Series) -> pd.DataFrame:
+    """The design matrix for the group grade: trait composites, the shrunk-runs feature, and age."""
     x = composites.copy()
     x["shrunk_runs"] = shrunk.reindex(x.index)
+    centred = (pd.to_numeric(age, errors="coerce").astype("float64").reindex(x.index) - AGE_CENTER).fillna(0.0)
+    x["age"], x["age2"] = centred, centred ** 2
     x["pool"] = pool
     return x
 
@@ -203,15 +208,14 @@ def reliability_band(sample: pd.Series, k: pd.Series | float) -> pd.Series:
     return 10.0 * np.sqrt((1 - r).clip(lower=0))
 
 
-def dirichlet_draws(counts: pd.DataFrame, group_of: pd.Series, strength: float, k: int, seed: int = 7) -> np.ndarray:
+def dirichlet_draws(counts: pd.DataFrame, group_of: pd.Series, strength: float, k: int, seed: int = 7,
+                    prior_counts: pd.DataFrame | None = None) -> np.ndarray:
     """K draws of outcome rates per player from the shrunk Dirichlet posterior, shape (rows, k, 8)."""
     cols = list(OUTCOMES)
     frame = counts[["player_id", "role", *cols]].copy()
     frame["group"] = frame["player_id"].map(group_of)
     frame["group"] = frame["group"].fillna(pd.Series(np.where(frame["role"].eq("pit"), "RP", "DH"), index=frame.index))
-    totals = frame.groupby("group")[cols].sum()
-    prior = totals.div(totals.sum(axis=1), axis=0).reindex(frame["group"]).values
-    alpha = frame[cols].values + strength * prior
+    alpha = frame[cols].values + strength * prior_rates(frame, strength, prior_counts)
     rng = np.random.default_rng(seed)
     draws = np.empty((len(frame), k, len(cols)))
     for i in range(len(frame)):

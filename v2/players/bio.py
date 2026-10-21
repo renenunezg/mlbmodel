@@ -168,10 +168,11 @@ def _pitcher_roles(pitches: pd.DataFrame) -> pd.DataFrame:
     })
 
 
-def positions(seasons: list[int]) -> pd.DataFrame:
+def positions(seasons: list[int], before: date | None = None) -> pd.DataFrame:
     """Innings fielded by position per player-season, from who stood where on every pitch.
 
     Batters with plate appearances but no fielding innings are DH. Pitchers are SP or RP.
+    ``before`` keeps only games played before that date, for as-of evaluations.
     """
     fielder_cols = [f"fielder_{k}" for k in FIELD_POSITIONS]
     frames = []
@@ -179,6 +180,8 @@ def positions(seasons: list[int]) -> pd.DataFrame:
         pitches = _load_pitches(
             season, ["game_pk", "inning", "inning_topbot", "home_team", "away_team", "batter", "pitcher", "events", *fielder_cols],
         )
+        if before is not None:
+            pitches = pitches[pd.to_datetime(pitches["game_date"]).dt.date < before]
         half = pitches[["game_pk", "inning", "inning_topbot", *fielder_cols]].drop_duplicates()
         long = half.melt(id_vars=["game_pk", "inning", "inning_topbot"], value_vars=fielder_cols,
                          var_name="slot", value_name="player_id").dropna(subset=["player_id"])
@@ -296,6 +299,16 @@ def league_season_lines(seasons: list[int], group: str, *, refresh: bool = False
             frame.to_parquet(path, index=False)
         frames.append(frame)
     return pd.concat(frames, ignore_index=True)
+
+
+def ages(season: int) -> pd.Series:
+    """Seasonal age in ``season`` by player_id for everyone with an MLB line that season or the one before."""
+    parts = []
+    for s, shift in ((season, 0), (season - 1, 1)):
+        for group in ("hitting", "pitching"):
+            lines = league_season_lines([s], group)
+            parts.append(pd.Series(lines["age"].to_numpy(float) + shift, index=lines["player_id"].to_numpy()))
+    return pd.concat(parts).groupby(level=0).first()
 
 
 def offseason_roster(season: int) -> pd.DataFrame:

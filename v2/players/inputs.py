@@ -115,7 +115,8 @@ INPUTS: dict[str, InputSpec] = {s.name: s for s in [
 LONG_COLUMNS = ["player_id", "season", "role", "input", "value", "sample"]
 
 
-def _load(season: int) -> pd.DataFrame:
+def load_pitches(season: int) -> pd.DataFrame:
+    """Regular-season pitches of one season from the Statcast cache, typed for input building."""
     path = STATCAST_DIR / f"statcast_{season}.parquet"
     if not path.exists():
         raise FileNotFoundError(f"Missing {path}; run python -m v2.data.build_cache --years {season}")
@@ -161,7 +162,7 @@ def _batted_ball_inputs(bip: pd.DataFrame, key: str, prefix_map: dict[str, str],
     return out
 
 
-def _statcast_inputs(pitches: pd.DataFrame, season: int) -> pd.DataFrame:
+def statcast_inputs(pitches: pd.DataFrame, season: int) -> pd.DataFrame:
     p = pitches
     p = p.assign(
         swing=p["description"].isin(SWING),
@@ -304,8 +305,8 @@ def season_inputs(season: int, *, refresh: bool = False) -> pd.DataFrame:
     path = CACHE_DIR / f"inputs_{season}.parquet"
     if path.exists() and not refresh:
         return pd.read_parquet(path)
-    pitches = _load(season)
-    frame = pd.concat([_statcast_inputs(pitches, season), _board_inputs(season, refresh=refresh)], ignore_index=True)
+    pitches = load_pitches(season)
+    frame = pd.concat([statcast_inputs(pitches, season), _board_inputs(season, refresh=refresh)], ignore_index=True)
     frame = frame.astype({"player_id": "int64", "season": "int64", "value": "float64", "sample": "float64"})
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     frame.to_parquet(path, index=False)
@@ -318,7 +319,15 @@ def outcome_counts(season: int, *, refresh: bool = False) -> pd.DataFrame:
     path = CACHE_DIR / f"outcomes_{season}.parquet"
     if path.exists() and not refresh:
         return pd.read_parquet(path)
-    p = _load(season)
+    out = count_outcomes(load_pitches(season), season)
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    out.to_parquet(path, index=False)
+    return out
+
+
+def count_outcomes(pitches: pd.DataFrame, season: int) -> pd.DataFrame:
+    """Outcome counts per (player, role) from a frame of pitches, in the ``outcome_counts`` layout."""
+    p = pitches
     pa = p[p["events"].notna() & ~p["events"].isin(NON_PA_EVENTS)].copy()
     pa["outcome"] = pa["events"].map(EVENT_TO_OUTCOME)
     pa = pa.dropna(subset=["outcome"])
@@ -336,8 +345,6 @@ def outcome_counts(season: int, *, refresh: bool = False) -> pd.DataFrame:
     out = pd.concat(frames, ignore_index=True).fillna(0)
     out["season"] = season
     out["player_id"] = out["player_id"].astype("int64")
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    out.to_parquet(path, index=False)
     return out
 
 
@@ -378,9 +385,13 @@ def window(frames_by_season: dict[int, pd.DataFrame], weights: dict[int, float])
     return agg[LONG_COLUMNS]
 
 
-def window_counts(counts_by_season: dict[int, pd.DataFrame], weights: dict[int, float]) -> pd.DataFrame:
-    """Season-weighted outcome counts per (player, role), with weights normalized to sum to one."""
-    weights = _normalized(weights, {s for s, f in counts_by_season.items() if not f.empty})
+def window_counts(counts_by_season: dict[int, pd.DataFrame], weights: dict[int, float], present: set[int] | None = None) -> pd.DataFrame:
+    """Season-weighted outcome counts per (player, role), with weights normalized to sum to one.
+
+    ``present`` fixes the seasons the weights are normalized over, so a frame
+    covering fewer seasons (Triple-A) is weighted exactly like the MLB window.
+    """
+    weights = _normalized(weights, present if present is not None else {s for s, f in counts_by_season.items() if not f.empty})
     parts = []
     for season, frame in counts_by_season.items():
         w = weights.get(season, 0.0)
@@ -394,20 +405,36 @@ def window_counts(counts_by_season: dict[int, pd.DataFrame], weights: dict[int, 
     return stacked.groupby(["player_id", "role"]).sum().reset_index()
 
 
-def shrunk_rates(counts: pd.DataFrame, group_of: pd.Series, strength: float) -> pd.DataFrame:
-    """Dirichlet-multinomial shrink of each player's outcome counts toward his group's rates.
+def prior_rates(frame: pd.DataFrame, strength: float, prior_counts: pd.DataFrame | None) -> np.ndarray:
+    """Each row's prior outcome rates: the group's rates, leaning on the player's own prior counts where he has them.
 
-    ``group_of`` maps player_id to position group. Returns one row per player with the
-    eight shrunk rates, ``n`` (weighted PA), and ``group``.
+    ``prior_counts`` (player_id index, outcome columns) are batting pseudo-counts such
+    as translated Triple-A plate appearances. They move the prior mean with weight
+    ``A / (strength + A)`` and never add to the player's sample, so a thin MLB record
+    regresses toward his minor-league record while an established one is untouched.
+    """
+    cols = list(OUTCOMES)
+    totals = frame.groupby("group")[cols].sum()
+    group = totals.div(totals.sum(axis=1), axis=0).reindex(frame["group"]).values
+    if prior_counts is None or prior_counts.empty:
+        return group
+    own = prior_counts.reindex(frame["player_id"])[cols].fillna(0.0).values
+    own = np.where(frame["role"].eq("bat").values[:, None], own, 0.0)
+    return (strength * group + own) / (strength + own.sum(axis=1, keepdims=True))
+
+
+def shrunk_rates(counts: pd.DataFrame, group_of: pd.Series, strength: float, prior_counts: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Dirichlet-multinomial shrink of each player's outcome counts toward his prior rates.
+
+    ``group_of`` maps player_id to position group; see ``prior_rates`` for ``prior_counts``.
+    Returns one row per player with the eight shrunk rates, ``n`` (weighted PA), and ``group``.
     """
     cols = list(OUTCOMES)
     frame = counts[["player_id", "role", *cols]].copy()
     frame["group"] = frame["player_id"].map(group_of)
     frame["group"] = frame["group"].fillna(pd.Series(np.where(frame["role"].eq("pit"), "RP", "DH"), index=frame.index))
-    totals = frame.groupby("group")[cols].sum()
-    prior = totals.div(totals.sum(axis=1), axis=0)
     n = frame[cols].sum(axis=1)
-    prior_rows = prior.reindex(frame["group"]).values
+    prior_rows = prior_rates(frame, strength, prior_counts)
     shrunk = (frame[cols].values + strength * prior_rows) / (n.values[:, None] + strength)
     out = pd.DataFrame(shrunk, columns=cols)
     out.insert(0, "player_id", frame["player_id"].values)

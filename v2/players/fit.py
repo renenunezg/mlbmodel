@@ -25,7 +25,7 @@ from scipy.stats import spearmanr
 from backend.db import writes_allowed
 from backend.log import setup_logging
 from v2.data.pa_dataset import OUTCOMES
-from v2.players import aging, bio, features, inputs, pricing, production, workload
+from v2.players import aging, bio, features, inputs, minors, pricing, production, workload
 from v2.players import runs as runs_mod
 from v2.players.inputs import INPUTS
 from v2.players.model import MODELS_DIR, ValueModel, model_path, publish_model
@@ -95,35 +95,49 @@ def fit_ridge(pairs: dict[int, tuple[np.ndarray, np.ndarray]], lower: np.ndarray
 # Season data.
 
 
+def season_rates(counts: pd.DataFrame) -> pd.DataFrame:
+    """Outcome rates, sample, and the summary rates each trait target uses, from an outcome-count frame."""
+    c = counts
+    n = c[list(OUTCOMES)].sum(axis=1)
+    out = c[["player_id", "role"]].copy()
+    for k in OUTCOMES:
+        out[k] = c[k] / n.where(n > 0)
+    out["n"] = n
+    out["k_rate"], out["bb_rate"], out["hr_rate"] = out["K"], out["BB"], out["HR"]
+    out["iso"] = out["2B"] + 2 * out["3B"] + 3 * out["HR"]
+    out["woba"] = sum(WOBA[k] * out[k] for k in WOBA)
+    return out
+
+
 class SeasonData:
     """Cached per-season frames: inputs, counts, positions."""
 
     def __init__(self, seasons: list[int]):
         self.inputs = {s: inputs.season_inputs(s) for s in seasons}
         self.counts = {s: inputs.outcome_counts(s) for s in seasons}
+        self.pseudo = {s: minors.pseudo_counts(s) for s in seasons}
         self.positions = bio.positions(seasons)
         self.linear_weights = {s: runs_mod.linear_weights(s) for s in seasons}
         self.pa_per_ip = {s: runs_mod.pa_per_inning(s) for s in seasons}
+        self._ages: dict[int, pd.Series] = {}
 
-    def window(self, t: int, offsets: dict[int, float]) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series]:
+    def ages(self, season: int) -> pd.Series:
+        if season not in self._ages:
+            self._ages[season] = bio.ages(season)
+        return self._ages[season]
+
+    def window(self, t: int, offsets: dict[int, float], aaa_scale: float) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.DataFrame | None]:
+        """(inputs, MLB counts, position groups, Triple-A prior counts) over the window ending in ``t``."""
         weights = {t - back: w for back, w in offsets.items() if t - back in self.inputs}
         win = inputs.window({s: self.inputs[s] for s in weights}, weights)
         counts = inputs.window_counts({s: self.counts[s] for s in weights}, weights)
+        prior = minors.prior_counts(self.pseudo, weights, set(weights), aaa_scale)
         pos = self.positions[self.positions["season"].isin(weights)]
         groups = bio.primary_position(pos, weights).set_index("player_id")["position_group"]
-        return win, counts, groups
+        return win, counts, groups, prior
 
     def season_rates(self, s: int) -> pd.DataFrame:
-        c = self.counts[s]
-        n = c[list(OUTCOMES)].sum(axis=1)
-        out = c[["player_id", "role"]].copy()
-        for k in OUTCOMES:
-            out[k] = c[k] / n.where(n > 0)
-        out["n"] = n
-        out["k_rate"], out["bb_rate"], out["hr_rate"] = out["K"], out["BB"], out["HR"]
-        out["iso"] = out["2B"] + 2 * out["3B"] + 3 * out["HR"]
-        out["woba"] = sum(WOBA[k] * out[k] for k in WOBA)
-        return out
+        return season_rates(self.counts[s])
 
     def targets(self, t1: int, groups: pd.Series) -> tuple[pd.DataFrame, pd.DataFrame]:
         """(trait targets wide by trait, group target) for season t1, indexed by (player_id, role)."""
@@ -151,7 +165,8 @@ class SeasonData:
         per_pa = rates[list(OUTCOMES)].values @ w
         innings = np.where(group.eq("SP"), runs_mod.STARTER_INNINGS, runs_mod.RELIEVER_INNINGS)
         pitcher_total = pd.Series(-per_pa * self.pa_per_ip[t1] * innings, index=rates.index)
-        target = pd.DataFrame({"role": role, "n": rates["n"], "target": np.where(role.eq("bat"), hitter_total, pitcher_total), "woba": rates["woba"]})
+        target = pd.DataFrame({"role": role, "n": rates["n"], "target": np.where(role.eq("bat"), hitter_total, pitcher_total),
+                               "bat_runs": rates["bat_runs"], "woba": rates["woba"]})
         traits["role"] = role
         return traits.reset_index(), target.reset_index()
 
@@ -173,10 +188,10 @@ def _z_within(values: pd.Series, key: pd.Series) -> pd.Series:
 
 def build_pair(data: SeasonData, t: int, model: ValueModel) -> dict:
     """Everything a development pair (t, t+1) contributes: features at t, targets at t+1."""
-    win, counts, groups = data.window(t, model.window_weights)
+    win, counts, groups, prior = data.window(t, model.window_weights, model.aaa_scale)
     values, samples = features.wide_inputs(win)
     group = groups.reindex(values.index).fillna("DH")
-    rates = inputs.shrunk_rates(counts, groups, model.shrink_strength)
+    rates = inputs.shrunk_rates(counts, groups, model.shrink_strength, prior)
     pool = pd.Series(features.pool_of(group), index=values.index)
     z = features.oriented_z(values, pool)
     sample = features.role_rows(rates, group).set_index("player_id")["n"].reindex(values.index).fillna(0.0)
@@ -184,11 +199,12 @@ def build_pair(data: SeasonData, t: int, model: ValueModel) -> dict:
     leverage = values["workload.leverage"] if "workload.leverage" in values.columns else None
     shrunk = features.shrunk_runs(rates, model, group, leverage).reindex(values.index)
     return {"t": t, "values": values, "samples": samples, "z": z, "pool": pool, "group": group, "rates": rates,
-            "sample": sample, "traits_next": traits_next, "target_next": target_next, "shrunk": shrunk, "counts": counts}
+            "sample": sample, "traits_next": traits_next, "target_next": target_next, "shrunk": shrunk, "counts": counts,
+            "age": data.ages(t + 1).reindex(values.index)}
 
 
-def choose_window_and_shrink(data: SeasonData, dev_first: list[int]) -> tuple[dict[int, float], float]:
-    """Next-season multinomial log-likelihood of shrunk rates over the development pairs."""
+def choose_window_and_shrink(data: SeasonData, dev_first: list[int]) -> tuple[dict[int, float], float, float]:
+    """Window, shrink, and Triple-A scale by next-season multinomial log-likelihood of shrunk rates over the development pairs."""
     best, best_ll = None, -np.inf
     # Every candidate is judged on the same players: those with counts in season t
     # (the single-season window's population) and a full sample in t+1.
@@ -200,17 +216,19 @@ def choose_window_and_shrink(data: SeasonData, dev_first: list[int]) -> tuple[di
         targets[t] = nxt.loc[nxt.index.intersection(present)]
     for cand in WINDOW_CANDIDATES:
         offsets = {i: w for i, w in enumerate(cand)}
-        for strength in SHRINK_CANDIDATES:
-            ll = 0.0
-            for t in dev_first:
-                _, counts, groups = data.window(t, offsets)
-                rates = inputs.shrunk_rates(counts, groups, strength).set_index(["player_id", "role"])
-                nxt = targets[t]
-                r = rates.reindex(nxt.index)[list(OUTCOMES)].fillna(1.0 / len(OUTCOMES)).values
-                ll += float((nxt[list(OUTCOMES)].values * np.log(np.clip(r, 1e-9, 1))).sum())
-            log.info(f"window {cand} shrink {strength}: log-lik {ll:,.0f}")
-            if ll > best_ll:
-                best, best_ll = (offsets, strength), ll
+        for aaa_scale in minors.SCALE_CANDIDATES:
+            windows = {t: data.window(t, offsets, aaa_scale) for t in dev_first}
+            for strength in SHRINK_CANDIDATES:
+                ll = 0.0
+                for t in dev_first:
+                    _, counts, groups, prior = windows[t]
+                    rates = inputs.shrunk_rates(counts, groups, strength, prior).set_index(["player_id", "role"])
+                    nxt = targets[t]
+                    r = rates.reindex(nxt.index)[list(OUTCOMES)].fillna(1.0 / len(OUTCOMES)).values
+                    ll += float((nxt[list(OUTCOMES)].values * np.log(np.clip(r, 1e-9, 1))).sum())
+                log.info(f"window {cand} triple-a {aaa_scale} shrink {strength}: log-lik {ll:,.0f}")
+                if ll > best_ll:
+                    best, best_ll = (offsets, strength, aaa_scale), ll
     return best
 
 
@@ -256,7 +274,7 @@ def _fit_pools(p: dict) -> pd.Series:
 
 def grade_design(p: dict, model: ValueModel) -> tuple[pd.DataFrame, pd.Series, pd.Series]:
     comps, _ = features.trait_composites(p["z"], p["pool"], model)
-    x = features.grade_features(comps, p["shrunk"], p["pool"])
+    x = features.grade_features(comps, p["shrunk"], p["pool"], p["age"])
     tn = _by_role(p["target_next"], p["group"])
     y = tn["target"].reindex(x.index)
     ok = (p["sample"] >= MIN_FIT_SAMPLE) & (tn["n"].reindex(x.index).fillna(0) >= MIN_TARGET_SAMPLE) & y.notna() & x["shrunk_runs"].notna()
@@ -265,10 +283,11 @@ def grade_design(p: dict, model: ValueModel) -> tuple[pd.DataFrame, pd.Series, p
 
 def fit_grade_weights(pairs: list[dict], model: ValueModel) -> list[dict]:
     rows: list[dict] = []
-    feature_cols = [t for t in features.TRAITS] + ["shrunk_runs"]
+    feature_cols = [t for t in features.TRAITS] + ["shrunk_runs", *features.AGE_FEATURES]
     for pool_name in (features.HITTER_POOL, "SP", "RP"):
         design = {}
-        cols = [c for c in feature_cols if c == "shrunk_runs" or features.TRAITS[c].pool == (features.PITCHER_POOL if pool_name != features.HITTER_POOL else features.HITTER_POOL)]
+        cols = [c for c in feature_cols if c not in features.TRAITS
+                or features.TRAITS[c].pool == (features.PITCHER_POOL if pool_name != features.HITTER_POOL else features.HITTER_POOL)]
         for p in pairs:
             x, y, ok = grade_design(p, model)
             ok &= _fit_pools(p) == pool_name
@@ -277,14 +296,16 @@ def fit_grade_weights(pairs: list[dict], model: ValueModel) -> list[dict]:
             design[p["t"]] = (x.loc[ok, cols].fillna(0.0).to_numpy(float), y[ok].to_numpy(float))
         if not design:
             continue
-        beta, penalty = fit_ridge(design, np.zeros(len(cols)))
+        # Traits and shrunk runs are oriented higher-is-better; age may slope either way.
+        lower = np.array([-np.inf if c in features.AGE_FEATURES else 0.0 for c in cols])
+        beta, penalty = fit_ridge(design, lower)
         rows.append({"pool": pool_name, "feature": "intercept", "coefficient": float(beta[0]), "penalty": penalty})
         for c, b in zip(cols, beta[1:], strict=True):
             rows.append({"pool": pool_name, "feature": c, "coefficient": float(b) if abs(b) > ZERO_COEFFICIENT else 0.0})
     return rows
 
 
-def _spearman(a: pd.Series, b: pd.Series) -> float:
+def spearman(a: pd.Series, b: pd.Series) -> float:
     joined = pd.concat([a, b], axis=1).dropna()
     if len(joined) < 10:
         return float("nan")
@@ -299,8 +320,8 @@ def reliability_k(pairs: list[dict], model: ValueModel) -> dict[str, float]:
             continue
         ca, _ = features.trait_composites(a["z"], a["pool"], model)
         cb, _ = features.trait_composites(b["z"], b["pool"], model)
-        xa = features.grade_features(ca, a["shrunk"], a["pool"])
-        xb = features.grade_features(cb, b["shrunk"], b["pool"])
+        xa = features.grade_features(ca, a["shrunk"], a["pool"], a["age"])
+        xb = features.grade_features(cb, b["shrunk"], b["pool"], b["age"])
         ga, gb = features.project_runs(xa, a["group"], model), features.project_runs(xb, b["group"], model)
         pools_a = _fit_pools(a)
         for trait in features.TRAITS:
@@ -321,23 +342,26 @@ def reliability_k(pairs: list[dict], model: ValueModel) -> dict[str, float]:
         frame["bin"] = pd.qcut(frame["n"], RELIABILITY_BINS, labels=False, duplicates="drop")
         ks = []
         for _, g in frame.groupby("bin"):
-            r = _spearman(g["x"], g["y"])
+            r = spearman(g["x"], g["y"])
             if r == r and r > 0.02:
                 ks.append(float(g["n"].median()) * (1 / np.sqrt(r) - 1))
         out[name] = float(np.median(ks)) if ks else 0.0
     return out
 
 
-def marcel(data: SeasonData, t: int, role: str) -> pd.Series:
-    """Three-season weighted wOBA (hitters) or runs allowed per PA (pitchers), regressed to 1,200 PA of league average."""
+def marcel(rates_by_season: dict[int, pd.DataFrame], linear_weights: dict[int, dict[str, float]], t: int, role: str) -> pd.Series:
+    """Three-season weighted wOBA (hitters) or runs allowed per PA (pitchers), regressed to 1,200 PA of league average.
+
+    ``rates_by_season`` holds ``season_rates`` frames; season ``t`` may be a partial season.
+    """
     num, den = None, None
     for back, w in enumerate(MARCEL_WEIGHTS):
         s = t - back
-        if s not in data.counts:
+        if s not in rates_by_season:
             continue
-        r = data.season_rates(s)
+        r = rates_by_season[s]
         r = r[r["role"] == role].set_index("player_id")
-        lw = data.linear_weights[s]
+        lw = linear_weights[s]
         stat = r["woba"] if role == "bat" else -(r[list(OUTCOMES)].values @ np.array([lw[k] for k in OUTCOMES]))
         stat = pd.Series(np.asarray(stat), index=r.index)
         contrib = w * stat * r["n"]
@@ -378,13 +402,14 @@ def _score_pair(p: dict, data: SeasonData, model: ValueModel, pool_name: str, xw
         prior_runs = -prior_runs
     out = {
         "t": p["t"], "n": int(ok.sum()),
-        "grade": _spearman(proj[ok], y[ok]),
-        "shrunk_only": _spearman(x.loc[ok, "shrunk_runs"], y[ok]),
-        "prior_production": _spearman(prior_runs.reindex(x.index[ok]), y[ok]),
-        "marcel": _spearman(marcel(data, p["t"], role).reindex(x.index[ok]), y[ok]),
+        "grade": spearman(proj[ok], y[ok]),
+        "shrunk_only": spearman(x.loc[ok, "shrunk_runs"], y[ok]),
+        "prior_production": spearman(prior_runs.reindex(x.index[ok]), y[ok]),
+        "marcel": spearman(marcel({s: data.season_rates(s) for s in data.counts if p["t"] - 2 <= s <= p["t"]},
+                                  data.linear_weights, p["t"], role).reindex(x.index[ok]), y[ok]),
     }
     if role == "bat" and p["t"] in xwoba_boards:
-        out["prior_xwoba"] = _spearman(xwoba_boards[p["t"]].reindex(x.index[ok]), y[ok])
+        out["prior_xwoba"] = spearman(xwoba_boards[p["t"]].reindex(x.index[ok]), y[ok])
     return out
 
 
@@ -422,12 +447,12 @@ def fit(last_dev_season: int = 2024, holdout_pair: tuple[int, int] | None = None
     model = ValueModel.empty(dev_seasons, holdout_pair)
     model.fitted_at = datetime.now(UTC).isoformat()
 
-    offsets, strength = choose_window_and_shrink(data, dev_first)
-    model.window_weights, model.shrink_strength = offsets, strength
+    offsets, strength, aaa_scale = choose_window_and_shrink(data, dev_first)
+    model.window_weights, model.shrink_strength, model.aaa_scale = offsets, strength, aaa_scale
     model.linear_weights = data.linear_weights[last_dev_season]
     model.pa_per_ip = data.pa_per_ip[last_dev_season]
     model.runs_per_win = runs_mod.runs_per_win(last_dev_season)
-    log.info(f"window {offsets}, shrink {strength}, runs/win {model.runs_per_win:.2f}")
+    log.info(f"window {offsets}, shrink {strength}, triple-a {aaa_scale}, runs/win {model.runs_per_win:.2f}")
 
     pairs = [build_pair(data, t, model) for t in dev_first]
     model.trait_weights = fit_trait_weights(pairs)
@@ -501,7 +526,7 @@ def fit(last_dev_season: int = 2024, holdout_pair: tuple[int, int] | None = None
     holdout = build_pair(data, holdout_pair[0], model) if holdout_pair[1] in data.inputs else None
     report = evaluate(pairs, data, model, holdout, xwoba_boards)
     report.update({
-        "window_weights": offsets, "shrink_strength": strength, "runs_per_win": model.runs_per_win,
+        "window_weights": offsets, "shrink_strength": strength, "aaa_scale": aaa_scale, "runs_per_win": model.runs_per_win,
         "price": model.price, "arb_fractions": model.arb_fractions, "dollar_calibration": calibration,
         "replacement": model.replacement, "measured_fringe_replacement": measured_replacement,
         "positional_adjustment": model.positional_adjustment, "fitted_positional_runs": fitted_positional,

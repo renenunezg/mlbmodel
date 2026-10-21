@@ -215,15 +215,13 @@ def hitter_design(rows: pd.DataFrame, *, include_aaa: bool = False) -> np.ndarra
     return x
 
 
-def aaa_hitting(season: int) -> pd.DataFrame:
-    """Last-season Triple-A performance, used only for existing MLB histories.
+def aaa_hitting_rows(season: int) -> pd.DataFrame:
+    """One row per Triple-A hitter-season with the official MLB stat columns, cached per season.
 
-    Rates are centered on that Triple-A season and stabilized with 100 PA.
-    These are performance inputs, not invented minor-league WAR. The cancelled
-    2020 season and years before source coverage are explicitly unknown.
+    The cancelled 2020 season and years before source coverage raise.
     """
     if season < 2006 or season == 2020:
-        return pd.DataFrame(columns=KEYS+AAA_FEATURES[1:])
+        raise ValueError(f"No Triple-A coverage for {season}")
     path = bio.CACHE_DIR / f"aaa_season_{season}.json"
     if path.exists():
         payload = json.loads(path.read_text())
@@ -242,6 +240,24 @@ def aaa_hitting(season: int) -> pd.DataFrame:
     r = pd.DataFrame([{"player_id": s["player"]["id"], **s["stat"]} for s in splits])
     if r.player_id.duplicated().any():
         raise ValueError("Duplicate Triple-A player totals")
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        pending = path.with_suffix(".tmp")
+        pending.write_text(json.dumps(payload))
+        pending.replace(path)
+    return r
+
+
+def aaa_hitting(season: int) -> pd.DataFrame:
+    """Last-season Triple-A performance, used only for existing MLB histories.
+
+    Rates are centered on that Triple-A season and stabilized with 100 PA.
+    These are performance inputs, not invented minor-league WAR. The cancelled
+    2020 season and years before source coverage are explicitly unknown.
+    """
+    if season < 2006 or season == 2020:
+        return pd.DataFrame(columns=KEYS+AAA_FEATURES[1:])
+    r = aaa_hitting_rows(season)
     pa = r.plateAppearances
     out = r[["player_id"]].assign(role="bat", aaa_volume=pa/600)
     for name, stat in (("k", "strikeOuts"), ("bb", "baseOnBalls"), ("hr", "homeRuns")):
@@ -250,11 +266,6 @@ def aaa_hitting(season: int) -> pd.DataFrame:
     out["aaa_quality"] = 10*(points-pa*points.sum()/pa.sum())/(pa+100)
     if not np.isfinite(out[AAA_FEATURES[1:]].to_numpy(float)).all():
         raise ValueError("Missing Triple-A production inputs")
-    if not path.exists():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        pending = path.with_suffix(".tmp")
-        pending.write_text(json.dumps(payload))
-        pending.replace(path)
     return out
 
 

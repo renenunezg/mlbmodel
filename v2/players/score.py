@@ -21,7 +21,7 @@ import pandas as pd
 from backend.db import writes_allowed
 from backend.log import setup_logging
 from v2.data.pa_dataset import OUTCOMES
-from v2.players import aging, bio, features, inputs, production, value, workload
+from v2.players import aging, bio, features, inputs, minors, production, value, workload
 from v2.players.contracts import estimated_schedule, load_contracts
 from v2.players.model import ValueModel, load_latest_from_db
 from v2.players.pricing import league_minimum
@@ -140,7 +140,7 @@ def assemble_values(
         two_way_runs.loc[projected_pit.index] = projected_pit.values
     sample = rates_pop.set_index("player_id")["n"] if not rates_pop.empty else pd.Series(dtype="float64")
     sample = sample.reindex(pop.index).fillna(0.0)
-    design = features.grade_features(composites, shrunk, pool)
+    design = features.grade_features(composites, shrunk, pool, pop["age"])
     two_way_ids = set(two_way["player_id"]) if not two_way.empty else set()
     projected = features.project_runs(design, group, model)
     has_fit = bool(model.grade_weights)
@@ -444,10 +444,14 @@ def gather(as_of: date, model: ValueModel, season: int | None = None) -> dict:
     # The current season is recomputed every run (Statcast cache and Savant boards); past seasons come from cache.
     frames = {s: inputs.season_inputs(s, refresh=(s == season)) for s in seasons if (inputs.STATCAST_DIR / f"statcast_{s}.parquet").exists()}
     counts = {s: inputs.outcome_counts(s, refresh=(s == season)) for s in frames}
+    # Completed Triple-A seasons only: the current season's cache is not refreshed daily.
+    _, season_end = bio.season_dates(season)
+    completed = [s for s in frames if s < season or as_of > season_end]
+    prior = minors.prior_counts({s: minors.pseudo_counts(s) for s in completed}, weights, set(frames), model.aaa_scale)
     win = inputs.window(frames, weights)
     wc = inputs.window_counts(counts, weights)
     group_of = groups.set_index("player_id")["position_group"]
-    rates = inputs.shrunk_rates(wc, group_of, model.shrink_strength)
+    rates = inputs.shrunk_rates(wc, group_of, model.shrink_strength, prior)
     il = bio.il_days(seasons, as_of)
     contracts = load_contracts(season)
     # Players Baseball-Reference does not list yet (this year's debuts) get an
@@ -489,7 +493,7 @@ def gather(as_of: date, model: ValueModel, season: int | None = None) -> dict:
               else _actual_runs(season, model, group_of, lev))
     # Draws of outcome rates, as run deltas against the shrunk point estimate, one row per player.
     wc_role = features.role_rows(wc, group_of).reset_index(drop=True)
-    draws = features.dirichlet_draws(wc_role, group_of, model.shrink_strength, DRAWS)
+    draws = features.dirichlet_draws(wc_role, group_of, model.shrink_strength, DRAWS, prior_counts=prior)
     lw = np.array([model.linear_weights[k] for k in OUTCOMES])
     point = rates.set_index(["player_id", "role"]).reindex(pd.MultiIndex.from_frame(wc_role[["player_id", "role"]]))
     base = point[list(OUTCOMES)].to_numpy(float) @ lw

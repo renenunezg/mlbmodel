@@ -322,7 +322,7 @@ def estimated_schedule(player_id: int, mlb_debut: str | None, season: int, seaso
     Service time is estimated from the debut date: a full year for each completed
     season after the debut season, and the debut season's share of its 172-day year.
     """
-    if not mlb_debut:
+    if not mlb_debut or pd.isna(mlb_debut):  # a 40-man player who has not debuted has no service clock
         return pd.DataFrame(columns=CONTRACT_FRAME_COLUMNS)
     debut = date.fromisoformat(str(mlb_debut)[:10])
     first_end = date(debut.year, season_end.month, season_end.day)
