@@ -147,11 +147,16 @@ def assemble_values(
     if not has_fit:
         projected = shrunk  # no fitted weights: the shrunk runs stand in
     gradeable = sample >= features.MIN_GRADE_SAMPLE
+    # A thin MLB record backed by enough Triple-A plate appearances gets a provisional grade on the
+    # graded players' scale; it never enters that scale, the percentiles, or the dollar projections.
+    prior_n = (rates_pop.set_index("player_id")["prior_n"] if "prior_n" in rates_pop else pd.Series(0.0, index=pop.index)).reindex(pop.index).fillna(0.0)
+    provisional = ~gradeable & (sample + prior_n >= features.MIN_GRADE_SAMPLE) & has_fit
     pos_adj = group.map(model.positional_adjustment).fillna(0.0).where(role_series.eq("bat"), 0.0)
     replacement = group.map(model.replacement).fillna(0.0)
     full_runs = projected + pos_adj - replacement + two_way_runs  # per 600 PA or per 180/65 IP
     grade_raw = full_runs.where(gradeable)
     grade = features.to_grade_scale(grade_raw, group)
+    grade = grade.fillna(features.to_grade_scale(full_runs.where(provisional), group, reference=grade_raw))
     k_grade = pd.Series([model.reliability_k.get(f"grade_{p}", 0.0) for p in np.where(group.isin(features.PITCHER_GROUPS), group, "hitter")], index=pop.index)
     band = features.reliability_band(sample, k_grade.astype(float).fillna(0.0))
 
@@ -275,6 +280,7 @@ def assemble_values(
         known_roles = {y: {r: max(0.0, w) if pd.notna(w) else 0.0 for r, w in wars.items()}
                        for y, wars in war_by_role.items()}
         graded = bool(gradeable[pid]) and pd.notna(grade[pid])
+        grade_shown = graded or (bool(provisional[pid]) and pd.notna(grade[pid]))
         service_season = int(rows["season"].min()) if rows is not None and len(rows) and contract_status != "free_agent" else next_season
         # Preserve unsigned control when production is unknown; do not infer a non-tender
         # from a missing grade. Dollar projections require a grade.
@@ -345,10 +351,10 @@ def assemble_values(
             "position_group": g, "secondary_positions": list(pop.at[pid, "secondary_positions"]) if isinstance(pop.at[pid, "secondary_positions"], list) else [],
             "age": None if pd.isna(age_next[pid]) else int(age_next[pid]), "bats": pop.at[pid, "bats"], "throws": pop.at[pid, "throws"],
             "status": status, "as_of": as_of, "model_version": model.model_version, "season": next_season,
-            "grade": round(float(grade[pid]), 1) if graded else None,
-            "grade_low": round(float(max(20.0, grade[pid] - band[pid])), 1) if graded else None,
-            "grade_high": round(float(min(80.0, grade[pid] + band[pid])), 1) if graded else None,
-            "grade_percentile": None, "grade_reason": None if graded else "insufficient_sample",
+            "grade": round(float(grade[pid]), 1) if grade_shown else None,
+            "grade_low": round(float(max(20.0, grade[pid] - band[pid])), 1) if grade_shown else None,
+            "grade_high": round(float(min(80.0, grade[pid] + band[pid])), 1) if grade_shown else None,
+            "grade_percentile": None, "grade_reason": None if graded else ("provisional_sample" if grade_shown else "insufficient_sample"),
             "projected_war": None if not graded or pd.isna(war_by_season.get(next_season, np.nan)) else round(float(war_by_season[next_season]), 2),
             "trade_value_musd": None if pd.isna(tv) else round(float(tv), 1),
             "trade_value_low": None if pd.isna(tv_low) else round(tv_low, 1), "trade_value_high": None if pd.isna(tv_high) else round(tv_high, 1),
@@ -393,8 +399,23 @@ def assemble_values(
         traits_frame["grade_high"] = (traits_frame["grade"] + tb).clip(upper=80).round(1)
         traits_frame.loc[traits_frame["value"].isna(), ["grade", "grade_low", "grade_high", "percentile"]] = None
     if not values_frame.empty:
-        values_frame["grade_percentile"] = (values_frame["grade"].groupby(values_frame["position_group"]).rank(pct=True) * 100).round(1)
+        values_frame["grade_percentile"] = _grade_percentiles(values_frame)
     return values_frame, traits_frame
+
+
+def _grade_percentiles(values_frame: pd.DataFrame) -> pd.Series:
+    """Percentile among fully graded players of the group; a provisional grade takes the share of them it matches or beats."""
+    full = values_frame["grade_reason"].isna() & values_frame["grade"].notna()
+    out = pd.Series(np.nan, index=values_frame.index)
+    for position, rows in values_frame.groupby("position_group"):
+        reference = np.sort(rows.loc[full.reindex(rows.index), "grade"].to_numpy(float))
+        if not len(reference):
+            continue
+        graded_rows = rows.index[full.reindex(rows.index)]
+        out.loc[graded_rows] = rows.loc[graded_rows, "grade"].rank(pct=True) * 100
+        provisional_rows = rows.index[rows["grade_reason"].eq("provisional_sample")]
+        out.loc[provisional_rows] = np.searchsorted(reference, rows.loc[provisional_rows, "grade"].to_numpy(float), side="right") / len(reference) * 100
+    return out.round(1)
 
 
 def _actual_runs(season: int, model: ValueModel, groups: pd.Series, lev: pd.Series) -> pd.DataFrame:

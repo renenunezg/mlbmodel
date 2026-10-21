@@ -436,9 +436,12 @@ def shrunk_rates(counts: pd.DataFrame, group_of: pd.Series, strength: float, pri
     n = frame[cols].sum(axis=1)
     prior_rows = prior_rates(frame, strength, prior_counts)
     shrunk = (frame[cols].values + strength * prior_rows) / (n.values[:, None] + strength)
+    own = (prior_counts.reindex(frame["player_id"])[cols].fillna(0.0).sum(axis=1).to_numpy()
+           if prior_counts is not None and not prior_counts.empty else np.zeros(len(frame)))
     out = pd.DataFrame(shrunk, columns=cols)
     out.insert(0, "player_id", frame["player_id"].values)
     out["role"], out["group"], out["n"] = frame["role"].values, frame["group"].values, n.values
+    out["prior_n"] = np.where(frame["role"].eq("bat").values, own, 0.0)  # Triple-A plate appearances behind the prior
     return out
 
 

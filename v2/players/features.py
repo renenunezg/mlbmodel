@@ -191,10 +191,17 @@ def project_runs(features: pd.DataFrame, group: pd.Series, model: ValueModel) ->
     return out
 
 
-def to_grade_scale(values: pd.Series, group: pd.Series) -> pd.Series:
-    """20-80 within group: mean 50, sd 10 among graded players, clipped."""
-    g = values.groupby(group)
+def to_grade_scale(values: pd.Series, group: pd.Series, reference: pd.Series | None = None) -> pd.Series:
+    """20-80 within group: mean 50, sd 10 among graded players, clipped.
+
+    ``reference`` supplies the players whose mean and spread define the scale
+    (the fully graded ones), so provisional grades map onto the same numbers
+    without entering the scale.
+    """
+    g = (values if reference is None else reference).groupby(group)
     mean, sd = g.transform("mean"), g.transform("std")
+    if reference is not None:
+        mean, sd = mean.groupby(group).first().reindex(group).set_axis(group.index), sd.groupby(group).first().reindex(group).set_axis(group.index)
     scaled = 50 + 10 * (values - mean) / sd.where(sd > 0)
     # A group of one, or one with no spread, grades at the mean.
     scaled = scaled.where(scaled.notna() | values.isna(), 50.0)
