@@ -69,7 +69,7 @@ def statcast_path(season: int) -> Path:
 
 def season_inputs(season: int) -> pd.DataFrame:
     """Triple-A Statcast inputs for one season in the MLB long layout, cached; empty without a Triple-A cache."""
-    path = inputs.CACHE_DIR / f"inputs_aaa_{season}.parquet"
+    path = inputs.CACHE_DIR / f"aaa_inputs_{season}.parquet"
     if path.exists():
         return pd.read_parquet(path)
     if not statcast_path(season).exists():
