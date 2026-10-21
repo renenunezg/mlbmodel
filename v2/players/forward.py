@@ -63,6 +63,8 @@ FIRST_PAIR_SEASON = 2021
 MONTHS = (4, 5, 6, 7, 8, 9)
 POOLS = (features.HITTER_POOL, "SP", "RP")
 PROJECTION_SYSTEMS = ("zips", "the_bat", "steamer")
+# Rest-of-season sets exist only as dated page snapshots; a checkpoint on a snapshot's date gets them as extra baselines.
+ROS_SYSTEMS = {"zips_ros": "rzips", "the_bat_ros": "rthebatx"}
 RESULT_PATH = CACHE_DIR / "forward_evaluation.json"
 FANGRAPHS = ("https://www.fangraphs.com/api/leaders/major-league/data?age=&pos=all&stats={stats}&lg=all&qual=0"
              "&season={season}&season1={season}&startdate={season}-03-01&enddate={end}&month=1000&hand=&team=0"
@@ -191,7 +193,7 @@ def grade_as_of(m: SeasonMaterial, as_of: date) -> pd.DataFrame:
     out["prior_fwar"] = m.prior_war.reindex(pd.MultiIndex.from_arrays([out.index, role])).to_numpy()
     key = pd.MultiIndex.from_arrays([out.index, role])
     out["fwar_pace"] = war_pace(m.season, as_of).reindex(key).to_numpy()
-    for system, values in projections(m.season).items():
+    for system, values in projections(m.season, as_of).items():
         out[system] = values.reindex(key).to_numpy()
     return out
 
@@ -246,10 +248,21 @@ def _fangraphs_ids() -> dict[str, int]:
     return ids
 
 
-def projections(season: int) -> dict[str, pd.Series]:
-    """Each cached system's preseason ordering: wOBA for hitters, FIP (sign flipped) for pitchers, by (player_id, role)."""
+def projections(season: int, as_of: date | None = None) -> dict[str, pd.Series]:
+    """Each cached system's ordering: wOBA for hitters, FIP (sign flipped) for pitchers, by (player_id, role).
+
+    Preseason sets always; rest-of-season sets when a snapshot dated ``as_of`` is cached (hitters only).
+    """
     out: dict[str, pd.Series] = {}
     ids = _fangraphs_ids()
+    if as_of is not None:
+        for system, typ in ROS_SYSTEMS.items():
+            path = CACHE_DIR / f"fangraphs_projection_{typ}_bat_{season}_{as_of.isoformat()}.json"
+            if path.exists():
+                rows = json.loads(path.read_text())["rows"]
+                frame = pd.DataFrame([{"player_id": r.get("xMLBAMID") or ids.get(str(r.get("playerid"))), "value": r.get("wOBA")} for r in rows]).dropna()
+                frame = frame.astype({"player_id": "int64"}).drop_duplicates("player_id")
+                out[system] = pd.Series(frame["value"].to_numpy(float), index=pd.MultiIndex.from_arrays([frame["player_id"], ["bat"] * len(frame)], names=["player_id", "role"]))
     for system, bat_type, pit_type in (("zips", "zips", "zips"), ("the_bat", "thebatx", "thebat"), ("steamer", "steamer", "steamer")):
         parts = []
         for role, typ, column, sign in (("bat", bat_type, "wOBA", 1.0), ("pit", pit_type, "FIP", -1.0)):
@@ -273,7 +286,7 @@ def score_month(m: SeasonMaterial, as_of: date) -> list[dict]:
     target = rest_of_season(m, as_of, graded["group"])
     y = target["runs"].reindex(graded.index)
     ok = (graded["sample"] >= MIN_FIT_SAMPLE) & (target["n"].reindex(graded.index).fillna(0) >= MIN_TARGET_SAMPLE) & y.notna()
-    columns = ["grade", "grade_batting", "shrunk_only", "to_date_runs", "marcel", "prior_fwar", "fwar_pace", *PROJECTION_SYSTEMS]
+    columns = ["grade", "grade_batting", "shrunk_only", "to_date_runs", "marcel", "prior_fwar", "fwar_pace", *PROJECTION_SYSTEMS, *ROS_SYSTEMS]
     rows = []
     for pool in POOLS:
         members = ok & graded["fit_pool"].eq(pool)
@@ -287,12 +300,21 @@ def score_month(m: SeasonMaterial, as_of: date) -> list[dict]:
     return rows
 
 
-def evaluate(seasons: list[int], months: tuple[int, ...] = MONTHS) -> pd.DataFrame:
+def snapshot_dates(season: int) -> list[date]:
+    """Dates of cached rest-of-season snapshots for a season."""
+    found = set()
+    for typ in ROS_SYSTEMS.values():
+        for path in CACHE_DIR.glob(f"fangraphs_projection_{typ}_bat_{season}_*.json"):
+            found.add(date.fromisoformat(path.stem.rsplit("_", 1)[1]))
+    return sorted(found)
+
+
+def evaluate(seasons: list[int], months: tuple[int, ...] = MONTHS, snapshots: bool = False) -> pd.DataFrame:
     rows = []
     for season in seasons:
         m = SeasonMaterial(season, *grade_models(season - 2))
         start, end = bio.season_dates(season)
-        dates = [start] + [date(season, month, 1) for month in months]
+        dates = snapshot_dates(season) if snapshots else [start] + [date(season, month, 1) for month in months]
         for as_of in dates:
             if not start <= as_of <= end:
                 continue
@@ -302,7 +324,7 @@ def evaluate(seasons: list[int], months: tuple[int, ...] = MONTHS) -> pd.DataFra
 
 def summary(frame: pd.DataFrame) -> pd.DataFrame:
     """Mean correlation per pool and projection, and how many month starts it beat each baseline."""
-    baselines = ["shrunk_only", "to_date_runs", "marcel", "prior_fwar", "fwar_pace", *PROJECTION_SYSTEMS]
+    baselines = ["shrunk_only", "to_date_runs", "marcel", "prior_fwar", "fwar_pace", *PROJECTION_SYSTEMS, *ROS_SYSTEMS]
     out = []
     for pool, g in frame.groupby("pool"):
         for projection in ("grade", "grade_batting"):
@@ -322,6 +344,7 @@ def main() -> None:
     ap.add_argument("--seasons", type=int, nargs="+", default=[2024, 2025, 2026])
     ap.add_argument("--months", type=int, nargs="+", default=list(MONTHS))
     ap.add_argument("--war-urls", type=int, metavar="SEASON", help="Print the FanGraphs URLs to cache for the fWAR pace baseline")
+    ap.add_argument("--snapshots", action="store_true", help="Score on the dates of cached rest-of-season snapshots instead of month starts")
     args = ap.parse_args()
     if args.war_urls:
         for month in args.months:
@@ -329,9 +352,9 @@ def main() -> None:
             for role, url in war_urls(args.war_urls, as_of).items():
                 print(f"{war_to_date_path(args.war_urls, as_of).name} {role} {url}")
         return
-    frame = evaluate(args.seasons, tuple(args.months))
+    frame = evaluate(args.seasons, tuple(args.months), snapshots=args.snapshots)
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    RESULT_PATH.write_text(json.dumps({"rows": frame.to_dict("records"), "summary": summary(frame).to_dict("records")}, indent=1, default=str))
+    (CACHE_DIR / "forward_snapshot_evaluation.json" if args.snapshots else RESULT_PATH).write_text(json.dumps({"rows": frame.to_dict("records"), "summary": summary(frame).to_dict("records")}, indent=1, default=str))
     pd.set_option("display.width", 200)
     print(frame.round(3).to_string(index=False))
     print()
