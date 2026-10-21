@@ -3,7 +3,9 @@
 Populates cache/statcast_aaa_{year}.parquet with the same pitch columns as the
 MLB cache. Baseball Savant's minor-league search mixes every tracked level, so
 each day's pitches are kept only for the game_pks on the Triple-A schedule.
-Re-running a year fetches only the dates past the cached max date.
+Re-running a year fetches only the dates past the cached max date, and the
+parquet is checkpointed every CHECKPOINT_DAYS so a time-boxed run keeps its
+progress.
 
 Usage:
     python -m v2.data.build_aaa_cache --years 2023 2024 2025 2026
@@ -35,6 +37,7 @@ USER_AGENT = "Mozilla/5.0"
 ATTEMPTS = 3
 RETRY_SECONDS = 10
 PAUSE_SECONDS = 1.0
+CHECKPOINT_DAYS = 20
 
 
 def triple_a_schedule(year: int) -> dict[date, set[int]]:
@@ -68,43 +71,48 @@ def fetch_day(day: date) -> pd.DataFrame:
     raise RuntimeError(day)
 
 
+def _save(df: pd.DataFrame, path: Path) -> None:
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    pending = path.with_suffix(".tmp")
+    df.to_parquet(pending, index=False)
+    pending.replace(path)
+
+
 def fetch_year(year: int, force: bool = False) -> pd.DataFrame:
     """Populate cache/statcast_aaa_{year}.parquet, fetching only the missing dates."""
     if year > date.today().year:
         raise ValueError("Cannot build a Statcast cache for a future season")
     cache_path = CACHE_DIR / f"statcast_aaa_{year}.parquet"
     schedule = triple_a_schedule(year)
-    cached = pd.DataFrame()
+    df = pd.DataFrame()
     after = date(year, 1, 1)
     if cache_path.exists() and not force:
-        cached = regular_season_pitches(pd.read_parquet(cache_path), year)
-        if not cached.empty:
-            after = pd.to_datetime(cached["game_date"]).max().date()
-            log.info(f"[{year}] cached through {after} ({len(cached):,} pitches)")
+        df = regular_season_pitches(pd.read_parquet(cache_path), year)
+        if not df.empty:
+            df["game_date"] = pd.to_datetime(df["game_date"])
+            after = df["game_date"].max().date()
+            log.info(f"[{year}] cached through {after} ({len(df):,} pitches)")
     days = sorted(d for d in schedule if d >= after and d < date.today())
+    if not days:
+        log.info(f"[{year}] cache up to date")
+        return df
     parts = []
     for i, day in enumerate(days, 1):
         frame = fetch_day(day)
         if not frame.empty:
-            frame = frame[frame["game_pk"].isin(schedule[day])]
-            parts.append(frame)
-        if i % 20 == 0:
-            log.info(f"[{year}] {i}/{len(days)} days, {sum(len(p) for p in parts):,} pitches")
+            parts.append(frame[frame["game_pk"].isin(schedule[day])])
+        if i % CHECKPOINT_DAYS == 0 or i == len(days):
+            new = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
+            if not new.empty:
+                new["game_date"] = pd.to_datetime(new["game_date"])
+                df = pd.concat([df, regular_season_pitches(new, year)], ignore_index=True).drop_duplicates(subset=DEDUPE_COLS, keep="last")
+                _save(df, cache_path)
+            parts = []
+            log.info(f"[{year}] {i}/{len(days)} days, {len(df):,} pitches saved")
         time.sleep(PAUSE_SECONDS)
-    new = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
-    if not new.empty:
-        new["game_date"] = pd.to_datetime(new["game_date"])
-        new = regular_season_pitches(new, year)
-    if not cached.empty:
-        cached["game_date"] = pd.to_datetime(cached["game_date"])
-        df = pd.concat([cached, new], ignore_index=True).drop_duplicates(subset=DEDUPE_COLS, keep="last")
-    else:
-        df = new
     if df.empty:
         raise ValueError(f"No Triple-A pitches for {year}")
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(cache_path, index=False)
-    log.info(f"[{year}] saved {len(df):,} pitches across {df['game_pk'].nunique():,} games → {cache_path}")
+    log.info(f"[{year}] {len(df):,} pitches across {df['game_pk'].nunique():,} games → {cache_path}")
     return df
 
 

@@ -47,6 +47,12 @@ jobs:
           PYTHONPATH: "."
         run: python -m v2.data.build_cache --years $(seq 2024 "$(date -u +%Y)")
 
+      - name: Refresh Triple-A Statcast caches (time-boxed, resumes across runs)
+        continue-on-error: true
+        env:
+          PYTHONPATH: "."
+        run: timeout --preserve-status 15m python -m v2.data.build_aaa_cache --years $(seq 2022 "$(date -u +%Y)")
+
       - name: Refresh player contracts (Mondays)
         continue-on-error: true
         env:
