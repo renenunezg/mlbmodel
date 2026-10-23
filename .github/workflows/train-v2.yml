@@ -67,6 +67,19 @@ jobs:
           PYTHONPATH: "."
         run: python -m v2.players.score --as-of "$(date -u +%F)"
 
+      - name: Refresh prospect feeds for the scoring window (time-boxed, resumes across runs)
+        continue-on-error: true
+        env:
+          PYTHONPATH: "."
+        run: python -m v2.prospects.feeds --years $(seq $(( $(date -u +%Y) - 2 )) "$(date -u +%Y)") --minutes 15
+
+      - name: Score prospects
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PYTHONPATH: "."
+        run: python -m v2.prospects.score --as-of "$(date -u +%F)"
+
       - name: Train v2 models
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}

@@ -1,0 +1,139 @@
+"""The fitted prospect model: boosters, baselines, scale references and the evaluation, as one JSON payload.
+
+Stored as one jsonb row in ``mlb.prospect_models`` (boosters as base64 UBJSON) and optionally on
+disk. Scoring in CI reads the newest ``fitted_at`` row and never fits.
+"""
+from __future__ import annotations
+
+import base64
+import json
+import logging
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import xgboost as xgb
+from sqlalchemy import text
+
+from backend.db import engine
+
+log = logging.getLogger(__name__)
+
+MODEL_VERSION = "prospect-v1"
+MODELS_DIR = Path(__file__).resolve().parent / "models"
+POOLS = ("bat", "pit")
+TARGETS = ("mlb", "regular", "peak_war", "control_war", "control_q", "eta_years")
+QUANTILES = (0.25, 0.75)
+
+
+@dataclass
+class ProspectModel:
+    model_version: str = MODEL_VERSION
+    fitted_at: str = ""
+    dev_seasons: list[int] = field(default_factory=list)
+    holdout_seasons: list[int] = field(default_factory=list)
+    last_season: int = 0
+    feature_names: dict[str, list[str]] = field(default_factory=dict)  # pool -> features
+    boosters: dict[str, dict[str, str]] = field(default_factory=dict)  # pool -> target -> base64 ubj
+    rounds: dict[str, dict[str, int]] = field(default_factory=dict)
+    baseline: dict[str, dict] = field(default_factory=dict)  # pool -> KATOH-style coefficients
+    level_age: dict[str, list[dict]] = field(default_factory=dict)  # pool -> rows of level, season, age_baseline
+    grade_reference: dict[str, dict[str, float]] = field(default_factory=dict)  # pool -> mean, sd of MLB projected WAR
+    risk_cutpoints: dict[str, list[float]] = field(default_factory=dict)  # pool -> three cut points on the control spread
+    validated: dict[str, bool] = field(default_factory=dict)  # pool -> passed the publish gate
+    price: dict = field(default_factory=dict)  # copied from the player model at fit time
+    arb_fractions: dict[int, float] = field(default_factory=dict)
+    evaluation: dict = field(default_factory=dict)
+
+    def booster(self, pool: str, target: str) -> xgb.Booster:
+        b = xgb.Booster()
+        b.load_model(bytearray(base64.b64decode(self.boosters[pool][target])))
+        return b
+
+    def set_booster(self, pool: str, target: str, booster: xgb.Booster) -> None:
+        self.boosters.setdefault(pool, {})[target] = base64.b64encode(bytes(booster.save_raw("ubj"))).decode("ascii")
+
+    def predict(self, frame: pd.DataFrame, pool: str, *, contributions: bool = False) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
+        """Predictions for one pool's rows: probabilities, expected WARs, control quantiles, ETA years.
+
+        With ``contributions`` the per-feature SHAP contributions of the peak WAR booster come back too.
+        """
+        names = self.feature_names[pool]
+        X = frame.reindex(columns=names).astype(float)
+        dm = xgb.DMatrix(X, feature_names=names, missing=np.nan)
+        out = pd.DataFrame(index=frame.index)
+        out["p_mlb"] = self.booster(pool, "mlb").predict(dm)
+        out["p_regular"] = self.booster(pool, "regular").predict(dm)
+        out["peak_war"] = np.clip(self.booster(pool, "peak_war").predict(dm), 0.0, None)
+        out["control_war"] = np.clip(self.booster(pool, "control_war").predict(dm), 0.0, None)
+        q = self.booster(pool, "control_q").predict(dm)
+        q = q.reshape(len(frame), -1) if q.ndim == 1 and len(QUANTILES) > 1 else q
+        out["control_q25"] = np.clip(q[:, 0], 0.0, None)
+        out["control_q75"] = np.clip(np.maximum(q[:, -1], q[:, 0]), 0.0, None)
+        out["eta_years"] = np.clip(self.booster(pool, "eta_years").predict(dm), 0.5, None)
+        contribs: dict[str, pd.DataFrame] = {}
+        if contributions:
+            for target in ("peak_war", "regular"):
+                c = self.booster(pool, target).predict(dm, pred_contribs=True)
+                contribs[target] = pd.DataFrame(c[:, :-1], index=frame.index, columns=names)
+        return out, contribs
+
+    def to_payload(self) -> dict:
+        payload = asdict(self)
+        payload["arb_fractions"] = {str(k): v for k, v in self.arb_fractions.items()}
+        return payload
+
+    @classmethod
+    def from_payload(cls, payload: dict) -> ProspectModel:
+        p = dict(payload)
+        p["arb_fractions"] = {int(k): float(v) for k, v in p.get("arb_fractions", {}).items()}
+        known = set(cls.__dataclass_fields__)
+        return cls(**{k: v for k, v in p.items() if k in known})
+
+    def save(self, path: Path) -> Path:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(self.to_payload(), allow_nan=True), encoding="utf-8")
+        return path
+
+    @classmethod
+    def load(cls, path: Path) -> ProspectModel:
+        return cls.from_payload(json.loads(path.read_text(encoding="utf-8")))
+
+
+def model_path(last_dev_season: int) -> Path:
+    return MODELS_DIR / f"prospect_model_{last_dev_season}.json"
+
+
+def _clean(obj):
+    """JSON without NaN: NaN and infinities become null."""
+    if isinstance(obj, dict):
+        return {k: _clean(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_clean(v) for v in obj]
+    if isinstance(obj, float) and not np.isfinite(obj):
+        return None
+    return obj
+
+
+def publish_model(model: ProspectModel) -> None:
+    if not any(model.validated.values()):
+        raise ValueError("refusing to publish a prospect model with no validated pool")
+    payload = json.dumps(_clean(model.to_payload()), allow_nan=False)
+    with engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO prospect_models (model_version, last_dev_season, payload, fitted_at, updated_at) "
+            "VALUES (:v, :s, CAST(:p AS jsonb), :f, now()) "
+            "ON CONFLICT (model_version, last_dev_season) DO UPDATE SET payload = EXCLUDED.payload, "
+            "fitted_at = EXCLUDED.fitted_at, updated_at = now()"
+        ), {"v": model.model_version, "s": max(model.dev_seasons), "p": payload, "f": model.fitted_at})
+    log.info(f"model: published {model.model_version} through {max(model.dev_seasons)}")
+
+
+def load_latest_from_db() -> ProspectModel:
+    with engine.connect() as conn:
+        row = conn.execute(text("SELECT payload FROM prospect_models ORDER BY fitted_at DESC LIMIT 1")).fetchone()
+    if row is None:
+        raise RuntimeError("No prospect model published; run python -m v2.prospects.fit first")
+    payload = row[0] if isinstance(row[0], dict) else json.loads(row[0])
+    return ProspectModel.from_payload(payload)
