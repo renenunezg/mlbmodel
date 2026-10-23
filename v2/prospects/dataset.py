@@ -1,8 +1,8 @@
 """Snapshot datasets: features, eligibility and (for fitting) matured targets, one row per player and season.
 
 Season tables from ``events`` are cached per season under ``cache/prospects/tables/`` and rebuilt
-when the feed cache gained games. A player is a hitter or a pitcher in a snapshot by which sample
-is larger; a two-way player keeps the larger role. Rows below the sample floor are kept with
+when the feed cache gained games or ``TABLE_VERSION`` changed. A player is a hitter or a pitcher in a
+snapshot by which sample is larger; a two-way player keeps the larger role. Rows below the sample floor are kept with
 ``gradeable`` False so scoring can publish them as not yet graded.
 """
 from __future__ import annotations
@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 
 TABLES_DIR = CACHE_DIR / "tables"
 WINDOW = len(features.WINDOW_WEIGHTS)
+TABLE_VERSION = 2  # bump when events changes what a season table holds; 2: call-code counts only from fully logged games
 # Heuristic floors and age range, not fitted: a window below the floor is published ungraded.
 FLOOR_FULL = {"bat": 150.0, "pit": 120.0}
 FLOOR_COMPLEX = {"bat": 100.0, "pit": 80.0}
@@ -37,12 +38,12 @@ def season_tables(season: int) -> tuple[pd.DataFrame, pd.DataFrame]:
     meta = TABLES_DIR / f"meta_{season}.json"
     n_games = _feed_game_count(season)
     paths = (TABLES_DIR / f"hitters_{season}.parquet", TABLES_DIR / f"pitchers_{season}.parquet")
-    if meta.exists() and all(p.exists() for p in paths) and json.loads(meta.read_text()).get("n_games") == n_games:
+    if meta.exists() and all(p.exists() for p in paths) and json.loads(meta.read_text()) == {"n_games": n_games, "version": TABLE_VERSION}:
         return pd.read_parquet(paths[0]), pd.read_parquet(paths[1])
     hitters, pitchers = events.season_tables([season])
     hitters.to_parquet(paths[0], index=False)
     pitchers.to_parquet(paths[1], index=False)
-    meta.write_text(json.dumps({"n_games": n_games}))
+    meta.write_text(json.dumps({"n_games": n_games, "version": TABLE_VERSION}))
     return hitters, pitchers
 
 

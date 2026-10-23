@@ -31,7 +31,7 @@ HITTER_RATES = {
     "pu_share": ("bb_pu", "bip"), "hard_share": ("bb_hard", "bip"), "soft_share": ("bb_soft", "bip"),
     "sb_rate": ("sb", "pa"), "cs_rate": ("cs", "SBA"), "babip": ("BIPH", "BIPAB"), "iso": ("TBX", "AB"),
     "hbp_rate": ("HBP", "pa"), "foul_share": ("fouls", "swings"), "called_rate": ("called_strikes", "n_pitches"),
-    "strike_rate": ("STRIKES", "n_pitches"), "pitches_per_pa": ("n_pitches", "pa"),
+    "strike_rate": ("STRIKES", "n_pitches"), "pitches_per_pa": ("n_pitches", "seq_pa"),
 }
 PITCHER_RATES = {
     "k_rate": ("K", "bf"), "bb_rate": ("BB", "bf"), "hr_rate": ("HR", "bf"), "swstr_rate": ("swinging_strikes", "n_pitches"),
@@ -40,7 +40,7 @@ PITCHER_RATES = {
     "outs_per_game": ("outs", "games"),
     "pu_share": ("bb_pu", "bip"), "ld_share": ("bb_ld", "bip"), "xbh_rate": ("XBH", "bf"), "hbp_rate": ("HBP", "bf"),
     "foul_share": ("fouls", "swings"), "called_rate": ("called_strikes", "n_pitches"), "strike_rate": ("STRIKES", "n_pitches"),
-    "pitches_per_pa": ("n_pitches", "bf"),
+    "pitches_per_pa": ("n_pitches", "seq_pa"),
 }
 TREND_RATES = {"bat": ["k_rate", "bb_rate", "iso", "swstr_rate"], "pit": ["k_rate", "bb_rate", "swstr_rate", "gb_share"]}
 # Tracked overlay features and the tracked opportunity each is pooled by; a row without the measurement is left out of both sides.

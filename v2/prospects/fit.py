@@ -2,9 +2,10 @@
 
 Per pool (hitters, pitchers), gradient-boosted trees predict from each snapshot's features:
 reaching the majors, becoming a regular, peak WAR, control-years WAR with its quartiles, and years
-to arrival. Rounds are chosen by early stopping on the last two development cohorts, then every
-booster is refit on all development cohorts with that round count. A KATOH-style logistic and
-linear baseline (age relative to level, strikeout, walk and power rates, level) is fitted on the
+to arrival. Rounds are chosen by early stopping on a player-grouped slice of the development cohorts,
+then every booster is refit on all development cohorts with that round count. P(regular) is Platt-scaled
+on the early-stopped booster's predictions for that slice, players the trees never trained on. A
+KATOH-style logistic and linear baseline (age relative to level, strikeout, walk and power rates, level) is fitted on the
 same rows. Players who appear in a holdout cohort are left out of every development cohort, so a
 holdout label never shares its outcome seasons with a training label of the same player. The holdout
 is scored once per documented touch; a pool passes the publish gate when it beats the baseline on both
@@ -35,7 +36,7 @@ from backend.log import setup_logging
 from v2.players.model import load_latest_from_db
 from v2.prospects import dataset, features, identity, lists
 from v2.prospects.feeds import CACHE_DIR
-from v2.prospects.model import POOLS, QUANTILES, ProspectModel, model_path, publish_model, risk_score
+from v2.prospects.model import POOLS, QUANTILES, ProspectModel, logit, model_path, publish_model, risk_score
 
 log = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ EVALUATION_PATH = CACHE_DIR / "evaluation.json"
 PARAMS = {"max_depth": 4, "eta": 0.03, "subsample": 0.8, "colsample_bytree": 0.8, "min_child_weight": 25, "lambda": 2.0}
 MAX_ROUNDS = 3000
 TWEEDIE_POWER = 1.5
-HOLDOUT_TOUCHES = 3  # 2026-10-22: second pass after the development experiments (call-code and trend features, Tweedie); third after the audit fixes and the player-disjoint split
+HOLDOUT_TOUCHES = 4  # 2026-10-22: second pass after the development experiments (call-code and trend features, Tweedie); third after the audit fixes and the player-disjoint split; 2026-10-23: fourth after dropping partial pitch logs and Platt-scaling P(regular)
 EARLY_STOP = 100
 MONOTONE = {
     "bat": {"age_rel": -1, "k_rate_rel": -1, "iso_rel": 1, "bb_rate_rel": 1, "top_level_rank": 1},
@@ -73,8 +74,8 @@ def _params(pool: str, names: list[str], objective: str, **extra) -> dict:
     return {**PARAMS, "objective": objective, "monotone_constraints": mono, "verbosity": 0, **extra}
 
 
-def _fit_target(pool: str, names: list[str], dev: pd.DataFrame, val: pd.DataFrame, target: str) -> tuple[xgb.Booster, int]:
-    """Early-stopped rounds on the validation cohorts, then a refit on dev plus validation rows."""
+def _fit_target(pool: str, names: list[str], dev: pd.DataFrame, val: pd.DataFrame, target: str) -> tuple[xgb.Booster, int, np.ndarray]:
+    """Early-stopped rounds on the validation rows, then a refit on dev plus validation rows; also the early-stopped validation predictions."""
     if target in ("mlb", "regular"):
         objective, column, kw = "binary:logistic", target, {"eval_metric": "logloss"}
     elif target == "control_q":
@@ -98,9 +99,16 @@ def _fit_target(pool: str, names: list[str], dev: pd.DataFrame, val: pd.DataFram
     booster = xgb.train(params, _dmatrix(d, names, y_d), MAX_ROUNDS, evals=[(_dmatrix(v, names, y_v), "val")],
                         early_stopping_rounds=EARLY_STOP, verbose_eval=False)
     rounds = max(int(booster.best_iteration) + 1, 50)
+    val_pred = booster.predict(_dmatrix(v, names), iteration_range=(0, rounds))
     full = pd.concat([d, v])
     refit = xgb.train(params, _dmatrix(full, names, full[column].astype(float).to_numpy()), rounds)
-    return refit, rounds
+    return refit, rounds, val_pred
+
+
+def fit_platt(pred: np.ndarray, y: pd.Series) -> list[float]:
+    """Slope and intercept of an unregularized logistic fit of the outcome on the logit of the prediction."""
+    clf = LogisticRegression(C=1e6, max_iter=1000).fit(logit(pred).reshape(-1, 1), y.astype(int))
+    return [float(clf.coef_[0][0]), float(clf.intercept_[0])]
 
 
 def fit_baseline(pool: str, rows: pd.DataFrame) -> dict:
@@ -230,7 +238,9 @@ def fit(last_dev_season: int, holdout: list[int], last_season: int) -> ProspectM
         d, v = dev[~in_val], dev[in_val]
         log.info(f"fit[{pool}]: {len(dev):,} dev rows ({len(v):,} validation) after removing holdout players, {len(hold):,} holdout rows, {len(names)} features")
         for target in ("mlb", "regular", "peak_war", "control_war", "control_q", "eta_years"):
-            booster, rounds = _fit_target(pool, names, d, v, target)
+            booster, rounds, val_pred = _fit_target(pool, names, d, v, target)
+            if target == "regular":
+                model.regular_platt[pool] = fit_platt(val_pred, v["regular"])
             model.set_booster(pool, target, booster)
             model.rounds.setdefault(pool, {})[target] = rounds
         model.baseline[pool] = fit_baseline(pool, dev)
@@ -244,6 +254,7 @@ def fit(last_dev_season: int, holdout: list[int], last_season: int) -> ProspectM
         model.validated[pool] = bool(passed)
         metrics["validated"] = bool(passed)
         metrics["rounds"] = model.rounds[pool]
+        metrics["regular_platt"] = model.regular_platt[pool]
         model.risk_cutpoints[pool] = [float(q) for q in np.nanquantile(risk_score(pred).to_numpy(), [0.25, 0.5, 0.75])]
         model.eta_band[pool] = max(1, int(round(metrics["model"]["eta_mae"])))
         evaluation["pools"][pool] = metrics

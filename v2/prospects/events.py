@@ -3,8 +3,10 @@
 A play is a plate appearance when its event ends the batter's turn (``PA_EVENTS``); runner events
 such as steals and pickoffs are kept in the cache but do not count. Each plate appearance maps to
 the eight-outcome layout the player model uses (``v2.data.pa_dataset.OUTCOMES``), and its pitches
-contribute call-code counts (balls, called strikes, swinging strikes, fouls, balls in play) that
-exist at every level since 2005. Stringer trajectory and hardness describe the batted ball; the
+contribute call-code counts (balls, called strikes, swinging strikes, fouls, balls in play). Many
+games log only the pitch that ended each plate appearance (all of the lower levels before 2016,
+rookie ball before 2025); their call-code counts are missing, and ``seq_pa`` counts the plate
+appearances from fully logged games. Stringer trajectory and hardness describe the batted ball; the
 tracked fields (exit velocity, launch angle, pitch speed) are present only in tracked games and
 are aggregated with their own denominators so an untracked player reads as missing, never zero.
 
@@ -41,6 +43,10 @@ TRAJECTORY = {"ground_ball": "gb", "bunt_grounder": "gb", "line_drive": "ld", "f
 HARDNESS = {"soft": "soft", "medium": "medium", "hard": "hard"}
 EV90_MIN_BALLS = 15  # batted balls needed before a 90th percentile exit velocity is reported
 POSITION_CODES = ("C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH")
+# Games average either about 1.7 pitches per plate appearance (only the deciding pitch logged) or 3.5 and up;
+# almost none fall between 2.5 and 3.0, and a fully logged game below 2.75 is vanishingly rare.
+SEQUENCED_PITCHES_PER_PA = 2.75
+PITCH_COUNT_COLUMNS = ("n_pitches", "balls", "called_strikes", "swinging_strikes", "fouls", "in_play", "swings", "contacts", "strikes_seen")
 PITCH_SHAPE_COLUMNS = ("tracked_pitches", "fb_velo", "fb_velo_max", "fb_ivb", "fb_hb", "fb_spin", "extension", "whiff_tracked")
 
 
@@ -94,6 +100,8 @@ def plate_appearances(seasons: list[int], games: pd.DataFrame | None = None) -> 
     pa["swings"] = pa["swinging_strikes"] + pa["fouls"] + pa["in_play"]
     pa["contacts"] = pa["fouls"] + pa["in_play"]
     pa["strikes_seen"] = pa["called_strikes"] + pa["swings"]
+    pa["sequenced"] = pa.groupby("game_pk")["n_pitches"].transform("mean") >= SEQUENCED_PITCHES_PER_PA
+    pa.loc[~pa["sequenced"], list(PITCH_COUNT_COLUMNS)] = np.nan
     return pa
 
 
@@ -122,7 +130,8 @@ def hitter_season_levels(pa: pd.DataFrame, app: pd.DataFrame) -> pd.DataFrame:
     out = pd.DataFrame({"pa": g.size()})
     for o in OUTCOMES:
         out[o] = g["outcome"].agg(lambda s, o=o: int((s == o).sum()))
-    for col in ("n_pitches", "balls", "called_strikes", "swinging_strikes", "fouls", "in_play", "swings", "contacts", "strikes_seen"):
+    out["seq_pa"] = g["sequenced"].sum()
+    for col in PITCH_COUNT_COLUMNS:
         out[col] = g[col].sum()
     bip = pa[pa["in_play_ball"]]
     gb = bip.groupby(["batter", "season", "level"])
@@ -171,7 +180,8 @@ def pitcher_season_levels(pa: pd.DataFrame, app: pd.DataFrame, pitches: pd.DataF
     out = pd.DataFrame({"bf": g.size()})
     for o in OUTCOMES:
         out[o] = g["outcome"].agg(lambda s, o=o: int((s == o).sum()))
-    for col in ("n_pitches", "balls", "called_strikes", "swinging_strikes", "fouls", "in_play", "swings", "contacts", "strikes_seen"):
+    out["seq_pa"] = g["sequenced"].sum()
+    for col in PITCH_COUNT_COLUMNS:
         out[col] = g[col].sum()
     bip = pa[pa["in_play_ball"]]
     gb = bip.groupby(["pitcher", "season", "level"])

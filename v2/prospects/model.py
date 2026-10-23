@@ -42,6 +42,7 @@ class ProspectModel:
     grade_reference: dict[str, dict[str, float]] = field(default_factory=dict)  # pool -> mean, sd of MLB projected WAR
     risk_cutpoints: dict[str, list[float]] = field(default_factory=dict)  # pool -> quartile cut points on 1 - p_mlb
     eta_band: dict[str, int] = field(default_factory=dict)  # pool -> holdout mean absolute error of the arrival year, rounded
+    regular_platt: dict[str, list[float]] = field(default_factory=dict)  # pool -> [slope, intercept] on the logit of P(regular)
     validated: dict[str, bool] = field(default_factory=dict)  # pool -> passed the publish gate
     price: dict = field(default_factory=dict)  # copied from the player model at fit time
     arb_fractions: dict[int, float] = field(default_factory=dict)
@@ -65,7 +66,7 @@ class ProspectModel:
         dm = xgb.DMatrix(X, feature_names=names, missing=np.nan)
         out = pd.DataFrame(index=frame.index)
         out["p_mlb"] = self.booster(pool, "mlb").predict(dm)
-        out["p_regular"] = self.booster(pool, "regular").predict(dm)
+        out["p_regular"] = calibrate(self.booster(pool, "regular").predict(dm), self.regular_platt.get(pool))
         out["peak_war"] = np.clip(self.booster(pool, "peak_war").predict(dm), 0.0, None)
         out["control_war"] = np.clip(self.booster(pool, "control_war").predict(dm), 0.0, None)
         q = self.booster(pool, "control_q").predict(dm)
@@ -109,6 +110,19 @@ class ProspectModel:
     @classmethod
     def load(cls, path: Path) -> ProspectModel:
         return cls.from_payload(json.loads(path.read_text(encoding="utf-8")))
+
+
+def logit(p: np.ndarray) -> np.ndarray:
+    p = np.clip(p, 1e-6, 1 - 1e-6)
+    return np.log(p / (1 - p))
+
+
+def calibrate(p: np.ndarray, platt: list[float] | None) -> np.ndarray:
+    """Platt-scaled probabilities; a model fitted without calibration passes through unchanged."""
+    if platt is None:
+        return p
+    slope, intercept = platt
+    return 1 / (1 + np.exp(-(slope * logit(p) + intercept)))
 
 
 def risk_score(pred: pd.DataFrame) -> pd.Series:
