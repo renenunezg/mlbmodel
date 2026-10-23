@@ -32,14 +32,16 @@ jobs:
           restore-keys: |
             statcast-${{ runner.os }}-
 
-      # FSL pitches keep their own cache so the workflows that share the Statcast cache cannot race it away.
-      - name: Restore FSL Statcast cache
+      # FSL and spring pitches keep their own cache so the workflows that share the Statcast cache cannot race it away.
+      - name: Restore prospect-level Statcast caches
         uses: actions/cache@v4
         with:
-          path: cache/statcast_fsl_*.parquet
-          key: statcast-fsl-${{ runner.os }}-${{ github.run_id }}
+          path: |
+            cache/statcast_fsl_*.parquet
+            cache/statcast_spring_*.parquet
+          key: statcast-prospect-levels-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
-            statcast-fsl-${{ runner.os }}-
+            statcast-prospect-levels-${{ runner.os }}-
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -67,6 +69,12 @@ jobs:
         env:
           PYTHONPATH: "."
         run: timeout --preserve-status 5m python -m v2.data.build_aaa_cache --level fsl --years $(seq $(( $(date -u +%Y) - 2 )) "$(date -u +%Y)")
+
+      - name: Top up the spring training Statcast cache (backfill runs in fill-fsl-cache.yml)
+        continue-on-error: true
+        env:
+          PYTHONPATH: "."
+        run: timeout --preserve-status 3m python -m v2.data.build_aaa_cache --level spring --years "$(date -u +%Y)"
 
       - name: Refresh player contracts (Mondays)
         continue-on-error: true

@@ -1,7 +1,7 @@
-name: Fill FSL Statcast cache
+name: Fill prospect-level Statcast caches
 
-# One-time (or after a cache eviction) backfill of the Florida State League Statcast pitches the
-# prospect stuff grades read. The nightly train job only tops the cache up, inside its time budget.
+# One-time (or after a cache eviction) backfill of the Florida State League and spring training Statcast
+# pitches the prospect stuff grades read. The nightly train job only tops the cache up, inside its time budget.
 on:
   workflow_dispatch:
 
@@ -12,20 +12,22 @@ concurrency:
 jobs:
   fill:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Restore FSL Statcast cache
+      - name: Restore prospect-level Statcast caches
         uses: actions/cache@v4
         with:
-          path: cache/statcast_fsl_*.parquet
-          key: statcast-fsl-${{ runner.os }}-${{ github.run_id }}
+          path: |
+            cache/statcast_fsl_*.parquet
+            cache/statcast_spring_*.parquet
+          key: statcast-prospect-levels-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
-            statcast-fsl-${{ runner.os }}-
+            statcast-prospect-levels-${{ runner.os }}-
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -40,3 +42,8 @@ jobs:
         env:
           PYTHONPATH: "."
         run: timeout --preserve-status 110m python -m v2.data.build_aaa_cache --level fsl --years $(seq $(( $(date -u +%Y) - 2 )) "$(date -u +%Y)")
+
+      - name: Build the spring training cache for the scoring window
+        env:
+          PYTHONPATH: "."
+        run: timeout --preserve-status 60m python -m v2.data.build_aaa_cache --level spring --years $(seq $(( $(date -u +%Y) - 2 )) "$(date -u +%Y)")
