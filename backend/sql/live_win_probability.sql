@@ -18,7 +18,9 @@ DROP TRIGGER IF EXISTS live_win_probability_revalidate ON mlb.live_win_probabili
 
 -- Check only local serving tables overnight. The final snapshot takes priority
 -- over games.status, which can retain its pregame value until the nightly job.
-SELECT cron.schedule('live-win-probability-dispatch', '*/5 * * * *', $dispatch$
+-- Minute offset 3: the NHL, CFB, and NFL dispatchers take offsets 0, 1, and 2
+-- so the four never start on the same minute of the shared database.
+SELECT cron.schedule('live-win-probability-dispatch', '3-59/5 * * * *', $dispatch$
     SELECT net.http_post(
         url := 'https://api.github.com/repos/renenunezg/mlbmodel/dispatches',
         headers := jsonb_build_object(
