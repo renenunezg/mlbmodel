@@ -2,8 +2,9 @@
 
 MLB (``cache/statcast_{season}.parquet``), Triple-A (``statcast_aaa_``) and the Florida State League
 (``statcast_fsl_``) share the Savant column layout, so a pitch reads the same at every level. Shape
-readings are in the pitcher's frame: horizontal break, release side and spin axis are mirrored for
-left-handers so arm side is positive. Each pitch also carries its gap from the pitcher's primary
+readings are in the pitcher's frame: Savant's catcher-view horizontal break and release side are
+negative to a right-hander's arm side, so they are flipped for right-handers and arm side reads
+positive for everyone; the spin axis is mirrored for left-handers. Each pitch also carries its gap from the pitcher's primary
 fastball that season and level (the more thrown of ``FF`` and ``SI``), and its location in the
 batter's frame for the command model.
 """
@@ -22,10 +23,12 @@ FAMILY = {
 }
 FAMILIES = ("fastball", "breaking", "offspeed")
 PRIMARY_FASTBALLS = ("FF", "SI")
-SHAPE = ["velo", "ivb", "hb", "spin", "axis", "ext", "rel_x", "rel_z", "arm_angle", "velo_diff", "ivb_diff", "hb_diff"]
+# Arm angle is left out: Savant lacks it on most 2021-2022 minor-league pitches, and release side and height carry the slot.
+SHAPE = ["velo", "ivb", "hb", "spin", "axis", "ext", "rel_x", "rel_z", "velo_diff", "ivb_diff", "hb_diff"]
 LOCATION = ["px", "pz", "balls", "strikes", "same_side", "family_code"]
 COUNT = ["balls", "strikes", "same_side", "family_code"]
-REQUIRED = ("release_speed", "pfx_z", "release_spin_rate")  # a level-season missing these on most pitches is a broken cache
+REQUIRED = ("release_speed", "pfx_z", "release_spin_rate")
+MIN_TRACKED_SHARE = 0.05  # Triple-A 2022 was tracked in some parks only (37%); a level-season under this share is a broken cache
 SOURCE_COLUMNS = [
     "game_pk", "game_date", "game_type", "pitcher", "batter", "stand", "p_throws", "pitch_type", "pitch_number", "at_bat_number",
     "balls", "strikes", "release_speed", "pfx_x", "pfx_z", "release_spin_rate", "spin_axis", "release_extension", "release_pos_x",
@@ -46,14 +49,14 @@ def load(season: int, level: str) -> pd.DataFrame:
     if not src.exists():
         raise FileNotFoundError(f"Missing {src}")
     raw = regular_season_pitches(pd.read_parquet(src, columns=SOURCE_COLUMNS), season)
-    missing = {c: float(raw[c].isna().mean()) for c in REQUIRED}
-    if any(share > 0.5 for share in missing.values()):
-        raise ValueError(f"{src.name}: required readings missing on most pitches {missing}")
-    p = raw[raw["pitch_type"].isin(FAMILY)].copy()
+    tracked = raw[list(REQUIRED)].notna().all(axis=1)
+    if tracked.mean() < MIN_TRACKED_SHARE:
+        raise ValueError(f"{src.name}: only {tracked.mean():.1%} of pitches carry the required readings")
+    p = raw[raw["pitch_type"].isin(FAMILY) & tracked].copy()  # pitches from untracked games carry no shape
     for c in SOURCE_COLUMNS[9:-1]:
         p[c] = pd.to_numeric(p[c], errors="coerce")
     lefty = p["p_throws"].eq("L")
-    sign = np.where(lefty, -1.0, 1.0)
+    sign = np.where(lefty, 1.0, -1.0)  # arm side positive
     out = pd.DataFrame({
         "pitcher": p["pitcher"].astype("int64"), "season": season, "level": level, "game_pk": p["game_pk"].astype("int64"),
         "pitch_type": p["pitch_type"], "family": p["pitch_type"].map(FAMILY), "rv": p["delta_run_exp"],

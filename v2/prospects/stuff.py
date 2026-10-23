@@ -2,8 +2,9 @@
 
 Stuff: one gradient-boosted model per pitch family predicts a pitch's run value (Savant
 ``delta_run_exp``, batting side) from its shape alone (``pitches.SHAPE``), never its location or
-count. Command: a location-and-count model minus a count-only model, so a pitch's command value is
-what its location added beyond the count it was thrown in. Per pitcher, season and pitch type the
+count. Command: a location-and-count model minus the MLB mean run value of the count (a 72-cell table
+of balls, strikes, platoon side and pitch family), so a pitch's command value is what its location
+added beyond the count it was thrown in. Per pitcher, season and pitch type the
 mean prediction per 100 pitches is mapped to 20-80 against the MLB distribution of that pitch type
 (50 average, 10 per standard deviation, lower run value better); command against all MLB pitchers.
 
@@ -34,7 +35,8 @@ COMMAND_MIN_PITCHES = 300
 class StuffModel:
     fitted_at: str = ""
     seasons: list[int] = field(default_factory=list)
-    boosters: dict[str, str] = field(default_factory=dict)  # family, "command", "count" -> gzipped base64 UBJSON
+    boosters: dict[str, str] = field(default_factory=dict)  # family, "command" -> gzipped base64 UBJSON
+    count_table: dict[str, float] = field(default_factory=dict)  # "balls-strikes-same_side-family_code" -> MLB mean run value
     scale: dict[str, list[float]] = field(default_factory=dict)  # pitch type -> [mean, sd] of MLB rv100
     command_scale: list[float] = field(default_factory=list)
     floor: dict[str, int] = field(default_factory=dict)  # pitch type or "command" -> minimum pitches for a grade
@@ -85,8 +87,12 @@ def pitch_values(model: StuffModel, frame: pd.DataFrame) -> pd.DataFrame:
     if ok.any():
         sub = out[ok]
         out.loc[ok, "command_rv"] = (model.booster("command").predict(_matrix(sub, pitches.LOCATION))
-                                     - model.booster("count").predict(_matrix(sub, pitches.COUNT)))
+                                     - count_key(sub).map(model.count_table).to_numpy(float))
     return out
+
+
+def count_key(frame: pd.DataFrame) -> pd.Series:
+    return frame[pitches.COUNT].astype(int).astype(str).agg("-".join, axis=1)
 
 
 def stuff_grade(rv100: pd.Series, pitch_type: pd.Series, scale: dict[str, list[float]]) -> pd.Series:
@@ -113,6 +119,8 @@ def by_pitcher_command(values: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
     return pd.DataFrame({"command_n": g.size(), "command_rv100": 100 * g["command_rv"].mean()}).reset_index()
 
 
+PITCH_CODES = ("FF", "SI", "FC", "SL", "ST", "SV", "CU", "KC", "CS", "CH", "FS", "FO", "SC")  # published code = position + 1
+LEVEL_CODES = {"aaa": 1, "fsl": 2, "mixed": 3}
 TRACKED_FLOOR = 200  # released pitches in a pitcher's window before he counts as tracked
 MINOR_LEVELS = ("aaa", "fsl")
 
@@ -139,7 +147,7 @@ def window_arsenal(model: StuffModel, season: int, weights: dict[int, float]) ->
 
     Returns per pitcher and pitch type (released families only, at or above the type's floor):
     ``n, usage, readings, stuff_grade``; and per tracked pitcher: ``pitches, command_grade`` (null below
-    the command floor or when command is not released), ``stuff_level`` and ``stuff_adjusted``.
+    the command floor or when command is not released), ``stuff_level``, ``fsl_share`` and ``stuff_adjusted``.
     """
     ok = released(model)
     types, cmds = [], []
@@ -172,7 +180,9 @@ def window_arsenal(model: StuffModel, season: int, weights: dict[int, float]) ->
     arsenal["usage"] = arsenal["n"] / arsenal.groupby("pitcher")["n"].transform("sum")
     arsenal = arsenal[arsenal["n"] >= arsenal["pitch_type"].map(model.floor)]
     levels = t.groupby("pitcher")["level"].agg(lambda s: s.iloc[0] if s.nunique() == 1 else "mixed")
+    fsl = t[t["level"].eq("fsl")].groupby("pitcher")["n"].sum()
     pitchers = pd.DataFrame({"pitches": t.groupby("pitcher")["n"].sum(), "stuff_level": levels})
+    pitchers["fsl_share"] = (fsl.reindex(pitchers.index).fillna(0.0) / pitchers["pitches"]).astype(float)
     pitchers = pitchers[pitchers["pitches"] >= TRACKED_FLOOR]
     pitchers["stuff_adjusted"] = ~pitchers["stuff_level"].isin(["fsl", "mixed"]) | bool(model.offsets.get("fsl_adjusted"))
     if "command" in ok:

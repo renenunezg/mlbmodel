@@ -31,7 +31,7 @@ STUFF_PATH = MODELS_DIR / "stuff_model.json"
 FIT_SEASONS = [2021, 2022, 2023, 2024, 2025]
 TEST_SEASON = 2026
 HELD_OUT = 5  # pitcher % HELD_OUT == 0 is held out of every fit
-PARAMS = {"objective": "reg:squarederror", "max_depth": 6, "eta": 0.05, "min_child_weight": 200, "subsample": 0.8,
+PARAMS = {"objective": "reg:squarederror", "max_depth": 4, "eta": 0.2, "min_child_weight": 200, "subsample": 0.8,
           "colsample_bytree": 0.9, "tree_method": "hist", "verbosity": 0}
 MAX_ROUNDS = 2000
 EARLY_STOP = 50
@@ -39,8 +39,9 @@ FLOOR_GRID = (25, 50, 75, 100, 150, 200, 300)
 COMMAND_FLOOR_GRID = (100, 200, 300, 500)
 SPLIT_HALF_R = 0.7
 BIP_COLS = ["ls", "la", "balls", "strikes"]
-RUN_TEST_SEASON = True  # 2026 was scored once with the raw run-value target (2026-10-23); the expected target was chosen on held-out pitchers
-COMMAND_ETA = 0.2  # fewer, coarser rounds keep the command pair inside the stored-model budget
+RUN_TEST_SEASON = True  # 2026 was scored for the raw-target and depth-6 versions (2026-10-23); later choices (expected target, depth 4, no arm angle) were made on held-out pitchers
+COMMAND_ETA = 0.5  # fewer, coarser rounds keep the command model inside the stored-model budget
+# Depth 4 (from 6) and the count table (from a count booster) cut the stored row from 0.74 MB; chosen on held-out pitchers.
 # Fixed 2026-10-23 before the levels stage first ran.
 CARRY_MIN_R = 0.5
 CARRY_MAX_BIAS = 5.0  # grade points
@@ -87,10 +88,10 @@ def fit_models(mlb: pd.DataFrame) -> stuff.StuffModel:
         model.set_booster(fam, b)
         log.info(f"stuff[{fam}]: {b.num_boosted_rounds()} rounds")
     located = fit[fit["px"].notna() & fit["pz"].notna()]
-    for key, cols in (("command", pitches.LOCATION), ("count", pitches.COUNT)):
-        b = _trim(_train(located, cols, eta=COMMAND_ETA))
-        model.set_booster(key, b)
-        log.info(f"stuff[{key}]: {b.num_boosted_rounds()} rounds")
+    b = _trim(_train(located, pitches.LOCATION, eta=COMMAND_ETA))
+    model.set_booster("command", b)
+    log.info(f"stuff[command]: {b.num_boosted_rounds()} rounds")
+    model.count_table = {k: float(v) for k, v in located.groupby(stuff.count_key(located))["rv_x"].mean().items()}
     return model
 
 
