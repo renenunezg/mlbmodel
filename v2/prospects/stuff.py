@@ -153,6 +153,7 @@ def window_arsenal(model: StuffModel, season: int, weights: dict[int, float]) ->
     types, cmds = [], []
     for back, w in weights.items():
         for level in MINOR_LEVELS:
+            pitches.require_complete(season - back, level)
             if not pitches.path(season - back, level).exists():
                 continue
             values = pitch_values(model, pitches.load(season - back, level))

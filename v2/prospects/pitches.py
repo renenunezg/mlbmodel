@@ -15,6 +15,7 @@ import pandas as pd
 
 from backend.data.game_types import regular_season_pitches
 from v2.players.inputs import STATCAST_DIR
+from v2.prospects import feeds
 
 FAMILY = {
     **dict.fromkeys(("FF", "SI", "FC"), "fastball"),
@@ -37,6 +38,11 @@ SOURCE_COLUMNS = [
 ]
 BATTED = ["bip", "ls", "la"]
 PITCH_COLUMNS = ["pitcher", "season", "level", "game_pk", "pitch_type", "family", "rv", *SHAPE, *LOCATION, *BATTED]
+
+
+TRACKED_SINCE = {"aaa": 2022, "fsl": 2021}
+LEVEL_FEED = {"aaa": (11, None), "fsl": (14, 123)}  # level -> (sport id, league id) in the prospect feed cache
+CACHE_LAG_DAYS = 5  # Savant may trail the schedule's last games by a few days
 
 
 def path(season: int, level: str):
@@ -75,3 +81,26 @@ def load(season: int, level: str) -> pd.DataFrame:
     for c in ("velo", "ivb", "hb"):
         out[f"{c}_diff"] = out[c] - out["pitcher"].map(fb[c])
     return out[PITCH_COLUMNS].reset_index(drop=True)
+
+
+def require_complete(season: int, level: str) -> None:
+    """Fail fast when a tracked minor-league season's Savant cache is missing or stops well before the level's last game.
+
+    The scoring job builds the cache a time-boxed slice per night, so a half-built season must stop the
+    board rather than publish stuff (and grades) from part of a season.
+    """
+    if season < TRACKED_SINCE[level]:
+        return
+    src = path(season, level)
+    if not src.exists():
+        raise FileNotFoundError(f"Missing {src}; run python -m v2.data.build_aaa_cache --level {level} --years {season}")
+    sport_id, league_id = LEVEL_FEED[level]
+    games = feeds.read_kind(sport_id, season, "games")
+    if league_id is not None:
+        games = games[games["league_id"].eq(league_id)]
+    if games.empty:
+        return
+    last_game = pd.to_datetime(games["date"]).max()
+    last_pitch = pd.to_datetime(pd.read_parquet(src, columns=["game_date"])["game_date"]).max()
+    if last_pitch < last_game - pd.Timedelta(days=CACHE_LAG_DAYS):
+        raise ValueError(f"{src.name} ends {last_pitch.date()} but {level} played through {last_game.date()}; the cache is still building")

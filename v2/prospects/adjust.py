@@ -4,7 +4,8 @@ The published prospect model (fitted on 2005-2017, never refit here) gives every
 P(mlb) and a peak WAR. For tracked pitchers (``stuff.TRACKED_FLOOR`` released pitches in the window),
 two shallow boosters start from those predictions as offsets and learn from stuff summaries
 (``FEATURES``): one for reaching the majors within the horizon, one for horizon WAR floored at zero.
-Untracked pitchers keep the base prediction exactly.
+On the board the adjustment only re-orders tracked pitchers (``apply``); untracked pitchers keep the
+base prediction exactly.
 
 The rules were fixed on 2026-10-23 before the first run (``COHORTS`` to ``ROUNDS``). Every tracked
 pitcher snapshot of the cohorts is scored by a cross-fitting fold that never saw that player. The
@@ -107,19 +108,28 @@ def _shifts(reach: xgb.Booster, war: xgb.Booster, feats: pd.DataFrame, base: pd.
 
 
 def apply(base: pd.DataFrame, feats: pd.DataFrame, adjustment: dict) -> pd.DataFrame:
-    """Base predictions with the stuff adjustment applied; rows whose stuff features are all missing come back unchanged."""
-    out = base.copy()
+    """Tracked rows re-ordered by the stuff adjustment, keeping the base model's values; untracked rows come back unchanged.
+
+    The adjustment was validated on ordering only (Spearman and AUC over three-season outcomes), and its
+    raw shifts also carry the change from a seven-season to a three-season horizon. So among the tracked
+    rows passed in together (the graded pitchers of one board), the base model's own values of each
+    quantity are reassigned in the adjusted order: P(mlb) by the adjusted reach score, P(regular) and the
+    WAR quantities by the adjusted WAR score. Levels and spread stay the base model's.
+    """
+    out = base.astype("float64")  # booster outputs are float32
     have = feats.reindex(columns=FEATURES).notna().any(axis=1).to_numpy()
     if not have.any():
         return out
-    rows = base[have]
+    rows = out[have]
     r, w = _shifts(_decode(adjustment["reach"]), _decode(adjustment["war"]), feats[have], rows)
-    for col in ("p_mlb", "p_regular"):
-        out.loc[have, col] = 1 / (1 + np.exp(-(logit(rows[col].to_numpy(float)) + r)))
-    factor = np.exp(w)
-    for col in ("peak_war", "control_war", "control_q25", "control_q75"):
+    m_reach, m_war = _margins(rows)
+    order = {"p_mlb": m_reach + r}
+    for col in ("p_regular", "peak_war", "control_war", "control_q25", "control_q75"):
+        order[col] = m_war + w
+    for col, score in order.items():
         if col in out:
-            out.loc[have, col] = rows[col].to_numpy(float) * factor
+            ranks = np.argsort(np.argsort(score, kind="stable"), kind="stable")
+            out.loc[have, col] = np.sort(rows[col].to_numpy(float))[ranks]
     return out
 
 
