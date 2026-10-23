@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 
 from backend.log import setup_logging
+from v2.players.bio import CACHE_DIR as PLAYER_CACHE_DIR
 from v2.prospects import dataset, fit, identity, lists, targets
 from v2.prospects.feeds import CACHE_DIR
 from v2.prospects.model import POOLS, ProspectModel
@@ -30,6 +31,21 @@ log = logging.getLogger(__name__)
 
 RESULT_PATH = CACHE_DIR / "forward_evaluation.json"
 EARLY_SEASONS = 2
+PROJECTION_SYSTEMS = {"zips": ("zips", "zips"), "steamer": ("steamer", "steamer"), "the_bat": ("thebatx", "thebat")}
+
+
+def projected_war(season: int, role: str) -> dict[str, pd.Series]:
+    """Each cached system's preseason WAR projection for the season by MLBAM id, hitters or pitchers."""
+    out = {}
+    for system, (bat_type, pit_type) in PROJECTION_SYSTEMS.items():
+        path = PLAYER_CACHE_DIR / f"fangraphs_projection_{bat_type if role == 'bat' else pit_type}_{role}_{season}.json"
+        if not path.exists():
+            continue
+        rows = [r for r in json.loads(path.read_text())["rows"] if r.get("xMLBAMID") and r.get("WAR") is not None]
+        if len(rows) < 100:  # a stub snapshot, not a leaderboard
+            continue
+        out[system] = pd.Series({int(r["xMLBAMID"]): float(r["WAR"]) for r in rows})
+    return out
 
 
 def debuts(seasons: list[int], last_season: int) -> pd.DataFrame:
@@ -88,6 +104,16 @@ def run(model: ProspectModel, debut_seasons: list[int], last_season: int) -> dic
         out["unlisted_mean_early_war"] = float(unlisted["early_war"].mean()) if len(unlisted) else None
         out["unlisted_top_decile_early_war"] = (float(unlisted.nlargest(max(len(unlisted) // 10, 1), "model_peak")["early_war"].mean())
                                                 if len(unlisted) else None)
+        # Preseason projection systems, where cached for the debut season: the same players, the same target.
+        for debut in sorted(r["debut"].unique()):
+            for system, war in projected_war(int(debut), pool).items():
+                sub = r[r["debut"].eq(debut) & r["player_id"].isin(war.index)]
+                if len(sub) < 10:
+                    continue
+                key = f"{system}_{int(debut)}"
+                out[key] = {"n": int(len(sub)), "spearman_model": fit.spearman(sub["model_peak"], sub["early_war"]),
+                            "spearman_system": fit.spearman(sub["player_id"].map(war), sub["early_war"]),
+                            "spearman_baseline": fit.spearman(sub["baseline_peak"], sub["early_war"])}
         by_debut = r.groupby("debut").apply(lambda g: pd.Series({"n": len(g), "spearman_model": fit.spearman(g["model_peak"], g["early_war"]),
                                                                   "spearman_baseline": fit.spearman(g["baseline_peak"], g["early_war"])}))
         out["by_debut"] = {int(k): {kk: (None if vv != vv else float(vv)) for kk, vv in v.items()} for k, v in by_debut.iterrows()}
