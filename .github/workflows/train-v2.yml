@@ -53,6 +53,12 @@ jobs:
           PYTHONPATH: "."
         run: timeout --preserve-status 15m python -m v2.data.build_aaa_cache --years $(seq 2022 "$(date -u +%Y)")
 
+      - name: Refresh Florida State League Statcast caches for prospect stuff (time-boxed, resumes across runs)
+        continue-on-error: true
+        env:
+          PYTHONPATH: "."
+        run: timeout --preserve-status 15m python -m v2.data.build_aaa_cache --level fsl --years $(seq $(( $(date -u +%Y) - 2 )) "$(date -u +%Y)")
+
       - name: Refresh player contracts (Mondays)
         continue-on-error: true
         env:
