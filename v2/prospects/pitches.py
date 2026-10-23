@@ -1,7 +1,7 @@
 """Savant pitches at any tracked level in one frame: shape readings, location and run value per pitch.
 
-MLB (``cache/statcast_{season}.parquet``), Triple-A (``statcast_aaa_``) and the Florida State League
-(``statcast_fsl_``) share the Savant column layout, so a pitch reads the same at every level. Shape
+MLB (``cache/statcast_{season}.parquet``), Triple-A (``statcast_aaa_``), the Florida State League
+(``statcast_fsl_``) and spring training (``statcast_spring_``) share the Savant column layout, so a pitch reads the same at every level. Shape
 readings are in the pitcher's frame: Savant's catcher-view horizontal break and release side are
 negative to a right-hander's arm side, so they are flipped for right-handers and arm side reads
 positive for everyone; the spin axis is mirrored for left-handers. Each pitch also carries its gap from the pitcher's primary
@@ -40,7 +40,7 @@ BATTED = ["bip", "ls", "la"]
 PITCH_COLUMNS = ["pitcher", "season", "level", "game_pk", "pitch_type", "family", "rv", *SHAPE, *LOCATION, *BATTED]
 
 
-TRACKED_SINCE = {"aaa": 2022, "fsl": 2021}
+TRACKED_SINCE = {"aaa": 2022, "fsl": 2021, "spring": 2021}
 LEVEL_FEED = {"aaa": (11, None), "fsl": (14, 123)}  # level -> (sport id, league id) in the prospect feed cache
 CACHE_LAG_DAYS = 5  # Savant may trail the schedule's last games by a few days
 
@@ -54,7 +54,11 @@ def load(season: int, level: str) -> pd.DataFrame:
     src = path(season, level)
     if not src.exists():
         raise FileNotFoundError(f"Missing {src}")
-    raw = regular_season_pitches(pd.read_parquet(src, columns=SOURCE_COLUMNS), season)
+    raw = pd.read_parquet(src, columns=SOURCE_COLUMNS)
+    if level == "spring":
+        raw = raw[raw["game_type"].eq("S") & pd.to_datetime(raw["game_date"]).dt.year.eq(season)]
+    else:
+        raw = regular_season_pitches(raw, season)
     tracked = raw[list(REQUIRED)].notna().all(axis=1)
     if tracked.mean() < MIN_TRACKED_SHARE:
         raise ValueError(f"{src.name}: only {tracked.mean():.1%} of pitches carry the required readings")
@@ -94,6 +98,8 @@ def require_complete(season: int, level: str) -> None:
     src = path(season, level)
     if not src.exists():
         raise FileNotFoundError(f"Missing {src}; run python -m v2.data.build_aaa_cache --level {level} --years {season}")
+    if level not in LEVEL_FEED:  # spring training has no prospect feed to compare against
+        return
     sport_id, league_id = LEVEL_FEED[level]
     games = feeds.read_kind(sport_id, season, "games")
     if league_id is not None:

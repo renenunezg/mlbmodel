@@ -34,7 +34,7 @@ import xgboost as xgb
 from sklearn.metrics import roc_auc_score
 
 from backend.log import setup_logging
-from v2.prospects import dataset, features, fit, identity, lists, recent, stuff
+from v2.prospects import dataset, features, fit, identity, injuries, lists, recent, stuff
 from v2.prospects.model import ProspectModel, logit
 
 log = logging.getLogger(__name__)
@@ -47,31 +47,39 @@ PARAMS = {"max_depth": 2, "eta": 0.05, "min_child_weight": 20, "subsample": 0.8,
 ROUNDS = 100
 TWEEDIE_POWER = 1.5
 WAR_EPS = 0.01
-# fsl_share lets the adjustment read Florida State League grades on their own scale when they could not be shifted.
-FEATURES = ["fb_stuff", "best_secondary_stuff", "arsenal_stuff", "command_grade", "fb_velo", "n_types", "fsl_share"]
+# fsl_share and spring_share let the adjustment read those levels' grades on their own scale where they could not be shifted.
+STUFF_FEATURES = ["fb_stuff", "best_secondary_stuff", "arsenal_stuff", "command_grade", "fb_velo", "n_types", "fsl_share", "spring_share"]
+# Injured-list history (second pass, 2026-10-23): aimed at the overconfident top of the pitcher board.
+FEATURES = [*STUFF_FEATURES, *injuries.FEATURES]
 
 
 def stuff_features(model: stuff.StuffModel, season: int) -> pd.DataFrame:
-    """Per tracked pitcher at the end of ``season``: the stuff summaries the adjustment reads, indexed by player_id."""
-    return summarize(*stuff.window_arsenal(model, season, features.WINDOW_WEIGHTS))
+    """Per tracked pitcher at the end of ``season``: the stuff summaries and injured-list history the adjustment reads, by player_id."""
+    return with_injuries(summarize(*stuff.window_arsenal(model, season, features.WINDOW_WEIGHTS)), season)
+
+
+def with_injuries(feats: pd.DataFrame, season: int, refresh_current: bool = False) -> pd.DataFrame:
+    """Stuff summaries joined with window injured-list history; a tracked pitcher never on a list reads zero."""
+    il = injuries.window_features(season, features.WINDOW_WEIGHTS, refresh_current).reindex(feats.index).fillna(0.0)
+    return pd.concat([feats, il], axis=1)[FEATURES]
 
 
 def summarize(arsenal: pd.DataFrame, pitchers_: pd.DataFrame) -> pd.DataFrame:
     """Stuff summaries from a window arsenal: primary fastball grade and velocity, best secondary, usage-weighted grade, command."""
     if pitchers_.empty:
-        return pd.DataFrame(columns=FEATURES)
+        return pd.DataFrame(columns=STUFF_FEATURES)
     a = arsenal.copy()
     fb = a[a["family"].eq("fastball")].sort_values("usage").groupby("pitcher").tail(1).set_index("pitcher")
     sec = a[~a["family"].eq("fastball")].groupby("pitcher")["stuff_grade"].max()
     weighted = (a["stuff_grade"] * a["usage"]).groupby(a["pitcher"]).sum() / a.groupby("pitcher")["usage"].sum()
-    out = pitchers_.set_index("pitcher")[["command_grade", "fsl_share"]].copy()
+    out = pitchers_.set_index("pitcher")[["command_grade", "fsl_share", "spring_share"]].copy()
     out["fb_stuff"] = fb["stuff_grade"].reindex(out.index)
     out["fb_velo"] = fb["velo"].reindex(out.index)
     out["best_secondary_stuff"] = sec.reindex(out.index)
     out["arsenal_stuff"] = weighted.reindex(out.index)
     out["n_types"] = a.groupby("pitcher").size().reindex(out.index).fillna(0).astype(float)
     out.index.name = "player_id"
-    return out[FEATURES].astype(float)
+    return out[STUFF_FEATURES].astype(float)
 
 
 def _encode(b: xgb.Booster) -> str:
@@ -117,7 +125,7 @@ def apply(base: pd.DataFrame, feats: pd.DataFrame, adjustment: dict) -> pd.DataF
     WAR quantities by the adjusted WAR score. Levels and spread stay the base model's.
     """
     out = base.astype("float64")  # booster outputs are float32
-    have = feats.reindex(columns=FEATURES).notna().any(axis=1).to_numpy()
+    have = feats.reindex(columns=STUFF_FEATURES).notna().any(axis=1).to_numpy()
     if not have.any():
         return out
     rows = out[have]
@@ -193,7 +201,7 @@ def run(model: ProspectModel, stuff_model: stuff.StuffModel, last_season: int) -
     result["elite_passed"] = bool(result["elite"]["gap"] > 0 and result["elite"]["ci"][0] > 0)
     result["pipeline"] = pipeline_report(data)
     reach, war = _train(data, data, data["reached"], data["war"])
-    stuff_model.adjustment = {"reach": _encode(reach), "war": _encode(war), "adoption_passed": result["adoption_passed"],
+    stuff_model.adjustment = {"reach": _encode(reach), "war": _encode(war), "features": FEATURES, "adoption_passed": result["adoption_passed"],
                               "elite_passed": result["elite_passed"], "evaluation": result}
     return result
 

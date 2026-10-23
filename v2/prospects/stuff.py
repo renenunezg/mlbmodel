@@ -8,9 +8,10 @@ added beyond the count it was thrown in. Per pitcher, season and pitch type the
 mean prediction per 100 pitches is mapped to 20-80 against the MLB distribution of that pitch type
 (50 average, 10 per standard deviation, lower run value better); command against all MLB pitchers.
 
-Minor-league readings and grades are shifted to the MLB scale by level offsets fitted on pitchers
-measured at both levels in a season, and a pitch family is released for publishing only if its
-Triple-A grades carry over to the same pitchers' MLB grades (``carry``).
+Minor-league and spring training readings and grades are shifted to the MLB scale by level offsets
+fitted on pitchers measured at both levels in a season. A pitch family is released for publishing
+only if its grades carry over to the same pitchers' MLB grades (``carry``): Triple-A's check releases
+Triple-A and Florida State League pitches, spring training has its own.
 """
 from __future__ import annotations
 
@@ -41,7 +42,7 @@ class StuffModel:
     command_scale: list[float] = field(default_factory=list)
     floor: dict[str, int] = field(default_factory=dict)  # pitch type or "command" -> minimum pitches for a grade
     offsets: dict = field(default_factory=dict)  # level -> {reading or grade key -> MLB minus level}
-    carry: dict = field(default_factory=dict)  # family or "command" -> {"r", "bias", "n", "passed"}
+    carry: dict = field(default_factory=dict)  # level -> family or "command" -> {"r", "bias", "n", "passed"}
     adjustment: dict = field(default_factory=dict)
     evaluation: dict = field(default_factory=dict)
 
@@ -120,19 +121,30 @@ def by_pitcher_command(values: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
 
 
 PITCH_CODES = ("FF", "SI", "FC", "SL", "ST", "SV", "CU", "KC", "CS", "CH", "FS", "FO", "SC")  # published code = position + 1
-LEVEL_CODES = {"aaa": 1, "fsl": 2, "mixed": 3}
+LEVEL_CODES = {"aaa": 1, "fsl": 2, "mixed": 3, "spring": 4}
 TRACKED_FLOOR = 200  # released pitches in a pitcher's window before he counts as tracked
-MINOR_LEVELS = ("aaa", "fsl")
+MINOR_LEVELS = ("aaa", "fsl", "spring")
+RELEASED_BY = {"aaa": "aaa", "fsl": "aaa", "spring": "spring"}  # level -> the carry-over check that releases it
 
 
-def released(model: StuffModel) -> set[str]:
-    """Pitch families and "command" whose Triple-A grades carried over to MLB; only these are published or used."""
-    return {k for k, v in model.carry.items() if v.get("passed")}
+def released(model: StuffModel, level: str) -> set[str]:
+    """Pitch families and "command" released at a level by its carry-over check; only these are published or used.
+
+    Command is released only where it was checked at the level itself (Triple-A); Florida State League and
+    spring samples never reach the command floor in a pair, so their command is never shown.
+    """
+    checked = model.carry.get(RELEASED_BY[level], {})
+    out = {k for k, v in checked.items() if v.get("passed")}
+    return out if RELEASED_BY[level] == level else out - {"command"}
+
+
+def adjusted(model: StuffModel, level: str) -> bool:
+    return level == "aaa" or bool(model.offsets.get(f"{level}_adjusted"))
 
 
 def _level_shift(frame: pd.DataFrame, model: StuffModel, level: str) -> pd.DataFrame:
-    """Readings and the stuff grade on the MLB scale; FSL stays unshifted when its offsets could not be fitted."""
-    if level == "fsl" and not model.offsets.get("fsl_adjusted"):
+    """Readings and the stuff grade on the MLB scale; a level whose offsets could not be fitted stays unshifted."""
+    if not adjusted(model, level):
         return frame
     off = model.offsets[level]
     out = frame.copy()
@@ -143,36 +155,36 @@ def _level_shift(frame: pd.DataFrame, model: StuffModel, level: str) -> pd.DataF
 
 
 def window_arsenal(model: StuffModel, season: int, weights: dict[int, float]) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Tracked minor-league pitches over the window ending at ``season``, pooled with the window weights.
+    """Tracked prospect-level pitches over the window ending at ``season``, pooled with the window weights.
 
     Returns per pitcher and pitch type (released families only, at or above the type's floor):
     ``n, usage, readings, stuff_grade``; and per tracked pitcher: ``pitches, command_grade`` (null below
-    the command floor or when command is not released), ``stuff_level``, ``fsl_share`` and ``stuff_adjusted``.
+    the command floor or where command is not released), ``stuff_level``, ``fsl_share``, ``spring_share`` and
+    ``stuff_adjusted``.
     """
-    ok = released(model)
     types, cmds = [], []
     for back, w in weights.items():
         for level in MINOR_LEVELS:
             pitches.require_complete(season - back, level)
             if not pitches.path(season - back, level).exists():
                 continue
+            ok = released(model, level)
             values = pitch_values(model, pitches.load(season - back, level))
             t = by_type(values, ["pitcher"])
             t = t[t["pitch_type"].isin(model.scale)]
             t["family"] = t["pitch_type"].map(pitches.FAMILY)
+            t = t[t["family"].isin(ok)]
             t["stuff_grade"] = stuff_grade(t["stuff_rv100"], t["pitch_type"], model.scale)
             t = _level_shift(t, model, level)
-            types.append(t.assign(w=w, level=level))
+            types.append(t.assign(w=w, level=level, adjusted=adjusted(model, level)))
             if "command" in ok:
                 c = by_pitcher_command(values, ["pitcher"])
-                c["command_grade"] = command_grade(c["command_rv100"], model.command_scale)
-                if level == "aaa" or model.offsets.get("fsl_adjusted"):
-                    c["command_grade"] = (c["command_grade"] + model.offsets[level]["command_grade"]["value"]).clip(20, 80)
+                c["command_grade"] = (command_grade(c["command_rv100"], model.command_scale)
+                                      + model.offsets[level]["command_grade"]["value"]).clip(20, 80)
                 cmds.append(c.assign(w=w))
     if not types:
         return pd.DataFrame(), pd.DataFrame()
     t = pd.concat(types, ignore_index=True)
-    t = t[t["family"].isin(ok)]
     t["wn"] = t["w"] * t["n"]
     g = t.groupby(["pitcher", "pitch_type"])
     arsenal = pd.DataFrame({"n": g["n"].sum(), "family": g["family"].first()})
@@ -181,13 +193,15 @@ def window_arsenal(model: StuffModel, season: int, weights: dict[int, float]) ->
     arsenal = arsenal.reset_index()
     arsenal["usage"] = arsenal["n"] / arsenal.groupby("pitcher")["n"].transform("sum")
     arsenal = arsenal[arsenal["n"] >= arsenal["pitch_type"].map(model.floor)]
-    levels = t.groupby("pitcher")["level"].agg(lambda s: s.iloc[0] if s.nunique() == 1 else "mixed")
-    fsl = t[t["level"].eq("fsl")].groupby("pitcher")["n"].sum()
-    pitchers = pd.DataFrame({"pitches": t.groupby("pitcher")["n"].sum(), "stuff_level": levels})
-    pitchers["fsl_share"] = (fsl.reindex(pitchers.index).fillna(0.0) / pitchers["pitches"]).astype(float)
+    by_pitcher = t.groupby("pitcher")
+    pitchers = pd.DataFrame({"pitches": by_pitcher["n"].sum(),
+                             "stuff_level": by_pitcher["level"].agg(lambda s: s.iloc[0] if s.nunique() == 1 else "mixed"),
+                             "stuff_adjusted": by_pitcher["adjusted"].all()})
+    for level in ("fsl", "spring"):
+        share = t[t["level"].eq(level)].groupby("pitcher")["n"].sum()
+        pitchers[f"{level}_share"] = (share.reindex(pitchers.index).fillna(0.0) / pitchers["pitches"]).astype(float)
     pitchers = pitchers[pitchers["pitches"] >= TRACKED_FLOOR]
-    pitchers["stuff_adjusted"] = ~pitchers["stuff_level"].isin(["fsl", "mixed"]) | bool(model.offsets.get("fsl_adjusted"))
-    if "command" in ok:
+    if cmds:
         c = pd.concat(cmds, ignore_index=True)
         c["wn"] = c["w"] * c["command_n"]
         cg = c.groupby("pitcher")

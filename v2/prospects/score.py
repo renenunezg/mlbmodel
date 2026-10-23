@@ -136,6 +136,11 @@ def pitcher_gate(rows: pd.DataFrame, tracked: pd.Series, adjustment: dict) -> pd
     return reason
 
 
+def gate_ready(stuff_model: stuff.StuffModel | None) -> bool:
+    """Whether the published adjustment reads injured-list history (models fitted before it carry no feature list)."""
+    return stuff_model is not None and "il_days" in stuff_model.adjustment.get("features", [])
+
+
 def stuff_columns(arsenal: pd.DataFrame, pitchers: pd.DataFrame) -> pd.DataFrame:
     """Per tracked pitcher, the published stuff columns: the packed pitch mix (seven smallints per type, by usage), command, level, sample."""
     if pitchers.empty:
@@ -171,7 +176,8 @@ def score(as_of: date, model: ProspectModel, stuff_model: stuff.StuffModel | Non
     price = ValueModel(price=dict(model.price)).price_model()
     arsenal, tracked_pitchers = (stuff.window_arsenal(stuff_model, season, features.WINDOW_WEIGHTS) if stuff_model is not None
                                  else (pd.DataFrame(), pd.DataFrame()))
-    feats = adjust.summarize(arsenal, tracked_pitchers)
+    feats = adjust.with_injuries(adjust.summarize(arsenal, tracked_pitchers), season, refresh_current=True) if gate_ready(stuff_model) \
+        else adjust.summarize(arsenal, tracked_pitchers)
     gate = stuff_model is not None and bool(stuff_model.adjustment)
     pools = []
     for pool in POOLS:

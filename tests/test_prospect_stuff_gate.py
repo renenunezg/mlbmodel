@@ -24,7 +24,8 @@ def test_untracked_pitchers_stay_ungraded_and_unadjusted():
 
     base = pd.DataFrame({"p_mlb": [0.6, 0.2, 0.3], "p_regular": [0.3, 0.05, 0.1], "peak_war": [2.0, 0.1, 1.0],
                          "control_war": [6.0, 0.2, 3.0], "control_q25": [1.0, 0.0, 0.5], "control_q75": [9.0, 1.0, 5.0]}, index=[10, 11, 12])
-    feats = pd.DataFrame([[40, 40, 40, 40, 90.0, 2, 1.0], [75, 75, 75, 60, 99.0, 5, 0.0], [np.nan] * len(adjust.FEATURES)],
+    feats = pd.DataFrame([[40, 40, 40, 40, 90.0, 2, 1.0, 0.0, 2, 90, 1], [75, 75, 75, 60, 99.0, 5, 0.0, 0.0, 0, 0, 0],
+                          [np.nan] * len(adjust.STUFF_FEATURES) + [0, 0, 0]],
                          columns=adjust.FEATURES, index=[10, 11, 12])
     out = adjust.apply(base, feats, adjustment)
     pd.testing.assert_series_equal(out.loc[12], base.loc[12].astype("float64"))

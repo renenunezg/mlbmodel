@@ -1,7 +1,8 @@
-"""Idempotent per-year minor-league Statcast cache builder: Triple-A, and the Florida State League.
+"""Idempotent per-year Statcast cache builder for prospect levels: Triple-A, the Florida State League, spring training.
 
 Populates cache/statcast_{level}_{year}.parquet (``aaa`` by default, ``fsl`` for the Single-A
-Florida State League, tracked since 2021) with the same pitch columns as the MLB cache. Baseball
+Florida State League, tracked since 2021, ``spring`` for MLB spring training games, where many
+prospects pitch on non-roster invitations) with the same pitch columns as the MLB cache. Baseball
 Savant's minor-league search mixes every tracked level, so each day's pitches are kept only for
 the game_pks on that level's schedule.
 Re-running a year fetches only the dates past the cached max date, and the
@@ -34,7 +35,8 @@ log = logging.getLogger(__name__)
 CACHE_DIR = Path(__file__).resolve().parents[2] / "cache"
 SCHEDULE = "https://statsapi.mlb.com/api/v1/schedule"
 SEARCH = "https://baseballsavant.mlb.com/statcast-search-minors/csv"
-LEVELS = {"aaa": (11, None), "fsl": (14, 123)}  # level -> (sport id, league id or None for the whole sport)
+LEVELS = {"aaa": (11, None, "R"), "fsl": (14, 123, "R"), "spring": (1, None, "S")}  # level -> (sport id, league id or None, game type)
+MLB_SEARCH = "https://baseballsavant.mlb.com/statcast_search/csv"
 USER_AGENT = "Mozilla/5.0"
 ATTEMPTS = 3
 RETRY_SECONDS = 10
@@ -44,8 +46,8 @@ CHECKPOINT_DAYS = 20
 
 def schedule(year: int, level: str) -> dict[date, set[int]]:
     """Regular-season game_pks of the level by date."""
-    sport_id, league_id = LEVELS[level]
-    response = requests.get(SCHEDULE, params={"sportId": sport_id, "season": year, "gameType": "R", "hydrate": "team"}, timeout=120)
+    sport_id, league_id, game_type = LEVELS[level]
+    response = requests.get(SCHEDULE, params={"sportId": sport_id, "season": year, "gameType": game_type, "hydrate": "team"}, timeout=120)
     response.raise_for_status()
     out: dict[date, set[int]] = {}
     for day in response.json().get("dates", []):
@@ -58,12 +60,16 @@ def schedule(year: int, level: str) -> dict[date, set[int]]:
     return out
 
 
-def fetch_day(day: date) -> pd.DataFrame:
-    params = {"all": "true", "type": "details", "minors": "true", "player_type": "batter",
-              "game_date_gt": day.isoformat(), "game_date_lt": day.isoformat()}
+def fetch_day(day: date, level: str = "aaa") -> pd.DataFrame:
+    if level == "spring":
+        url, params = MLB_SEARCH, {"all": "true", "type": "details", "player_type": "batter", "hfGT": "S|",
+                                   "game_date_gt": day.isoformat(), "game_date_lt": day.isoformat()}
+    else:
+        url, params = SEARCH, {"all": "true", "type": "details", "minors": "true", "player_type": "batter",
+                               "game_date_gt": day.isoformat(), "game_date_lt": day.isoformat()}
     for attempt in range(1, ATTEMPTS + 1):
         try:
-            response = requests.get(SEARCH, params=params, headers={"User-Agent": USER_AGENT}, timeout=180)
+            response = requests.get(url, params=params, headers={"User-Agent": USER_AGENT}, timeout=180)
             response.raise_for_status()
             body = response.content.decode("utf-8-sig")
             if body.lstrip().startswith("<"):
@@ -75,6 +81,16 @@ def fetch_day(day: date) -> pd.DataFrame:
             log.warning(f"{day}: {exc}; retrying in {RETRY_SECONDS * attempt}s")
             time.sleep(RETRY_SECONDS * attempt)
     raise RuntimeError(day)
+
+
+def season_pitches(frame: pd.DataFrame, year: int, level: str) -> pd.DataFrame:
+    """The level's game type in the year: regular season, or spring training for ``spring``."""
+    if LEVELS[level][2] == "R":
+        return regular_season_pitches(frame, year)
+    if frame.empty:
+        return frame.copy()
+    keep = frame["game_type"].eq("S") & pd.to_datetime(frame["game_date"]).dt.year.eq(year)
+    return frame.loc[keep].copy()
 
 
 def _save(df: pd.DataFrame, path: Path) -> None:
@@ -93,7 +109,7 @@ def fetch_year(year: int, force: bool = False, level: str = "aaa") -> pd.DataFra
     df = pd.DataFrame()
     after = date(year, 1, 1)
     if cache_path.exists() and not force:
-        df = regular_season_pitches(pd.read_parquet(cache_path), year)
+        df = season_pitches(pd.read_parquet(cache_path), year, level)
         if not df.empty:
             df["game_date"] = pd.to_datetime(df["game_date"])
             after = df["game_date"].max().date()
@@ -104,14 +120,14 @@ def fetch_year(year: int, force: bool = False, level: str = "aaa") -> pd.DataFra
         return df
     parts = []
     for i, day in enumerate(days, 1):
-        frame = fetch_day(day)
+        frame = fetch_day(day, level)
         if not frame.empty:
             parts.append(frame[frame["game_pk"].isin(games[day])])
         if i % CHECKPOINT_DAYS == 0 or i == len(days):
             new = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
             if not new.empty:
                 new["game_date"] = pd.to_datetime(new["game_date"])
-                df = pd.concat([df, regular_season_pitches(new, year)], ignore_index=True).drop_duplicates(subset=DEDUPE_COLS, keep="last")
+                df = pd.concat([df, season_pitches(new, year, level)], ignore_index=True).drop_duplicates(subset=DEDUPE_COLS, keep="last")
                 _save(df, cache_path)
             parts = []
             log.info(f"[{year}] {i}/{len(days)} days, {len(df):,} pitches saved")

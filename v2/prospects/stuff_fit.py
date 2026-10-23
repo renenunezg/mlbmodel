@@ -47,6 +47,9 @@ CARRY_MIN_R = 0.5
 CARRY_MAX_BIAS = 5.0  # grade points
 CARRY_LATER_SEASON = False  # the first MLB season at or after the Triple-A season, same season included
 FSL_MIN_PAIRS = 30
+# Added 2026-10-23 (second pass): spring training as a level. A Triple-A-specific command model was tried the same
+# day and dropped: its carry-over r was .473 against .474 for the MLB model, for 0.16 MB more stored model.
+SPRING_MIN_PAIRS = 30
 BOOTSTRAP = 1000
 
 
@@ -247,21 +250,22 @@ def shifted(frame: pd.DataFrame, offsets: dict, command: bool = False) -> pd.Dat
     return out
 
 
-def carry_over(model: stuff.StuffModel, aaa: tuple, mlb: tuple) -> dict:
-    """Triple-A grades (offset-adjusted) against the same pitchers' first MLB season at or after, per family and for command."""
+def carry_over(model: stuff.StuffModel, low: tuple, mlb: tuple, offsets: dict, seasons: range) -> dict:
+    """A level's grades (offset-adjusted) against the same pitchers' first MLB season at or after, per family and for command."""
     out = {}
-    a = shifted(aaa[0][aaa[0]["season"].between(2022, 2025)], model.offsets["aaa"])
-    pairs = _pairs(a, mlb[0], model, same_season=False)
+    lo = shifted(low[0][low[0]["season"].isin(seasons)], offsets)
+    pairs = _pairs(lo, mlb[0], model, same_season=False)
     pairs = pairs[pairs["season_hi"] > pairs["season_lo"]] if CARRY_LATER_SEASON else pairs
     for fam in pitches.FAMILIES:
         f = pairs[pairs["family"].eq(fam)]
         r, bias = float(f["stuff_grade_lo"].corr(f["stuff_grade_hi"])), float((f["stuff_grade_hi"] - f["stuff_grade_lo"]).mean())
         out[fam] = {"r": r, "bias": bias, "n": int(len(f)), "passed": bool(r >= CARRY_MIN_R and abs(bias) <= CARRY_MAX_BIAS)}
-    ac = shifted(aaa[1][aaa[1]["season"].between(2022, 2025)], model.offsets["aaa"], command=True)
-    c = _command_pairs(ac, mlb[1], model.floor["command"], same_season=False)
-    c = c[c["season_hi"] > c["season_lo"]] if CARRY_LATER_SEASON else c
-    r, bias = float(c["command_grade_lo"].corr(c["command_grade_hi"])), float((c["command_grade_hi"] - c["command_grade_lo"]).mean())
-    out["command"] = {"r": r, "bias": bias, "n": int(len(c)), "passed": bool(r >= CARRY_MIN_R and abs(bias) <= CARRY_MAX_BIAS)}
+    if np.isfinite(offsets["command_grade"]["value"]):
+        lc = shifted(low[1][low[1]["season"].isin(seasons)], offsets, command=True)
+        c = _command_pairs(lc, mlb[1], model.floor["command"], same_season=False)
+        c = c[c["season_hi"] > c["season_lo"]] if CARRY_LATER_SEASON else c
+        r, bias = float(c["command_grade_lo"].corr(c["command_grade_hi"])), float((c["command_grade_hi"] - c["command_grade_lo"]).mean())
+        out["command"] = {"r": r, "bias": bias, "n": int(len(c)), "passed": bool(r >= CARRY_MIN_R and abs(bias) <= CARRY_MAX_BIAS)}
     return out
 
 
@@ -269,19 +273,27 @@ def stage_levels(model: stuff.StuffModel) -> stuff.StuffModel:
     mlb = season_grades(model, "mlb", FIT_SEASONS + [TEST_SEASON])
     aaa = season_grades(model, "aaa", [2022, 2023, 2024, 2025, 2026])
     fsl = season_grades(model, "fsl", [2021, 2022, 2023, 2024, 2025, 2026])
+    spring = season_grades(model, "spring", [2021, 2022, 2023, 2024, 2025, 2026])
     model.offsets = {"aaa": level_offsets(model, aaa, mlb)}
     to_aaa = level_offsets(model, fsl, aaa)
     model.offsets["fsl_adjusted"] = bool(to_aaa["pairs"] >= FSL_MIN_PAIRS)
     # FSL to MLB is chained through Triple-A; intervals are reported per link.
     model.offsets["fsl"] = {k: ({"value": v["value"] + model.offsets["aaa"][k]["value"], "ci_fsl_to_aaa": v["ci"], "pitchers": v["pitchers"]}
                                 if isinstance(v, dict) else v) for k, v in to_aaa.items()}
-    model.carry = carry_over(model, aaa, mlb)
-    for level in ("aaa", "fsl"):
+    model.offsets["spring"] = level_offsets(model, spring, mlb)
+    model.offsets["spring_adjusted"] = bool(model.offsets["spring"]["pairs"] >= SPRING_MIN_PAIRS)
+    # Triple-A's check releases Triple-A and FSL pitches and spring's releases spring; FSL's own check is reported only.
+    model.carry = {"aaa": carry_over(model, aaa, mlb, model.offsets["aaa"], range(2022, 2026)),
+                   "spring": carry_over(model, spring, mlb, model.offsets["spring"], range(2021, 2026)),
+                   "fsl": carry_over(model, fsl, mlb, model.offsets["fsl"], range(2021, 2026))}
+    for level in ("aaa", "fsl", "spring"):
         log.info(f"offsets[{level}]: " + ", ".join(f"{k} {v['value']:+.2f}" if isinstance(v, dict) else f"{k} {v}"
                                                  for k, v in model.offsets[level].items()))
-    log.info(f"fsl adjusted: {model.offsets['fsl_adjusted']} ({to_aaa['pairs']} FSL/AAA same-season pitcher-types)")
-    for k, v in model.carry.items():
-        log.info(f"carry[{k}]: {v}")
+    log.info(f"adjusted: fsl {model.offsets['fsl_adjusted']} ({to_aaa['pairs']}), spring {model.offsets['spring_adjusted']} "
+             f"({model.offsets['spring']['pairs']})")
+    for level, checks in model.carry.items():
+        for k, v in checks.items():
+            log.info(f"carry[{level}][{k}]: {v}")
     return model
 
 
