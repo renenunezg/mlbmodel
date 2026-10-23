@@ -22,6 +22,7 @@ from backend.db import engine
 log = logging.getLogger(__name__)
 
 MODEL_VERSION = "prospect-v1"
+STUFF_VERSION = "prospect-stuff-v1"  # the stuff model's sibling row in prospect_models
 MODELS_DIR = Path(__file__).resolve().parent / "models"
 POOLS = ("bat", "pit")
 QUANTILES = (0.25, 0.75)
@@ -159,10 +160,36 @@ def publish_model(model: ProspectModel) -> None:
     log.info(f"model: published {model.model_version} through {max(model.dev_seasons)}")
 
 
-def load_latest_from_db() -> ProspectModel:
+def _latest_payload(version: str) -> dict | None:
     with engine.connect() as conn:
-        row = conn.execute(text("SELECT payload FROM prospect_models ORDER BY fitted_at DESC LIMIT 1")).fetchone()
+        row = conn.execute(text("SELECT payload FROM prospect_models WHERE model_version = :v ORDER BY fitted_at DESC LIMIT 1"),
+                           {"v": version}).fetchone()
     if row is None:
+        return None
+    return row[0] if isinstance(row[0], dict) else json.loads(row[0])
+
+
+def load_latest_from_db() -> ProspectModel:
+    payload = _latest_payload(MODEL_VERSION)
+    if payload is None:
         raise RuntimeError("No prospect model published; run python -m v2.prospects.fit first")
-    payload = row[0] if isinstance(row[0], dict) else json.loads(row[0])
     return ProspectModel.from_payload(payload)
+
+
+def load_stuff_from_db():
+    """The published stuff model, or None before one is published (pitchers then carry no stuff columns)."""
+    from v2.prospects.stuff import StuffModel
+    payload = _latest_payload(STUFF_VERSION)
+    return None if payload is None else StuffModel.from_payload(payload)
+
+
+def publish_stuff(model) -> None:
+    payload = json.dumps(_clean(model.to_payload()), allow_nan=False)
+    with engine.begin() as conn:
+        conn.execute(text(
+            "INSERT INTO prospect_models (model_version, last_dev_season, payload, fitted_at, updated_at) "
+            "VALUES (:v, :s, CAST(:p AS jsonb), :f, now()) "
+            "ON CONFLICT (model_version, last_dev_season) DO UPDATE SET payload = EXCLUDED.payload, "
+            "fitted_at = EXCLUDED.fitted_at, updated_at = now()"
+        ), {"v": STUFF_VERSION, "s": max(model.seasons), "p": payload, "f": model.fitted_at})
+    log.info(f"model: published {STUFF_VERSION} through {max(model.seasons)}")

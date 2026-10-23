@@ -4,12 +4,13 @@ Reads the feed tables for the scoring window (this season and the two before), h
 roster history for players new to the cache and refreshes the few whose eligibility can still move
 (an open entry with an MLB club), builds the snapshot as of the date, predicts per pool on the rows
 above the floor, maps peak WAR onto the MLB grade scale, prices the control years, summarizes the
-traits, and publishes when the published columns changed. Rows under the floor are published
+traits, attaches per-pitch stuff for tracked pitchers (independent of the grade), and publishes when
+the published columns changed. Rows under the floor are published
 without a grade (``grade_reason`` set); a pool that failed the publish gate at fit time is published
 ungraded with ``model_not_validated``.
 
 Usage:
-    python -m v2.prospects.score --as-of 2026-10-22 [--no-write] [--model path.json]
+    python -m v2.prospects.score --as-of 2026-10-22 [--no-write] [--model path.json] [--stuff path.json]
 """
 from __future__ import annotations
 
@@ -27,9 +28,9 @@ from backend.log import setup_logging
 from v2.players.bio import STARTER_SHARE
 from v2.players.model import ValueModel
 from v2.players.score import HEADSHOT
-from v2.prospects import dataset, events, features, identity, value
+from v2.prospects import adjust, dataset, events, features, identity, stuff, value
 from v2.prospects.feeds import CACHE_DIR, STATSAPI, fetch_json
-from v2.prospects.model import POOLS, ProspectModel, load_latest_from_db
+from v2.prospects.model import POOLS, ProspectModel, load_latest_from_db, load_stuff_from_db
 from v2.prospects.publish import VALUE_COLUMNS, publish
 
 log = logging.getLogger(__name__)
@@ -119,7 +120,44 @@ def tip(contribs: pd.DataFrame) -> list[list[list]]:
     return [[[c, round(float(row[c]), 2)] for c in row.abs().sort_values(ascending=False).head(4).index] for _, row in contribs.iterrows()]
 
 
-def score(as_of: date, model: ProspectModel) -> pd.DataFrame:
+STUFF_COLUMNS = ["pitch_mix", "command_grade", "stuff_level", "stuff_pitches"]
+
+
+STUFF_TRAIT = [t for t, _ in TRAITS["pit"]].index("stuff")
+
+
+def pitcher_gate(rows: pd.DataFrame, tracked: pd.Series, adjustment: dict) -> pd.Series:
+    """Grade reason per pitcher row: graded (None) only when the stuff rules passed and the pitcher is above the floor and tracked."""
+    if not (adjustment.get("adoption_passed") and adjustment.get("elite_passed")):
+        return pd.Series("model_not_validated", index=rows.index, dtype=object)
+    reason = pd.Series([None] * len(rows), index=rows.index, dtype=object)
+    reason[~tracked.reindex(rows.index).fillna(False).astype(bool)] = "not_tracked"
+    reason[~rows["gradeable"].astype(bool)] = "insufficient_sample"
+    return reason
+
+
+def stuff_columns(arsenal: pd.DataFrame, pitchers: pd.DataFrame) -> pd.DataFrame:
+    """Per tracked pitcher, the published stuff columns: the packed pitch mix (seven smallints per type, by usage), command, level, sample."""
+    if pitchers.empty:
+        return pd.DataFrame(columns=["player_id", *STUFF_COLUMNS])
+
+    def pack(g: pd.DataFrame) -> list:
+        out = []
+        for r in g.itertuples(index=False):
+            out += [stuff.PITCH_CODES.index(r.pitch_type) + 1, int(round(100 * r.usage)), int(round(10 * r.velo)), int(round(10 * r.ivb)),
+                    int(round(10 * r.hb)), int(round(r.spin)) if pd.notna(r.spin) else None, int(round(r.stuff_grade))]
+        return out
+
+    mix = arsenal.groupby("pitcher")[["pitch_type", "usage", "velo", "ivb", "hb", "spin", "stuff_grade"]].apply(pack).rename("pitch_mix")
+    p = pitchers.set_index("pitcher").join(mix, how="left")
+    level = p["stuff_level"].map(stuff.LEVEL_CODES) * np.where(p["stuff_adjusted"], 1, -1)
+    out = pd.DataFrame({"pitch_mix": p["pitch_mix"], "command_grade": p["command_grade"].round().astype("Int64"),
+                        "stuff_level": level.astype("Int64"), "stuff_pitches": p["pitches"].clip(upper=32767).round().astype("Int64")},
+                       index=p.index)
+    return out.reset_index().rename(columns={"pitcher": "player_id"})[["player_id", *STUFF_COLUMNS]]
+
+
+def score(as_of: date, model: ProspectModel, stuff_model: stuff.StuffModel | None = None) -> pd.DataFrame:
     season = scoring_season(as_of)
     tables = dataset.load_tables(list(range(season - dataset.WINDOW + 1, season + 1)))
     active = set(tables[0].loc[tables[0]["season"] >= season - 1, "player_id"]) | set(tables[1].loc[tables[1]["season"] >= season - 1, "player_id"])
@@ -131,16 +169,27 @@ def score(as_of: date, model: ProspectModel) -> pd.DataFrame:
     frame = frame[frame["player_id"].isin(active) & frame["rookie_eligible"] & frame["in_age_range"]].reset_index(drop=True)
     log.info(f"score[{as_of}]: {len(frame):,} rookie-eligible players, {int(frame['gradeable'].sum()):,} above the floor")
     price = ValueModel(price=dict(model.price)).price_model()
+    arsenal, tracked_pitchers = (stuff.window_arsenal(stuff_model, season, features.WINDOW_WEIGHTS) if stuff_model is not None
+                                 else (pd.DataFrame(), pd.DataFrame()))
+    feats = adjust.summarize(arsenal, tracked_pitchers)
+    gate = stuff_model is not None and bool(stuff_model.adjustment)
     pools = []
     for pool in POOLS:
         rows = frame[frame["role"] == pool].copy()
         if rows.empty:
             continue
-        validated = bool(model.validated.get(pool, False))
-        rows["grade_reason"] = np.where(rows["gradeable"], None, "insufficient_sample") if validated else "model_not_validated"
-        graded = rows[rows["gradeable"]] if validated else rows.iloc[0:0]
+        if pool == "pit" and gate:
+            # Pitchers are graded one by one: tracked, above the floor, and only once the stuff rules passed.
+            rows["grade_reason"] = pitcher_gate(rows, rows["player_id"].isin(feats.index), stuff_model.adjustment)
+            graded = rows[rows["grade_reason"].isna()]
+        else:
+            validated = bool(model.validated.get(pool, False))
+            rows["grade_reason"] = np.where(rows["gradeable"], None, "insufficient_sample") if validated else "model_not_validated"
+            graded = rows[rows["gradeable"]] if validated else rows.iloc[0:0]
         if not graded.empty:
             pred, contribs = model.predict(graded, pool, contributions=True)
+            if pool == "pit" and gate:
+                pred = adjust.apply(pred, feats.reindex(graded["player_id"]).set_axis(graded.index), stuff_model.adjustment)
             band = grade_band(graded["sample"], graded["floor"])
             rows.loc[graded.index, "peak_war"] = pred["peak_war"].round(2)
             rows.loc[graded.index, "peak_grade"] = model.to_grade(pred["peak_war"], pool).round(1)
@@ -157,11 +206,26 @@ def score(as_of: date, model: ProspectModel) -> pd.DataFrame:
             rows.loc[graded.index, "risk"] = model.risk(pred, pool)
             rows.loc[graded.index, "price_role"] = roles
             g, pc = trait_summary(graded, pool, contribs["peak_war"])
+            if pool == "pit" and gate:
+                # The stuff trait of a graded pitcher is his usage-weighted stuff grade, not the base model's (untracked) inputs.
+                arsenal_grade = feats["arsenal_stuff"].reindex(graded["player_id"]).to_numpy()
+                pct = pd.Series(arsenal_grade).rank(pct=True).mul(100).round().to_numpy()
+                for i in range(len(g)):
+                    g[i][STUFF_TRAIT] = int(round(arsenal_grade[i]))
+                    pc[i][STUFF_TRAIT] = int(pct[i])
             rows.loc[graded.index, "trait_grades"] = pd.Series(g, index=graded.index, dtype=object)
             rows.loc[graded.index, "trait_pcts"] = pd.Series(pc, index=graded.index, dtype=object)
             rows.loc[graded.index, "tip"] = pd.Series(tip(contribs["peak_war"]), index=graded.index, dtype=object)
         pools.append(rows)
     out = pd.concat(pools, ignore_index=True)
+    if stuff_model is not None:
+        cols = stuff_columns(arsenal, tracked_pitchers)
+        pit = out["role"].eq("pit")
+        out = out.merge(cols[cols["player_id"].isin(out.loc[pit, "player_id"])], on="player_id", how="left")
+        log.info(f"score: stuff for {out['stuff_pitches'].notna().sum():,} of {int(pit.sum()):,} pitchers")
+    for c in STUFF_COLUMNS:
+        if c not in out:
+            out[c] = None
     for c in ("trait_grades", "trait_pcts", "tip"):
         out[c] = out[c].where(out[c].notna(), None) if c in out else None
     b = bio.set_index("player_id")
@@ -203,12 +267,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--as-of", type=date.fromisoformat, default=date.today())
     parser.add_argument("--model", type=str, default=None, help="model JSON on disk instead of the newest database row")
+    parser.add_argument("--stuff", type=str, default=None, help="stuff model JSON on disk instead of the newest database row")
     parser.add_argument("--no-write", action="store_true")
     parser.add_argument("--force", action="store_true", help="publish even when the fingerprint is unchanged")
     args = parser.parse_args()
     setup_logging()
     model = ProspectModel.load(Path(args.model)) if args.model else load_latest_from_db()
-    values = score(args.as_of, model)
+    stuff_model = stuff.StuffModel.load(Path(args.stuff)) if args.stuff else load_stuff_from_db()
+    values = score(args.as_of, model, stuff_model)
     log.info(f"score: {len(values):,} rows, {int(values['peak_grade'].notna().sum()):,} graded")
     if args.no_write:
         out = CACHE_DIR / f"scored_{args.as_of}.parquet"

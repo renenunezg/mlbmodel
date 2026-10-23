@@ -24,10 +24,13 @@ VALUE_COLUMNS = [
     "p_regular", "p_mlb", "eta_season", "trade_value_musd", "trade_value_low", "trade_value_high",
     "market_value_musd", "expected_control_war", "peak_war", "risk", "on_40_man", "mlb_ab_or_ip",
     "service_days", "season_sample", "sample", "tracked_share", "trait_grades", "trait_pcts", "tip",
+    "pitch_mix", "command_grade", "stuff_level", "stuff_pitches",
 ]
 JSON_COLUMNS = {"tip"}
 ARRAY_COLUMNS = {"trait_grades", "trait_pcts"}
-INT_COLUMNS = {"player_id", "org_id", "team_id", "season", "draft_year", "draft_pick", "eta_season", "service_days", "sample"}
+NULLABLE_ARRAY_COLUMNS = {"pitch_mix"}
+INT_COLUMNS = {"player_id", "org_id", "team_id", "season", "draft_year", "draft_pick", "eta_season", "service_days", "sample",
+               "command_grade", "stuff_level", "stuff_pitches"}
 MIN_VALUE_ROWS = 2000
 BATCH_ROWS = 2000
 
@@ -42,6 +45,8 @@ def _records(frame: pd.DataFrame, columns: list[str]) -> list[dict]:
                 rec[key] = val if val is not None else []
             elif key in ARRAY_COLUMNS:
                 rec[key] = list(val) if isinstance(val, (list, tuple)) else []
+            elif key in NULLABLE_ARRAY_COLUMNS:
+                rec[key] = list(val) if isinstance(val, (list, tuple)) else None
             elif val is None or (isinstance(val, float) and val != val) or val is pd.NaT:
                 rec[key] = None
             elif hasattr(val, "item"):
