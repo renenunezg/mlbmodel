@@ -163,11 +163,12 @@ def window_arsenal(model: StuffModel, season: int, weights: dict[int, float]) ->
             t["stuff_grade"] = stuff_grade(t["stuff_rv100"], t["pitch_type"], model.scale)
             t = _level_shift(t, model, level)
             types.append(t.assign(w=w, level=level))
-            c = by_pitcher_command(values, ["pitcher"])
-            c["command_grade"] = command_grade(c["command_rv100"], model.command_scale)
-            if level == "aaa" or model.offsets.get("fsl_adjusted"):
-                c["command_grade"] = (c["command_grade"] + model.offsets[level]["command_grade"]["value"]).clip(20, 80)
-            cmds.append(c.assign(w=w))
+            if "command" in ok:
+                c = by_pitcher_command(values, ["pitcher"])
+                c["command_grade"] = command_grade(c["command_rv100"], model.command_scale)
+                if level == "aaa" or model.offsets.get("fsl_adjusted"):
+                    c["command_grade"] = (c["command_grade"] + model.offsets[level]["command_grade"]["value"]).clip(20, 80)
+                cmds.append(c.assign(w=w))
     if not types:
         return pd.DataFrame(), pd.DataFrame()
     t = pd.concat(types, ignore_index=True)
