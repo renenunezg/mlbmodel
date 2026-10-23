@@ -11,17 +11,15 @@ without tracking. ``tracked_bip`` and ``tracked_pitches`` are their denominators
 """
 from __future__ import annotations
 
-import logging
 from datetime import date
 
 import numpy as np
 import pandas as pd
 
+from v2.players.model import DEFAULT_WINDOW
 from v2.prospects import events
 
-log = logging.getLogger(__name__)
-
-WINDOW_WEIGHTS = {0: 5.0, 1: 4.0, 2: 3.0}
+WINDOW_WEIGHTS = dict(DEFAULT_WINDOW)  # the player model's recent-season weights: this season 5, last 4, two back 3
 REGULAR_PA = 200  # a level regular, for the age baseline
 REGULAR_BF = 150
 AGE_DATE = (7, 1)  # season age is age on July 1
@@ -45,8 +43,11 @@ PITCHER_RATES = {
     "pitches_per_pa": ("n_pitches", "bf"),
 }
 TREND_RATES = {"bat": ["k_rate", "bb_rate", "iso", "swstr_rate"], "pit": ["k_rate", "bb_rate", "swstr_rate", "gb_share"]}
-HITTER_TRACKED = ["ev90", "ev_mean", "hard_hit", "la_mean"]
-PITCHER_TRACKED = ["fb_velo", "fb_velo_max", "fb_ivb", "fb_hb", "fb_spin", "extension", "whiff_tracked", "ev_mean_allowed", "hard_hit_allowed"]
+# Tracked overlay features and the tracked opportunity each is pooled by; a row without the measurement is left out of both sides.
+HITTER_TRACKED = {"ev90": "tracked_bip", "ev_mean": "tracked_bip", "hard_hit": "tracked_bip", "la_mean": "tracked_bip"}
+PITCHER_TRACKED = {"fb_velo": "tracked_pitches", "fb_velo_max": "tracked_pitches", "fb_ivb": "tracked_pitches", "fb_hb": "tracked_pitches",
+                   "fb_spin": "tracked_pitches", "extension": "tracked_pitches", "whiff_tracked": "tracked_pitches",
+                   "ev_mean_allowed": "tracked_bip", "hard_hit_allowed": "tracked_bip"}
 SCHOOL_TYPES = ("high_school", "college", "international", "undrafted")
 HITTER_SAMPLE = "pa"
 PITCHER_SAMPLE = "bf"
@@ -97,8 +98,8 @@ def _level_means(t: pd.DataFrame, rates: dict[str, tuple[str, str]]) -> pd.DataF
     return out.reset_index()
 
 
-def snapshot_rows(table: pd.DataFrame, bio: pd.DataFrame, snapshot_season: int, rates: dict[str, tuple[str, str]],
-                  sample: str, tracked: list[str], tracked_den: str) -> pd.DataFrame:
+def snapshot_rows(table: pd.DataFrame, snapshot_season: int, rates: dict[str, tuple[str, str]], sample: str,
+                  tracked: dict[str, str]) -> pd.DataFrame:
     """Pooled features for every player with a (season, level) row inside the window ending at ``snapshot_season``."""
     t = _derived_counts(table, sample)
     t = t[(t["season"] <= snapshot_season) & (t["season"] > snapshot_season - len(WINDOW_WEIGHTS))].copy()
@@ -148,13 +149,14 @@ def snapshot_rows(table: pd.DataFrame, bio: pd.DataFrame, snapshot_season: int, 
     out["prev_top_level_rank"] = prev.reindex(out.index)
     out["promoted"] = (out["top_level_rank"] > out["prev_top_level_rank"]).astype(float).where(out["prev_top_level_rank"].notna())
     out["career_max_level_rank"] = affiliated.groupby("player_id")["level_rank"].max().reindex(out.index)
-    # Tracked overlay from tracked opportunities only, pooled by the tracked denominator.
-    den = t[tracked_den].fillna(0.0) * t["w"]
-    for name in tracked:
-        if name in t:
-            num = (t[name] * den).groupby(t["player_id"]).sum()
-            out[name] = num / den.groupby(t["player_id"]).sum().where(lambda s: s > 0)
-    out[tracked_den] = t.groupby("player_id")[tracked_den].sum().reindex(out.index).fillna(0.0)
+    # Tracked overlay: each measurement pooled over the rows that carry it, weighted by its own tracked opportunities.
+    for name, den_name in tracked.items():
+        have = t[name].notna()
+        den = (t[den_name].fillna(0.0) * t["w"]).where(have, 0.0)
+        num = (t[name] * den).where(have, 0.0)
+        out[name] = num.groupby(t["player_id"]).sum() / den.groupby(t["player_id"]).sum().where(lambda s: s > 0)
+    for den_name in sorted(set(tracked.values())):
+        out[den_name] = t.groupby("player_id")[den_name].sum().reindex(out.index).fillna(0.0)
     out["tracked_share"] = (t.groupby("player_id")["tracked_pa"].sum() / t.groupby("player_id")[sample].sum()).reindex(out.index)
     out["season"] = snapshot_season
     return out.reset_index()
@@ -168,7 +170,9 @@ def with_bio(rows: pd.DataFrame, bio: pd.DataFrame, baseline: pd.DataFrame, pos:
     base = baseline.set_index(["level", "season"])["age_baseline"]
     keys = pd.MultiIndex.from_frame(out[["top_level", "season"]])
     out["level_age"] = base.reindex(keys).to_numpy()
-    out["level_age"] = out["level_age"].fillna(out["top_level"].map(FALLBACK_LEVEL_AGE))
+    missing = out["level_age"].isna() & out["top_level"].notna()
+    if missing.any():
+        raise ValueError(f"No level age baseline for {sorted(set(map(tuple, out.loc[missing, ['top_level', 'season']].to_numpy())))[:5]}")
     out["age_rel"] = out["age"] - out["level_age"]
     out["draft_round"] = pd.to_numeric(b["draft_round"].reindex(out["player_id"]).to_numpy(), errors="coerce")
     out["draft_pick"] = pd.to_numeric(b["draft_pick"].reindex(out["player_id"]).to_numpy(), errors="coerce")
@@ -201,7 +205,7 @@ def position_shares(table: pd.DataFrame, snapshot_season: int) -> pd.DataFrame:
 
 
 def hitter_features(table: pd.DataFrame, bio: pd.DataFrame, snapshot_season: int, baseline: pd.DataFrame) -> pd.DataFrame:
-    rows = snapshot_rows(table, bio, snapshot_season, HITTER_RATES, HITTER_SAMPLE, HITTER_TRACKED, "tracked_bip")
+    rows = snapshot_rows(table, snapshot_season, HITTER_RATES, HITTER_SAMPLE, HITTER_TRACKED)
     if rows.empty:
         return rows
     out = with_bio(rows, bio, baseline, position_shares(table, snapshot_season))
@@ -210,7 +214,7 @@ def hitter_features(table: pd.DataFrame, bio: pd.DataFrame, snapshot_season: int
 
 
 def pitcher_features(table: pd.DataFrame, bio: pd.DataFrame, snapshot_season: int, baseline: pd.DataFrame) -> pd.DataFrame:
-    rows = snapshot_rows(table, bio, snapshot_season, PITCHER_RATES, PITCHER_SAMPLE, PITCHER_TRACKED, "tracked_pitches")
+    rows = snapshot_rows(table, snapshot_season, PITCHER_RATES, PITCHER_SAMPLE, PITCHER_TRACKED)
     if rows.empty:
         return rows
     out = with_bio(rows, bio, baseline)
@@ -224,7 +228,7 @@ def hitter_feature_names() -> list[str]:
              "age", "age_rel", "draft_round", "log_draft_pick", "drafted", "years_pro", "bats_left", "bats_switch"]
     school = [f"school_{s}" for s in SCHOOL_TYPES]
     pos = [f"pos_{c}" for c in events.POSITION_CODES]
-    return base + shape + school + pos + HITTER_TRACKED + ["tracked_bip"]
+    return base + shape + school + pos + list(HITTER_TRACKED) + ["tracked_bip"]
 
 
 def pitcher_feature_names() -> list[str]:
@@ -232,7 +236,7 @@ def pitcher_feature_names() -> list[str]:
     shape = ["sample_w", "season_sample", "n_levels", "top_level_rank", "top_level_share", "promoted", "career_max_level_rank",
              "age", "age_rel", "draft_round", "log_draft_pick", "drafted", "years_pro", "throws_left"]
     school = [f"school_{s}" for s in SCHOOL_TYPES]
-    return base + shape + school + PITCHER_TRACKED + ["tracked_pitches"]
+    return base + shape + school + list(PITCHER_TRACKED) + ["tracked_pitches", "tracked_bip"]
 
 
 def snapshot_date(season: int) -> date:

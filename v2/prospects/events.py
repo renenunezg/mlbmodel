@@ -41,7 +41,7 @@ TRAJECTORY = {"ground_ball": "gb", "bunt_grounder": "gb", "line_drive": "ld", "f
 HARDNESS = {"soft": "soft", "medium": "medium", "hard": "hard"}
 EV90_MIN_BALLS = 15  # batted balls needed before a 90th percentile exit velocity is reported
 POSITION_CODES = ("C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH")
-PITCH_SHAPE_COLUMNS = ("tracked_pitches", "fb_velo", "fb_velo_max", "fb_ivb", "fb_hb", "fb_spin", "extension", "fb_share", "whiff_tracked")
+PITCH_SHAPE_COLUMNS = ("tracked_pitches", "fb_velo", "fb_velo_max", "fb_ivb", "fb_hb", "fb_spin", "extension", "whiff_tracked")
 
 
 def level_of(games: pd.DataFrame) -> pd.Series:
@@ -190,7 +190,7 @@ def pitcher_season_levels(pa: pd.DataFrame, app: pd.DataFrame, pitches: pd.DataF
     out = out.reset_index().rename(columns={"pitcher": "player_id"})
     if not app.empty:
         p = app[app["pitched"]].groupby(["player_id", "season", "level"]).agg(
-            games=("game_pk", "nunique"), starts=("games_started", "sum"), outs=("outs", "sum"), pitches_thrown=("pitches_thrown", "sum"),
+            games=("game_pk", "nunique"), starts=("games_started", "sum"), outs=("outs", "sum"),
             org_id=("org_id", "last"), team_id=("team_id", "last"))
         out = out.merge(p.reset_index(), on=["player_id", "season", "level"], how="left")
     if pitches is not None and not pitches.empty:
@@ -218,7 +218,6 @@ def pitch_shapes(pitches: pd.DataFrame) -> pd.DataFrame:
     out["fb_hb"] = g["hb"].mean()
     out["fb_spin"] = g["spin_rate"].mean()
     out["extension"] = g["extension"].mean()
-    out["fb_share"] = g.size() / out["tracked_pitches"]
     sw = pitches[pitches["code"].isin(list(feeds.SWINGING_STRIKE_CODES | feeds.FOUL_CODES | feeds.IN_PLAY_CODES))]
     out["whiff_tracked"] = (pitches[pitches["code"].isin(list(feeds.SWINGING_STRIKE_CODES))].groupby(["pitcher", "season", "level"]).size()
                             / sw.groupby(["pitcher", "season", "level"]).size())

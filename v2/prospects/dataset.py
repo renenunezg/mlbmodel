@@ -14,12 +14,13 @@ from datetime import date
 import pandas as pd
 
 from v2.prospects import events, features, identity, targets
-from v2.prospects.feeds import CACHE_DIR, SPORT_IDS, read_kind
+from v2.prospects.feeds import CACHE_DIR, FIRST_SEASON, NO_SEASON, SPORT_IDS, read_kind
 
 log = logging.getLogger(__name__)
 
 TABLES_DIR = CACHE_DIR / "tables"
 WINDOW = len(features.WINDOW_WEIGHTS)
+# Heuristic floors and age range, not fitted: a window below the floor is published ungraded.
 FLOOR_FULL = {"bat": 150.0, "pit": 120.0}
 FLOOR_COMPLEX = {"bat": 100.0, "pit": 80.0}
 COMPLEX_MAX_RANK = events.LEVEL_RANK["rk+"]
@@ -46,17 +47,17 @@ def season_tables(season: int) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 def load_tables(seasons: list[int]) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Tables for every season asked for; a season without feeds is an error, never a silently thinner window.
+
+    Seasons before the first feed season and the season with no minor league play are not asked for.
+    """
     hs, ps = [], []
     for season in seasons:
-        try:
-            h, p = season_tables(season)
-        except FileNotFoundError:
-            log.warning(f"tables: no feeds for {season}")
+        if season < FIRST_SEASON or season in NO_SEASON:
             continue
+        h, p = season_tables(season)
         hs.append(h)
         ps.append(p)
-    if not hs:
-        raise FileNotFoundError(f"No feed tables for seasons {seasons}")
     return pd.concat(hs, ignore_index=True), pd.concat(ps, ignore_index=True)
 
 
@@ -89,7 +90,6 @@ def snapshot(season: int, tables: tuple[pd.DataFrame, pd.DataFrame], bio: pd.Dat
     when = as_of or features.snapshot_date(season)
     status = identity.rookie_status(frame["player_id"].tolist(), when, roster)
     frame = frame.merge(status, on="player_id", how="left")
-    frame["rookie_eligible"] = frame["rookie_eligible"].fillna(True).astype(bool)
     frame["floor"] = _floor(frame)
     frame["gradeable"] = frame["sample"] >= frame["floor"]
     frame["in_age_range"] = frame["age"].between(MIN_AGE, MAX_AGE)
@@ -102,11 +102,10 @@ def baselines(tables: tuple[pd.DataFrame, pd.DataFrame], bio: pd.DataFrame) -> t
             features.level_age_baseline(tables[1], bio, "bf", features.REGULAR_BF))
 
 
-def build(snapshot_seasons: list[int], last_season: int | None = None, *, population_only: bool = True) -> pd.DataFrame:
-    """Snapshot rows for the seasons; with ``last_season`` the matured targets are attached.
+def build(snapshot_seasons: list[int], last_season: int | None = None) -> pd.DataFrame:
+    """Rookie-eligible snapshot rows in the age range for the seasons; with ``last_season`` the matured targets are attached.
 
-    ``population_only`` keeps rookie-eligible players in the age range, which is the scoring and
-    fitting population; the floor is a flag, not a filter, so scoring can publish ungraded rows.
+    The floor is a flag, not a filter, so scoring can publish ungraded rows.
     """
     seasons = list(range(min(snapshot_seasons) - WINDOW + 1, max(snapshot_seasons) + 1))
     tables = load_tables(seasons)
@@ -118,8 +117,7 @@ def build(snapshot_seasons: list[int], last_season: int | None = None, *, popula
         rows = snapshot(season, tables, bio, roster, base)
         if rows.empty:
             continue
-        if population_only:
-            rows = rows[rows["rookie_eligible"] & rows["in_age_range"]]
+        rows = rows[rows["rookie_eligible"] & rows["in_age_range"]]
         frames.append(rows)
         log.info(f"dataset[{season}]: {len(rows):,} rows, {int(rows['gradeable'].sum()):,} above the floor")
     out = pd.concat(frames, ignore_index=True)

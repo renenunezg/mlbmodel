@@ -10,7 +10,8 @@ A snapshot is a player at the end of season S. Its window is the seven MLB seaso
 - ``control_war``: WAR over the six seasons from ``eta``; missing when that span runs past the last
   observed season (censored), zero when the player never reaches the majors in a complete window
 
-Per-season WAR is the sum of batting and pitching fWAR for the player.
+Per-season WAR is the sum of batting and pitching fWAR for the player. ``CONTROL_SEASONS`` is the
+one definition of the control window; the trade value prices the same six seasons.
 """
 from __future__ import annotations
 

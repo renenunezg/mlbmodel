@@ -10,19 +10,16 @@ from __future__ import annotations
 
 import logging
 import re
-import time
 from datetime import date
 from functools import cache
 
 import pandas as pd
-import requests
 
 from v2.players import bio
-from v2.prospects.feeds import CACHE_DIR
+from v2.prospects.feeds import CACHE_DIR, STATSAPI, fetch_json
 
 log = logging.getLogger(__name__)
 
-STATSAPI = "https://statsapi.mlb.com/api/v1"
 PEOPLE_BATCH = 100
 PEOPLE_PATH = CACHE_DIR / "people.parquet"
 ROSTER_PATH = CACHE_DIR / "roster_entries.parquet"
@@ -30,7 +27,6 @@ HYDRATE = "draft,education,rosterEntries"
 ROOKIE_AB = 130
 ROOKIE_IP = 50.0
 ROOKIE_DAYS = 45
-ATTEMPTS = 4
 CHECKPOINT_BATCHES = 20
 SEPTEMBER = 9
 PEOPLE_COLUMNS = ["player_id", "full_name", "birth_date", "bats", "throws", "primary_position", "birth_country", "height", "weight",
@@ -40,17 +36,7 @@ HS_PATTERN = re.compile(r"\bHS\b|HIGH SCHOOL|\(HS\)|\bH\.S\.")
 
 
 def _get(path: str, **params) -> dict:
-    for attempt in range(1, ATTEMPTS + 1):
-        try:
-            response = requests.get(f"{STATSAPI}/{path}", params=params, timeout=90)
-            response.raise_for_status()
-            return response.json()
-        except (requests.RequestException, ValueError) as exc:
-            if attempt == ATTEMPTS:
-                raise
-            log.warning(f"{path}: {exc}; retry {attempt}")
-            time.sleep(5.0 * attempt)
-    raise RuntimeError("unreachable")
+    return fetch_json(f"{STATSAPI}/{path}", params, timeout=90)
 
 
 @cache
@@ -95,16 +81,13 @@ def _people_batch(chunk: list[int]) -> list[dict]:
     """One hydrated people request; a 404 (one retired id poisons the batch) falls back to single lookups."""
     try:
         return _get("people", personIds=",".join(map(str, chunk)), hydrate=HYDRATE).get("people", [])
-    except requests.HTTPError as exc:
-        if exc.response is None or exc.response.status_code != 404:
-            raise
+    except FileNotFoundError:
+        pass
     out = []
     for pid in chunk:
         try:
             out.extend(_get("people", personIds=str(pid), hydrate=HYDRATE).get("people", []))
-        except requests.HTTPError as exc:
-            if exc.response is None or exc.response.status_code != 404:
-                raise
+        except FileNotFoundError:
             log.warning(f"people: {pid} not found")
     return out
 
@@ -182,13 +165,13 @@ def rookie_status(player_ids: list[int], as_of: date, roster: pd.DataFrame) -> p
     return out.reset_index()
 
 
-def on_forty_man(roster: pd.DataFrame, as_of: date, mlb_ids: set[int]) -> pd.Series:
-    """Whether a player's latest roster entry is with an MLB club as of the date (a 40-man proxy)."""
-    r = roster[pd.to_datetime(roster["start"]) <= pd.Timestamp(as_of)].sort_values("start")
-    latest = r.groupby("player_id").tail(1)
-    return latest.set_index("player_id")["team_id"].isin(mlb_ids).rename("on_40_man")
+def on_forty_man(roster: pd.DataFrame, as_of: date, mlb_ids: frozenset[int]) -> pd.Series:
+    """Whether a player has an open Active entry with an MLB club as of the date (a 40-man proxy)."""
+    r = roster[(pd.to_datetime(roster["start"]) <= pd.Timestamp(as_of)) & roster["end"].isna() & roster["status"].eq("A")]
+    return r.groupby("player_id")["team_id"].agg(lambda t: bool(t.isin(mlb_ids).any())).rename("on_40_man")
 
 
-def age_on(birth: pd.Series, when: date) -> pd.Series:
-    b = pd.to_datetime(birth, errors="coerce")
-    return ((pd.Timestamp(when) - b).dt.days / 365.25).round(2)
+def mlb_linked(roster: pd.DataFrame, mlb_ids: frozenset[int]) -> set[int]:
+    """Players whose cached roster history has an open entry with an MLB club: the ones whose eligibility can still move."""
+    r = roster[roster["end"].isna() & roster["team_id"].isin(mlb_ids)]
+    return set(r["player_id"].astype(int))

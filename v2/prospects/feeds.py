@@ -8,7 +8,6 @@ parquet files under ``cache/prospects/feeds/{sport_id}/{season}/``:
   pitches, the stringer batted-ball description, and tracking fields where the last pitch had them
 - ``pitches``: one row per pitch, only for games whose pitches carry tracking
 - ``appearances``: one row per player per game from the boxscore (positions, batting order, counts)
-- ``players``: the feed's bio rows (birth date, hand, primary position), deduplicated at read time
 
 Levels are Stats API sport ids: 11 Triple-A, 12 Double-A, 13 High-A, 14 Single-A, 15 short-season
 A (through 2020), 16 Rookie (complex leagues, DSL, and the former advanced rookie leagues), and 17
@@ -38,16 +37,19 @@ log = logging.getLogger(__name__)
 
 CACHE_DIR = Path(__file__).resolve().parents[2] / "cache" / "prospects"
 FEEDS_DIR = CACHE_DIR / "feeds"
-SCHEDULE = "https://statsapi.mlb.com/api/v1/schedule"
+STATSAPI = "https://statsapi.mlb.com/api/v1"
+SCHEDULE = f"{STATSAPI}/schedule"
 FEED = "https://statsapi.mlb.com/api/v1.1/game/{pk}/feed/live"
 SPORT_IDS = (11, 12, 13, 14, 15, 16, 17)
 AFL_LEAGUE_ID = 119
-FIRST_SEASON = 2005
+FIRST_SEASON = 2005  # the first season with minor league feeds
+NO_SEASON = {2020}  # no minor league season was played
 WORKERS = 6
 REQUESTS_PER_SECOND = 8.0
 ATTEMPTS = 4
 CHUNK_GAMES = 250
-KINDS = ("games", "plays", "pitches", "appearances", "players")
+KINDS = ("games", "plays", "pitches", "appearances")
+COMPLETE_MARKER = "complete"  # written once a past season is fully cached, so later runs skip its schedule call
 BALL_CODES = {"B", "*B", "I", "V", "P"}
 CALLED_STRIKE_CODES = {"C"}
 SWINGING_STRIKE_CODES = {"S", "W", "M", "Q"}
@@ -60,7 +62,8 @@ _throttle_lock = threading.Lock()
 _next_slot = [0.0]
 
 
-def _get(url: str, params: dict | None = None, timeout: int = 60) -> dict:
+def fetch_json(url: str, params: dict | None = None, timeout: int = 60) -> dict:
+    """The package's one Stats API client: throttled, retried, 404 raised as FileNotFoundError."""
     session = getattr(_session, "s", None)
     if session is None:
         session = _session.s = requests.Session()
@@ -88,7 +91,7 @@ def _get(url: str, params: dict | None = None, timeout: int = 60) -> dict:
 
 def schedule(sport_id: int, season: int) -> pd.DataFrame:
     """Final regular-season games of one level and season: game_pk, date, league_id, venue_id."""
-    payload = _get(SCHEDULE, {"sportId": sport_id, "season": season, "gameType": "R", "hydrate": "team"}, timeout=120)
+    payload = fetch_json(SCHEDULE, {"sportId": sport_id, "season": season, "gameType": "R", "hydrate": "team"}, timeout=120)
     rows = []
     for day in payload.get("dates", []):
         for g in day["games"]:
@@ -105,45 +108,29 @@ def schedule(sport_id: int, season: int) -> pd.DataFrame:
 def _pitch_row(e: dict, play: dict, game_pk: int) -> dict:
     d = e.get("details", {})
     pdata = e.get("pitchData", {})
-    coords = pdata.get("coordinates", {})
     breaks = pdata.get("breaks", {})
-    hit = e.get("hitData", {})
-    m = play["matchup"]
     return {
-        "game_pk": game_pk, "at_bat_index": play["about"]["atBatIndex"], "pitch_number": e.get("pitchNumber"),
-        "batter": m["batter"]["id"], "pitcher": m["pitcher"]["id"], "bat_side": m.get("batSide", {}).get("code"),
-        "pitch_hand": m.get("pitchHand", {}).get("code"), "code": d.get("code"), "pitch_type": (d.get("type") or {}).get("code"),
-        "start_speed": pdata.get("startSpeed"), "pfx_x": coords.get("pfxX"), "pfx_z": coords.get("pfxZ"),
-        "plate_x": coords.get("pX"), "plate_z": coords.get("pZ"), "x0": coords.get("x0"), "z0": coords.get("z0"),
+        "game_pk": game_pk, "pitcher": play["matchup"]["pitcher"]["id"], "code": d.get("code"),
+        "pitch_type": (d.get("type") or {}).get("code"), "start_speed": pdata.get("startSpeed"),
         "spin_rate": breaks.get("spinRate"), "ivb": breaks.get("breakVerticalInduced"), "hb": breaks.get("breakHorizontal"),
-        "extension": pdata.get("extension"), "zone": pdata.get("zone"), "sz_top": pdata.get("strikeZoneTop"),
-        "sz_bot": pdata.get("strikeZoneBottom"), "launch_speed": hit.get("launchSpeed"), "launch_angle": hit.get("launchAngle"),
-        "total_distance": hit.get("totalDistance"), "trajectory": hit.get("trajectory"), "hardness": hit.get("hardness"),
+        "extension": pdata.get("extension"),
     }
 
 
 def _play_row(play: dict, game_pk: int) -> dict:
     m = play["matchup"]
-    r = play["result"]
     pitches = [e for e in play.get("playEvents", []) if e.get("isPitch")]
     codes = [e.get("details", {}).get("code") for e in pitches]
     last = pitches[-1] if pitches else {}
     hit = last.get("hitData", {})
-    hc = hit.get("coordinates", {})
-    pdata = last.get("pitchData", {})
     return {
-        "game_pk": game_pk, "at_bat_index": play["about"]["atBatIndex"], "inning": play["about"]["inning"],
-        "top": bool(play["about"]["isTopInning"]), "batter": m["batter"]["id"], "pitcher": m["pitcher"]["id"],
-        "bat_side": m.get("batSide", {}).get("code"), "pitch_hand": m.get("pitchHand", {}).get("code"),
-        "result_type": r.get("type"), "event_type": r.get("eventType"), "rbi": r.get("rbi"), "is_out": r.get("isOut"),
+        "game_pk": game_pk, "batter": m["batter"]["id"], "pitcher": m["pitcher"]["id"], "event_type": play["result"].get("eventType"),
         "n_pitches": len(pitches),
         "balls": sum(c in BALL_CODES for c in codes), "called_strikes": sum(c in CALLED_STRIKE_CODES for c in codes),
         "swinging_strikes": sum(c in SWINGING_STRIKE_CODES for c in codes), "fouls": sum(c in FOUL_CODES for c in codes),
-        "in_play": sum(c in IN_PLAY_CODES for c in codes), "tracked": pdata.get("startSpeed") is not None,
-        "pitch_type": ((last.get("details") or {}).get("type") or {}).get("code"), "start_speed": pdata.get("startSpeed"),
-        "trajectory": hit.get("trajectory"), "hardness": hit.get("hardness"), "location": hit.get("location"),
-        "coord_x": hc.get("coordX"), "coord_y": hc.get("coordY"), "launch_speed": hit.get("launchSpeed"),
-        "launch_angle": hit.get("launchAngle"), "total_distance": hit.get("totalDistance"),
+        "in_play": sum(c in IN_PLAY_CODES for c in codes), "tracked": last.get("pitchData", {}).get("startSpeed") is not None,
+        "trajectory": hit.get("trajectory"), "hardness": hit.get("hardness"), "launch_speed": hit.get("launchSpeed"),
+        "launch_angle": hit.get("launchAngle"),
     }
 
 
@@ -151,34 +138,19 @@ def _appearance_rows(box: dict, game_pk: int) -> list[dict]:
     rows = []
     for side in ("home", "away"):
         team = box["teams"][side]
-        team_id = team["team"]["id"]
-        org_id = team["team"].get("parentOrgId")
         for p in team.get("players", {}).values():
             stats = p.get("stats", {})
             bat = stats.get("batting", {})
             pit = stats.get("pitching", {})
             if not bat and not pit and not p.get("allPositions"):
                 continue
-            order = p.get("battingOrder")
             rows.append({
-                "game_pk": game_pk, "player_id": p["person"]["id"], "team_id": team_id, "org_id": org_id, "home": side == "home",
+                "game_pk": game_pk, "player_id": p["person"]["id"], "team_id": team["team"]["id"], "home": side == "home",
                 "positions": ",".join(pos["abbreviation"] for pos in p.get("allPositions", [])),
-                "batting_order": int(order) if order else None, "substitute": bool(p.get("gameStatus", {}).get("isSubstitute")),
-                "pa": bat.get("plateAppearances", 0), "ab": bat.get("atBats", 0), "sb": bat.get("stolenBases", 0),
-                "cs": bat.get("caughtStealing", 0), "games_started": pit.get("gamesStarted", 0),
-                "batters_faced": pit.get("battersFaced", 0), "outs": pit.get("outs", 0), "pitches_thrown": pit.get("numberOfPitches", 0),
-                "games_finished": pit.get("gamesFinished", 0), "pitched": bool(pit),
+                "sb": bat.get("stolenBases", 0), "cs": bat.get("caughtStealing", 0),
+                "games_started": pit.get("gamesStarted", 0), "outs": pit.get("outs", 0), "pitched": bool(pit),
             })
     return rows
-
-
-def _player_rows(players: dict) -> list[dict]:
-    return [{
-        "player_id": p["id"], "full_name": p.get("fullName"), "birth_date": p.get("birthDate"),
-        "primary_position": p.get("primaryPosition", {}).get("abbreviation"), "bats": p.get("batSide", {}).get("code"),
-        "throws": p.get("pitchHand", {}).get("code"), "draft_year": p.get("draftYear"), "mlb_debut": p.get("mlbDebutDate"),
-        "birth_country": p.get("birthCountry"), "height": p.get("height"), "weight": p.get("weight"),
-    } for p in players.values() if p.get("isPlayer", True)]
 
 
 def parse_feed(feed: dict, sport_id: int, season: int) -> dict[str, list[dict]]:
@@ -197,11 +169,9 @@ def parse_feed(feed: dict, sport_id: int, season: int) -> dict[str, list[dict]]:
         "game_pk": game_pk, "season": season, "sport_id": sport_id, "league_id": home.get("league", {}).get("id"),
         "date": gd["datetime"].get("officialDate"), "venue_id": gd.get("venue", {}).get("id"),
         "home_team_id": home["id"], "away_team_id": away["id"], "home_org_id": home.get("parentOrgId"),
-        "away_org_id": away.get("parentOrgId"), "game_type": gd["game"].get("type"), "double_header": gd["game"].get("doubleHeader"),
-        "n_plays": len(plays), "n_pitches": n_pitches, "tracked_share": tracked_share,
+        "away_org_id": away.get("parentOrgId"), "n_plays": len(plays), "n_pitches": n_pitches, "tracked_share": tracked_share,
     }
-    return {"games": [game], "plays": play_rows, "pitches": pitch_rows,
-            "appearances": _appearance_rows(box, game_pk), "players": _player_rows(gd.get("players", {}))}
+    return {"games": [game], "plays": play_rows, "pitches": pitch_rows, "appearances": _appearance_rows(box, game_pk)}
 
 
 def level_dir(sport_id: int, season: int) -> Path:
@@ -213,10 +183,7 @@ def read_kind(sport_id: int, season: int, kind: str) -> pd.DataFrame:
     files = sorted(level_dir(sport_id, season).glob(f"{kind}-*.parquet"))
     if not files:
         return pd.DataFrame()
-    frame = pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
-    if kind == "players":
-        frame = frame.drop_duplicates("player_id", keep="last")
-    return frame
+    return pd.concat([pd.read_parquet(f) for f in files], ignore_index=True)
 
 
 def cached_game_pks(sport_id: int, season: int, kind: str = "games") -> set[int]:
@@ -241,10 +208,16 @@ def build(sport_id: int, season: int, deadline: float | None = None, workers: in
     """Fetch and cache every final regular-season game of a level-season not yet cached; returns games added."""
     kinds = KINDS
     marker = "games"
+    complete = level_dir(sport_id, season) / COMPLETE_MARKER
+    if complete.exists():
+        return 0
     sched = schedule(sport_id, season)
     todo = sorted(set(sched["game_pk"].astype(int)) - cached_game_pks(sport_id, season, marker))
     if not todo:
         log.info(f"feeds[{sport_id}/{season}]: complete ({len(sched)} games)")
+        if season < date.today().year:
+            complete.parent.mkdir(parents=True, exist_ok=True)
+            complete.touch()
         return 0
     log.info(f"feeds[{sport_id}/{season}]: {len(todo)} of {len(sched)} games to fetch")
     chunk = _next_chunk(sport_id, season, marker)
@@ -254,11 +227,11 @@ def build(sport_id: int, season: int, deadline: float | None = None, workers: in
 
     def fetch(pk: int) -> dict[str, list[dict]] | None:
         try:
-            return parse_feed(_get(FEED.format(pk=pk)), sport_id, season)
+            return parse_feed(fetch_json(FEED.format(pk=pk)), sport_id, season)
         except FileNotFoundError:
             log.warning(f"feeds[{sport_id}/{season}]: game {pk} has no feed")
             return {"games": [{"game_pk": pk, "season": season, "sport_id": sport_id, "n_plays": 0, "n_pitches": 0, "tracked_share": 0.0}],
-                    "plays": [], "pitches": [], "appearances": [], "players": []}
+                    "plays": [], "pitches": [], "appearances": []}
         except Exception as exc:  # noqa: BLE001 - one bad game must not end a multi-hour backfill
             log.warning(f"feeds[{sport_id}/{season}]: game {pk} failed: {exc}")
             return None

@@ -1,11 +1,12 @@
 """The fitted prospect model: boosters, baselines, scale references and the evaluation, as one JSON payload.
 
-Stored as one jsonb row in ``mlb.prospect_models`` (boosters as base64 UBJSON) and optionally on
-disk. Scoring in CI reads the newest ``fitted_at`` row and never fits.
+Stored as one jsonb row in ``mlb.prospect_models`` (boosters as gzipped base64 UBJSON) and optionally
+on disk. Scoring in CI reads the newest ``fitted_at`` row and never fits.
 """
 from __future__ import annotations
 
 import base64
+import gzip
 import json
 import logging
 from dataclasses import asdict, dataclass, field
@@ -23,8 +24,8 @@ log = logging.getLogger(__name__)
 MODEL_VERSION = "prospect-v1"
 MODELS_DIR = Path(__file__).resolve().parent / "models"
 POOLS = ("bat", "pit")
-TARGETS = ("mlb", "regular", "peak_war", "control_war", "control_q", "eta_years")
 QUANTILES = (0.25, 0.75)
+RISK_LABELS = ("safe", "medium", "high", "extreme")
 
 
 @dataclass
@@ -38,9 +39,9 @@ class ProspectModel:
     boosters: dict[str, dict[str, str]] = field(default_factory=dict)  # pool -> target -> base64 ubj
     rounds: dict[str, dict[str, int]] = field(default_factory=dict)
     baseline: dict[str, dict] = field(default_factory=dict)  # pool -> KATOH-style coefficients
-    level_age: dict[str, list[dict]] = field(default_factory=dict)  # pool -> rows of level, season, age_baseline
     grade_reference: dict[str, dict[str, float]] = field(default_factory=dict)  # pool -> mean, sd of MLB projected WAR
-    risk_cutpoints: dict[str, list[float]] = field(default_factory=dict)  # pool -> three cut points on the control spread
+    risk_cutpoints: dict[str, list[float]] = field(default_factory=dict)  # pool -> quartile cut points on 1 - p_mlb
+    eta_band: dict[str, int] = field(default_factory=dict)  # pool -> holdout mean absolute error of the arrival year, rounded
     validated: dict[str, bool] = field(default_factory=dict)  # pool -> passed the publish gate
     price: dict = field(default_factory=dict)  # copied from the player model at fit time
     arb_fractions: dict[int, float] = field(default_factory=dict)
@@ -48,11 +49,11 @@ class ProspectModel:
 
     def booster(self, pool: str, target: str) -> xgb.Booster:
         b = xgb.Booster()
-        b.load_model(bytearray(base64.b64decode(self.boosters[pool][target])))
+        b.load_model(bytearray(gzip.decompress(base64.b64decode(self.boosters[pool][target]))))
         return b
 
     def set_booster(self, pool: str, target: str, booster: xgb.Booster) -> None:
-        self.boosters.setdefault(pool, {})[target] = base64.b64encode(bytes(booster.save_raw("ubj"))).decode("ascii")
+        self.boosters.setdefault(pool, {})[target] = base64.b64encode(gzip.compress(bytes(booster.save_raw("ubj")), 9)).decode("ascii")
 
     def predict(self, frame: pd.DataFrame, pool: str, *, contributions: bool = False) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
         """Predictions for one pool's rows: probabilities, expected WARs, control quantiles, ETA years.
@@ -74,10 +75,19 @@ class ProspectModel:
         out["eta_years"] = np.clip(self.booster(pool, "eta_years").predict(dm), 0.5, None)
         contribs: dict[str, pd.DataFrame] = {}
         if contributions:
-            for target in ("peak_war", "regular"):
-                c = self.booster(pool, target).predict(dm, pred_contribs=True)
-                contribs[target] = pd.DataFrame(c[:, :-1], index=frame.index, columns=names)
+            c = self.booster(pool, "peak_war").predict(dm, pred_contribs=True)
+            contribs["peak_war"] = pd.DataFrame(c[:, :-1], index=frame.index, columns=names)
         return out, contribs
+
+    def to_grade(self, peak_war: pd.Series, pool: str) -> pd.Series:
+        """Peak WAR on the 20-80 scale of the published MLB projected WAR for the pool."""
+        ref = self.grade_reference[pool]
+        return (50 + 10 * (peak_war - ref["mean"]) / ref["sd"]).clip(20, 80)
+
+    def risk(self, pred: pd.DataFrame, pool: str) -> pd.Series:
+        """Risk band from the chance of never reaching the majors, cut at the holdout quartiles."""
+        idx = np.searchsorted(np.array(self.risk_cutpoints[pool]), risk_score(pred).to_numpy(float), side="right")
+        return pd.Series([RISK_LABELS[min(i, 3)] for i in idx], index=pred.index)
 
     def to_payload(self) -> dict:
         payload = asdict(self)
@@ -99,6 +109,11 @@ class ProspectModel:
     @classmethod
     def load(cls, path: Path) -> ProspectModel:
         return cls.from_payload(json.loads(path.read_text(encoding="utf-8")))
+
+
+def risk_score(pred: pd.DataFrame) -> pd.Series:
+    """Risk is the chance of never reaching the majors; the control-WAR quartiles sit at zero for most prospects, so they cannot band it."""
+    return 1.0 - pred["p_mlb"]
 
 
 def model_path(last_dev_season: int) -> Path:

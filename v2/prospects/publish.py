@@ -1,7 +1,8 @@
-"""Publish the three prospect tables: one truncate and one ordered insert each, in one transaction.
+"""Publish the prospect table: one truncate and one ordered insert, in one transaction.
 
-Same shape as the player publish: rows travel as one jsonb array per table, land in key order, and
-the site's revalidate trigger fires once per statement.
+Rows travel to a temporary table in slices the pooler accepts (the population is ten times the
+player table's), then one INSERT ... SELECT lands them in key order, so the site's revalidate
+trigger fires twice per night: once for the truncate and once for the insert.
 """
 from __future__ import annotations
 
@@ -17,22 +18,16 @@ from backend.db import engine
 log = logging.getLogger(__name__)
 
 VALUE_COLUMNS = [
-    "player_id", "player_name", "org", "org_id", "team", "team_id", "level", "source", "position_group", "secondary_positions",
+    "player_id", "player_name", "org", "org_id", "team", "team_id", "level", "position_group",
     "age", "bats", "throws", "headshot_url", "as_of", "model_version", "season", "draft_year", "draft_round", "draft_pick",
     "signing_bonus_musd", "acquired", "peak_grade", "peak_grade_low", "peak_grade_high", "peak_grade_percentile", "grade_reason",
-    "p_regular", "p_mlb", "eta_season", "eta_low", "eta_high", "trade_value_musd", "trade_value_low", "trade_value_high",
-    "market_value_musd", "expected_control_war", "peak_war", "risk", "rookie_eligible", "on_40_man", "mlb_pa_or_ip",
-    "service_days", "injured", "season_sample", "sample", "tracked_share",
+    "p_regular", "p_mlb", "eta_season", "trade_value_musd", "trade_value_low", "trade_value_high",
+    "market_value_musd", "expected_control_war", "peak_war", "risk", "on_40_man", "mlb_ab_or_ip",
+    "service_days", "season_sample", "sample", "tracked_share", "trait_grades", "trait_pcts", "tip",
 ]
-DETAIL_COLUMNS = ["player_id", "outlook", "tip"]
-TRAIT_COLUMNS = [
-    "player_id", "trait", "panel", "grade", "grade_low", "grade_high", "percentile", "value", "in_grade", "kind", "sample",
-    "inputs", "as_of", "model_version",
-]
-JSON_COLUMNS = {"outlook", "tip", "inputs"}
-ARRAY_COLUMNS = {"secondary_positions"}
-INT_COLUMNS = {"player_id", "org_id", "team_id", "season", "draft_year", "draft_pick", "eta_season", "eta_low", "eta_high",
-               "service_days", "sample"}
+JSON_COLUMNS = {"tip"}
+ARRAY_COLUMNS = {"trait_grades", "trait_pcts"}
+INT_COLUMNS = {"player_id", "org_id", "team_id", "season", "draft_year", "draft_pick", "eta_season", "service_days", "sample"}
 MIN_VALUE_ROWS = 2000
 BATCH_ROWS = 2000
 
@@ -44,7 +39,7 @@ def _records(frame: pd.DataFrame, columns: list[str]) -> list[dict]:
         rec = {"updated_at": now}
         for key, val in row.items():
             if key in JSON_COLUMNS:
-                rec[key] = val if val is not None else ([] if key != "tip" else {})
+                rec[key] = val if val is not None else []
             elif key in ARRAY_COLUMNS:
                 rec[key] = list(val) if isinstance(val, (list, tuple)) else []
             elif val is None or (isinstance(val, float) and val != val) or val is pd.NaT:
@@ -59,22 +54,15 @@ def _records(frame: pd.DataFrame, columns: list[str]) -> list[dict]:
     return out
 
 
-def _insert(table: str, order_by: str) -> str:
-    return (f"INSERT INTO {table} SELECT * FROM jsonb_populate_recordset(NULL::{table}, CAST(:rows AS jsonb)) "
-            f"ORDER BY {order_by}")
-
-
-def publish(values: pd.DataFrame, traits: pd.DataFrame) -> None:
+def publish(values: pd.DataFrame) -> None:
     if len(values) < MIN_VALUE_ROWS:
         raise ValueError(f"refusing to publish {len(values)} prospect_values rows (under {MIN_VALUE_ROWS})")
-    value_rows = _records(values, VALUE_COLUMNS)
-    detail_rows = _records(values, DETAIL_COLUMNS)
-    trait_rows = _records(traits, TRAIT_COLUMNS)
+    rows = _records(values, VALUE_COLUMNS)
     with engine.begin() as conn:
-        conn.execute(text("TRUNCATE prospect_values, prospect_details, prospect_traits"))
-        for table, order_by, rows in (("prospect_values", "player_id", value_rows), ("prospect_details", "player_id", detail_rows),
-                                      ("prospect_traits", "player_id, trait", trait_rows)):
-            # The population is ten times the player table's, so each insert travels in slices the pooler accepts.
-            for start in range(0, len(rows), BATCH_ROWS):
-                conn.execute(text(_insert(table, order_by)), {"rows": json.dumps(rows[start:start + BATCH_ROWS], default=str)})
-    log.info(f"published {len(value_rows)} prospect_values, {len(detail_rows)} prospect_details and {len(trait_rows)} prospect_traits rows")
+        conn.execute(text("CREATE TEMP TABLE prospect_values_in (LIKE prospect_values) ON COMMIT DROP"))
+        for start in range(0, len(rows), BATCH_ROWS):
+            conn.execute(text("INSERT INTO prospect_values_in SELECT * FROM jsonb_populate_recordset(NULL::prospect_values_in, CAST(:rows AS jsonb))"),
+                         {"rows": json.dumps(rows[start:start + BATCH_ROWS], default=str)})
+        conn.execute(text("TRUNCATE prospect_values"))
+        conn.execute(text("INSERT INTO prospect_values SELECT * FROM prospect_values_in ORDER BY player_id"))
+    log.info(f"published {len(rows)} prospect_values rows")

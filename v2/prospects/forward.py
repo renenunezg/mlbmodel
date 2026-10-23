@@ -73,23 +73,23 @@ def run(model: ProspectModel, debut_seasons: list[int], last_season: int) -> dic
         r["baseline_peak"] = base["peak_war"].to_numpy()
         r = r.merge(ranked.rename(columns={"list_year": "debut"}), on=["player_id", "debut"], how="left")
         out = {"n": int(len(r)), "mean_early_war": float(r["early_war"].mean()),
-               "spearman_model": fit._spearman(r["model_peak"], r["early_war"]),
-               "spearman_baseline": fit._spearman(r["baseline_peak"], r["early_war"]),
-               "spearman_p_regular": fit._spearman(r["model_p_regular"], r["early_war"])}
+               "spearman_model": fit.spearman(r["model_peak"], r["early_war"]),
+               "spearman_baseline": fit.spearman(r["baseline_peak"], r["early_war"]),
+               "spearman_p_regular": fit.spearman(r["model_p_regular"], r["early_war"])}
         listed = r[r["rank"].notna()]
         out["listed_n"] = int(len(listed))
         if len(listed) > 5:
-            out["listed_spearman_model"] = fit._spearman(listed["model_peak"], listed["early_war"])
-            out["listed_spearman_pipeline"] = fit._spearman(-listed["rank"], listed["early_war"])
-            out["listed_spearman_baseline"] = fit._spearman(listed["baseline_peak"], listed["early_war"])
-            out["model_vs_pipeline_rank_agreement"] = fit._spearman(listed["model_peak"], -listed["rank"])
+            out["listed_spearman_model"] = fit.spearman(listed["model_peak"], listed["early_war"])
+            out["listed_spearman_pipeline"] = fit.spearman(-listed["rank"], listed["early_war"])
+            out["listed_spearman_baseline"] = fit.spearman(listed["baseline_peak"], listed["early_war"])
+            out["model_vs_pipeline_rank_agreement"] = fit.spearman(listed["model_peak"], -listed["rank"])
         # Listed versus unlisted debuts: did the model see the unranked arrivals coming?
         unlisted = r[r["rank"].isna()]
         out["unlisted_mean_early_war"] = float(unlisted["early_war"].mean()) if len(unlisted) else None
         out["unlisted_top_decile_early_war"] = (float(unlisted.nlargest(max(len(unlisted) // 10, 1), "model_peak")["early_war"].mean())
                                                 if len(unlisted) else None)
-        by_debut = r.groupby("debut").apply(lambda g: pd.Series({"n": len(g), "spearman_model": fit._spearman(g["model_peak"], g["early_war"]),
-                                                                  "spearman_baseline": fit._spearman(g["baseline_peak"], g["early_war"])}))
+        by_debut = r.groupby("debut").apply(lambda g: pd.Series({"n": len(g), "spearman_model": fit.spearman(g["model_peak"], g["early_war"]),
+                                                                  "spearman_baseline": fit.spearman(g["baseline_peak"], g["early_war"])}))
         out["by_debut"] = {int(k): {kk: (None if vv != vv else float(vv)) for kk, vv in v.items()} for k, v in by_debut.iterrows()}
         result["pools"][pool] = out
         log.info(f"forward[{pool}]: n={out['n']} spearman model {out['spearman_model']:.3f} baseline {out['spearman_baseline']:.3f} "

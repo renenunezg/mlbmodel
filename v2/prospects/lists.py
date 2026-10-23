@@ -12,14 +12,13 @@ import logging
 import unicodedata
 
 import pandas as pd
-import requests
 
-from v2.prospects.feeds import CACHE_DIR
+from v2.prospects.feeds import CACHE_DIR, STATSAPI, fetch_json
 
 log = logging.getLogger(__name__)
 
 LISTS_DIR = CACHE_DIR / "lists"
-SEARCH = "https://statsapi.mlb.com/api/v1/people/search"
+SEARCH = f"{STATSAPI}/people/search"
 
 
 def _fold(name: str) -> str:
@@ -43,8 +42,8 @@ def read_list(year: int) -> pd.DataFrame:
 
 def _search(name: str) -> int | None:
     try:
-        payload = requests.get(SEARCH, params={"names": name, "limit": 5, "sportIds": "1,11,12,13,14,16"}, timeout=30).json()
-    except requests.RequestException:
+        payload = fetch_json(SEARCH, {"names": name, "limit": 5, "sportIds": "1,11,12,13,14,16"}, timeout=30)
+    except FileNotFoundError:
         return None
     people = [p for p in payload.get("people", []) if _fold(p.get("fullName", "")) == _fold(name)]
     return int(people[0]["id"]) if len(people) == 1 else None

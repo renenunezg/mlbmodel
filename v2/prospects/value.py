@@ -12,10 +12,11 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from v2.players.bio import STARTER_SHARE
 from v2.players.pricing import PriceModel, league_minimum
 from v2.players.value import DISCOUNT_PER_YEAR
+from v2.prospects.targets import CONTROL_SEASONS
 
-CONTROL_SEASONS = 6
 PRE_ARB_SEASONS = 3
 
 
@@ -28,7 +29,7 @@ def _surplus(control_war: float, p_mlb: float, eta_years: float, role: str, pric
              season: int) -> tuple[float, float]:
     """Discounted surplus and undiscounted market value over the control seasons for one player."""
     per_season = max(control_war, 0.0) / CONTROL_SEASONS
-    first = season + int(round(max(eta_years, 0.5)))
+    first = season + int(round(eta_years))
     surplus = 0.0
     market = 0.0
     for k in range(CONTROL_SEASONS):
@@ -45,10 +46,10 @@ def _surplus(control_war: float, p_mlb: float, eta_years: float, role: str, pric
 
 
 def price_role(role: str, start_share: float) -> str:
-    """The player model's price role: hitters, starters (half their games or more) and relievers."""
+    """The player model's price role: hitters, starters (the player model's starter share) and relievers."""
     if role == "bat":
         return "bat"
-    return "SP" if start_share == start_share and start_share >= 0.5 else "RP"
+    return "SP" if start_share == start_share and start_share >= STARTER_SHARE else "RP"
 
 
 def trade_values(pred: pd.DataFrame, roles: pd.Series, price: PriceModel, arb: dict[int, float], season: int) -> pd.DataFrame:
@@ -67,22 +68,5 @@ def trade_values(pred: pd.DataFrame, roles: pd.Series, price: PriceModel, arb: d
     out["trade_value_low"] = np.round(lows, 2)
     out["trade_value_high"] = np.round(highs, 2)
     out["market_value_musd"] = np.round(markets, 2)
-    out["eta_season"] = season + np.round(np.maximum(pred["eta_years"].to_numpy(float), 0.5)).astype(int)
+    out["eta_season"] = season + np.round(pred["eta_years"].to_numpy(float)).astype(int)
     return out
-
-
-def outlook(control_war: float, p_mlb: float, eta_years: float, age: float, role: str, price: PriceModel, arb: dict[int, float],
-            season: int) -> list[dict]:
-    """Season-by-season expected line for the detail table."""
-    per_season = max(control_war, 0.0) / CONTROL_SEASONS
-    first = season + int(round(max(eta_years, 0.5)))
-    rows = []
-    for k in range(CONTROL_SEASONS):
-        year = first + k
-        value = market_value(per_season, p_mlb, year, season, role, price)
-        kind = "pre_arb" if k < PRE_ARB_SEASONS else "arbitration"
-        salary = p_mlb * league_minimum(year) if kind == "pre_arb" else arb.get(k - PRE_ARB_SEASONS + 1, 0.0) * value
-        rows.append({"season": year, "age": int(round(age + (year - season))) if age == age else None, "war": round(per_season, 2),
-                     "salary_musd": round(salary, 2), "salary_kind": kind, "surplus_musd": round(value - salary, 2),
-                     "in_control": True, "p_active": round(p_mlb, 3)})
-    return rows

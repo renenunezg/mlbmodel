@@ -5,8 +5,10 @@ reaching the majors, becoming a regular, peak WAR, control-years WAR with its qu
 to arrival. Rounds are chosen by early stopping on the last two development cohorts, then every
 booster is refit on all development cohorts with that round count. A KATOH-style logistic and
 linear baseline (age relative to level, strikeout, walk and power rates, level) is fitted on the
-same rows. The holdout cohorts are scored once; a pool passes the publish gate when it beats the
-baseline on both log loss for ``regular`` and Spearman for ``peak_war``.
+same rows. Players who appear in a holdout cohort are left out of every development cohort, so a
+holdout label never shares its outcome seasons with a training label of the same player. The holdout
+is scored once per documented touch; a pool passes the publish gate when it beats the baseline on both
+log loss for ``regular`` and Spearman for ``peak_war``.
 
 Usage:
     MLBMODEL_DB_WRITES=1 python -m v2.prospects.fit --last-dev-season 2017 --holdout 2018 2019 --write-db
@@ -26,21 +28,24 @@ from scipy.stats import spearmanr
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.metrics import log_loss, roc_auc_score
 from sklearn.preprocessing import StandardScaler
+from sqlalchemy import text
 
+from backend.db import engine
 from backend.log import setup_logging
-from v2.prospects import dataset, features, identity, lists, targets
+from v2.players.model import load_latest_from_db
+from v2.prospects import dataset, features, identity, lists
 from v2.prospects.feeds import CACHE_DIR
-from v2.prospects.model import POOLS, QUANTILES, ProspectModel, model_path, publish_model
+from v2.prospects.model import POOLS, QUANTILES, ProspectModel, model_path, publish_model, risk_score
 
 log = logging.getLogger(__name__)
 
 FIRST_DEV_SEASON = 2005
-VALIDATION_COHORTS = 2
+VALIDATION_SHARE = 0.15  # of development players, grouped by player, for early stopping only
 EVALUATION_PATH = CACHE_DIR / "evaluation.json"
 PARAMS = {"max_depth": 4, "eta": 0.03, "subsample": 0.8, "colsample_bytree": 0.8, "min_child_weight": 25, "lambda": 2.0}
 MAX_ROUNDS = 3000
 TWEEDIE_POWER = 1.5
-HOLDOUT_TOUCHES = 2  # 2026-10-22: a second pass after the development-set experiments (new call-code and trend features, Tweedie)
+HOLDOUT_TOUCHES = 3  # 2026-10-22: second pass after the development experiments (call-code and trend features, Tweedie); third after the audit fixes and the player-disjoint split
 EARLY_STOP = 100
 MONOTONE = {
     "bat": {"age_rel": -1, "k_rate_rel": -1, "iso_rel": 1, "bb_rate_rel": 1, "top_level_rank": 1},
@@ -120,7 +125,7 @@ def predict_baseline(base: dict, rows: pd.DataFrame) -> pd.DataFrame:
                          "peak_war": np.clip(Xs @ np.array(base["linear_coef"]) + base["linear_intercept"], 0, None)}, index=rows.index)
 
 
-def _spearman(a: pd.Series, b: pd.Series) -> float:
+def spearman(a: pd.Series, b: pd.Series) -> float:
     m = a.notna() & b.notna()
     return float(spearmanr(a[m], b[m]).statistic) if m.sum() > 2 else float("nan")
 
@@ -133,7 +138,7 @@ def evaluate(rows: pd.DataFrame, pred: pd.DataFrame, base: pd.DataFrame) -> dict
     for name, p in (("model", pred), ("baseline", base)):
         m = {"logloss_regular": float(log_loss(y_reg, np.clip(p["p_regular"], 1e-6, 1 - 1e-6))),
              "auc_regular": float(roc_auc_score(y_reg, p["p_regular"])) if y_reg.nunique() > 1 else float("nan"),
-             "spearman_peak": _spearman(p["peak_war"], rows["peak_war"])}
+             "spearman_peak": spearman(p["peak_war"], rows["peak_war"])}
         top = p["peak_war"] >= p["peak_war"].quantile(1 - TOP_SHARE)
         m["top_decile_regular_rate"] = float(y_reg[top].mean()) if top.any() else float("nan")
         if "p_mlb" in p:
@@ -141,7 +146,7 @@ def evaluate(rows: pd.DataFrame, pred: pd.DataFrame, base: pd.DataFrame) -> dict
             m["auc_mlb"] = float(roc_auc_score(y_mlb, p["p_mlb"])) if y_mlb.nunique() > 1 else float("nan")
         if "control_war" in p:
             c = rows["control_war"].notna()
-            m["spearman_control"] = _spearman(p["control_war"][c], rows["control_war"][c])
+            m["spearman_control"] = spearman(p["control_war"][c], rows["control_war"][c])
             m["control_n"] = int(c.sum())
         if "eta_years" in p:
             r = rows["eta_years"].notna()
@@ -165,11 +170,6 @@ def calibration(grade: pd.Series, rows: pd.DataFrame) -> list[dict]:
     return table
 
 
-def risk_score(pred: pd.DataFrame) -> pd.Series:
-    """Risk is the chance of never reaching the majors; the control-WAR quartiles sit at zero for most prospects, so they cannot band it."""
-    return 1.0 - pred["p_mlb"]
-
-
 def list_comparison(rows: pd.DataFrame, pred: pd.DataFrame, ranked: pd.DataFrame) -> dict:
     """On the holdout players MLB Pipeline ranked: how the model's order and the list's order each track the realized peak."""
     if ranked.empty:
@@ -180,51 +180,28 @@ def list_comparison(rows: pd.DataFrame, pred: pd.DataFrame, ranked: pd.DataFrame
                 on=["player_id", "season"], how="inner")
     if len(r) < 6:
         return {"n": int(len(r))}
-    return {"n": int(len(r)), "spearman_model": _spearman(r["model_peak"], r["peak_war"]),
-            "spearman_pipeline": _spearman(-r["rank"], r["peak_war"]), "rank_agreement": _spearman(r["model_peak"], -r["rank"]),
+    return {"n": int(len(r)), "spearman_model": spearman(r["model_peak"], r["peak_war"]),
+            "spearman_pipeline": spearman(-r["rank"], r["peak_war"]), "rank_agreement": spearman(r["model_peak"], -r["rank"]),
             "regular_rate": float(r["regular"].mean())}
 
 
-def grade_reference(last_season: int) -> dict[str, dict[str, float]]:
-    """Mean and spread of MLB projected WAR per pool from the published player table, or realized WAR of regulars as a fallback."""
-    try:
-        from sqlalchemy import text
-
-        from backend.db import engine
-        with engine.connect() as conn:
-            rows = conn.execute(text("SELECT position_group, projected_war FROM player_values WHERE projected_war IS NOT NULL")).fetchall()
-        frame = pd.DataFrame(rows, columns=["group", "war"])
-        frame["war"] = frame["war"].astype(float)
-        frame["pool"] = np.where(frame["group"].isin(["SP", "RP"]), "pit", "bat")
-        source = "player_values.projected_war"
-    except Exception as exc:  # noqa: BLE001 - fitting must work without the database
-        log.warning(f"grade reference: falling back to realized WAR ({exc})")
-        mlb = targets.mlb_seasons(last_season)
-        recent = mlb[(mlb["season"] > last_season - 3) & mlb["qualifies"]]
-        from v2.players.production import load_war
-        roles = load_war(last_season).groupby("player_id")["role"].agg(lambda s: s.value_counts().idxmax())
-        frame = recent.assign(pool=recent["player_id"].map(roles)).rename(columns={"war": "war"})
-        source = "realized_war_regulars"
-    out = {}
-    for pool, g in frame.groupby("pool"):
-        out[pool] = {"mean": float(g["war"].mean()), "sd": float(g["war"].std()), "n": int(len(g)), "source": source}
-    return out
-
-
-def to_grade(peak_war: pd.Series, ref: dict[str, float]) -> pd.Series:
-    return (50 + 10 * (peak_war - ref["mean"]) / ref["sd"]).clip(20, 80)
+def grade_reference() -> dict[str, dict[str, float]]:
+    """Mean and spread of the published MLB projected WAR per pool: the scale a 60 prospect is measured on."""
+    with engine.connect() as conn:
+        rows = conn.execute(text("SELECT position_group, projected_war FROM player_values WHERE projected_war IS NOT NULL")).fetchall()
+    frame = pd.DataFrame(rows, columns=["group", "war"])
+    if frame.empty:
+        raise RuntimeError("player_values has no projected WAR to scale prospect grades against")
+    frame["war"] = frame["war"].astype(float)
+    frame["pool"] = np.where(frame["group"].isin(["SP", "RP"]), "pit", "bat")
+    return {pool: {"mean": float(g["war"].mean()), "sd": float(g["war"].std()), "n": int(len(g)), "source": "player_values.projected_war"}
+            for pool, g in frame.groupby("pool")}
 
 
 def price_from_player_model() -> tuple[dict, dict[int, float]]:
-    try:
-        from v2.players.model import load_latest_from_db
-        m = load_latest_from_db()
-        return dict(m.price), dict(m.arb_fractions)
-    except Exception as exc:  # noqa: BLE001
-        log.warning(f"price: using player model fallbacks ({exc})")
-        from v2.players.model import ValueModel
-        m = ValueModel()
-        return dict(m.price), dict(m.arb_fractions)
+    """The published player model's price of a win and arbitration fractions; prospects are priced on the same scale."""
+    m = load_latest_from_db()
+    return dict(m.price), dict(m.arb_fractions)
 
 
 def fit(last_dev_season: int, holdout: list[int], last_season: int) -> ProspectModel:
@@ -234,10 +211,9 @@ def fit(last_dev_season: int, holdout: list[int], last_season: int) -> ProspectM
     data["eta_years"] = (data["eta"] - data["season"]).where(data["eta"].notna())
     model = ProspectModel(fitted_at=datetime.now(UTC).isoformat(), dev_seasons=dev_seasons, holdout_seasons=holdout, last_season=last_season)
     model.price, model.arb_fractions = price_from_player_model()
-    model.grade_reference = grade_reference(last_season)
+    model.grade_reference = grade_reference()
     evaluation = {"dev_seasons": dev_seasons, "holdout_seasons": holdout, "last_season": last_season, "holdout_touches": HOLDOUT_TOUCHES,
                   "pools": {}}
-    val_seasons = dev_seasons[-VALIDATION_COHORTS:]
     bio_tables = dataset.load_tables(list(range(FIRST_DEV_SEASON - dataset.WINDOW + 1, max(holdout) + 1)))
     active = pd.concat([bio_tables[0][["player_id", "season"]], bio_tables[1][["player_id", "season"]]]).drop_duplicates()
     bio, _ = identity.people(sorted(active["player_id"].unique()))
@@ -245,12 +221,14 @@ def fit(last_dev_season: int, holdout: list[int], last_season: int) -> ProspectM
     ranked = lists.load(bio, active, list_years) if list_years else pd.DataFrame(columns=["player_id", "season", "rank"])
     for pool in POOLS:
         rows = data[data["role"] == pool]
-        dev = rows[rows["season"].isin(dev_seasons)]
         hold = rows[rows["season"].isin(holdout)]
+        # Player-disjoint: a holdout player's earlier snapshots would share most of his outcome window with the holdout label.
+        dev = rows[rows["season"].isin(dev_seasons) & ~rows["player_id"].isin(hold["player_id"])]
         names = [n for n in _feature_names(pool) if n in rows.columns]
         model.feature_names[pool] = names
-        d, v = dev[~dev["season"].isin(val_seasons)], dev[dev["season"].isin(val_seasons)]
-        log.info(f"fit[{pool}]: {len(dev):,} dev rows ({len(v):,} validation), {len(hold):,} holdout rows, {len(names)} features")
+        in_val = (dev["player_id"] % 100) < VALIDATION_SHARE * 100  # a fixed player-grouped slice, every season represented
+        d, v = dev[~in_val], dev[in_val]
+        log.info(f"fit[{pool}]: {len(dev):,} dev rows ({len(v):,} validation) after removing holdout players, {len(hold):,} holdout rows, {len(names)} features")
         for target in ("mlb", "regular", "peak_war", "control_war", "control_q", "eta_years"):
             booster, rounds = _fit_target(pool, names, d, v, target)
             model.set_booster(pool, target, booster)
@@ -259,8 +237,7 @@ def fit(last_dev_season: int, holdout: list[int], last_season: int) -> ProspectM
         pred, _ = model.predict(hold, pool)
         base = predict_baseline(model.baseline[pool], hold)
         metrics = evaluate(hold, pred, base)
-        grade = to_grade(pred["peak_war"], model.grade_reference[pool])
-        metrics["calibration"] = calibration(grade, hold)
+        metrics["calibration"] = calibration(model.to_grade(pred["peak_war"], pool), hold)
         metrics["pipeline"] = list_comparison(hold, pred, ranked)
         passed = (metrics["model"]["logloss_regular"] < metrics["baseline"]["logloss_regular"]
                   and metrics["model"]["spearman_peak"] > metrics["baseline"]["spearman_peak"])
@@ -268,12 +245,11 @@ def fit(last_dev_season: int, holdout: list[int], last_season: int) -> ProspectM
         metrics["validated"] = bool(passed)
         metrics["rounds"] = model.rounds[pool]
         model.risk_cutpoints[pool] = [float(q) for q in np.nanquantile(risk_score(pred).to_numpy(), [0.25, 0.5, 0.75])]
+        model.eta_band[pool] = max(1, int(round(metrics["model"]["eta_mae"])))
         evaluation["pools"][pool] = metrics
         log.info(f"fit[{pool}]: holdout logloss(regular) {metrics['model']['logloss_regular']:.4f} vs baseline "
                  f"{metrics['baseline']['logloss_regular']:.4f}; spearman(peak) {metrics['model']['spearman_peak']:.3f} vs "
                  f"{metrics['baseline']['spearman_peak']:.3f}; validated={passed}")
-    base_h, base_p = dataset.baselines(bio_tables, bio)
-    model.level_age = {"bat": base_h.to_dict("records"), "pit": base_p.to_dict("records")}
     model.evaluation = evaluation
     EVALUATION_PATH.parent.mkdir(parents=True, exist_ok=True)
     EVALUATION_PATH.write_text(json.dumps(evaluation, indent=1, default=float))
