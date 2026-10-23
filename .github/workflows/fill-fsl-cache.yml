@@ -1,0 +1,42 @@
+name: Fill FSL Statcast cache
+
+# One-time (or after a cache eviction) backfill of the Florida State League Statcast pitches the
+# prospect stuff grades read. The nightly train job only tops the cache up, inside its time budget.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: fill-fsl-cache
+  cancel-in-progress: false
+
+jobs:
+  fill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore FSL Statcast cache
+        uses: actions/cache@v4
+        with:
+          path: cache/statcast_fsl_*.parquet
+          key: statcast-fsl-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            statcast-fsl-${{ runner.os }}-
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -c constraints.txt -r requirements.txt -r v2/requirements.txt && pip install --no-deps -e .
+
+      - name: Build the FSL cache for the scoring window
+        env:
+          PYTHONPATH: "."
+        run: timeout --preserve-status 110m python -m v2.data.build_aaa_cache --level fsl --years $(seq $(( $(date -u +%Y) - 2 )) "$(date -u +%Y)")
