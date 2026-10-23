@@ -158,7 +158,8 @@ def run(model: ProspectModel, stuff_model: stuff.StuffModel, last_season: int) -
         rows = rows.merge(recent.outcomes(rows, last_season, horizon), on=["player_id", "season"])
         pred, _ = model.predict(rows, "pit")
         rows[["p_mlb", "peak_war"]] = pred[["p_mlb", "peak_war"]].to_numpy()
-        frames.append(rows.join(feats, on="player_id"))
+        # The base snapshot carries its own feed-based fb_velo; the adjustment reads only the stuff summaries.
+        frames.append(rows.drop(columns=[c for c in FEATURES if c in rows]).join(feats, on="player_id"))
         log.info(f"adjust[{season}]: {len(rows):,} tracked pitcher rows, horizon {horizon}, reach rate {rows['reached'].mean():.3f}")
     data = pd.concat(frames, ignore_index=True)
     fold = data["player_id"] % FOLDS
