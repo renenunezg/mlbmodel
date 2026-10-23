@@ -73,12 +73,12 @@ jobs:
           PYTHONPATH: "."
         run: timeout --preserve-status 16m python -m v2.prospects.feeds --years $(seq $(( $(date -u +%Y) - 2 )) "$(date -u +%Y)") --minutes 15
 
-      - name: Score prospects
+      - name: Score prospects (Mondays; the publish is skipped when the board is unchanged)
         continue-on-error: true
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           PYTHONPATH: "."
-        run: timeout --preserve-status 10m python -m v2.prospects.score --as-of "$(date -u +%F)"
+        run: if [ "$(date -u +%u)" = "1" ]; then timeout --preserve-status 10m python -m v2.prospects.score --as-of "$(date -u +%F)"; fi
 
       - name: Train v2 models
         env:
