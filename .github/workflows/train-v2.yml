@@ -103,6 +103,13 @@ jobs:
           PYTHONPATH: "."
         run: if [ "$(date -u +%u)" = "1" ]; then timeout --preserve-status 10m python -m v2.prospects.score --as-of "$(date -u +%F)"; fi
 
+      - name: Publish season stats beneath the grades (skipped when unchanged)
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PYTHONPATH: "."
+        run: timeout --preserve-status 5m python -m v2.season_stats
+
       - name: Train v2 models
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
