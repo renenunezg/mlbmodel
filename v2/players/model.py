@@ -64,6 +64,8 @@ class ValueModel:
     component_grades: bool = False
     # Diagnostic: the hitter grade reads the oriented batting inputs directly in place of the five batting composites.
     direct_batting: bool = False
+    # The reliever grade also reads the oriented pitcher inputs beside the pitcher composites.
+    reliever_inputs: bool = False
     # One row per (pool, trait, input): weight within the trait, status.
     trait_weights: list[dict] = field(default_factory=list)
     # One row per (pool, feature): coefficient on the z-scored feature, plus the intercept rows.

@@ -500,7 +500,7 @@ def _fit_pools(p: dict) -> pd.Series:
 
 def grade_design(p: dict, model: ValueModel) -> tuple[pd.DataFrame, pd.Series, pd.Series]:
     comps, _ = features.trait_composites(p["z"], p["pool"], model)
-    x = features.grade_features(comps, p["shrunk"], p["pool"], p["age"], p["z"] if model.direct_batting else None)
+    x = features.grade_features(comps, p["shrunk"], p["pool"], p["age"], p["z"], features.direct_inputs(model))
     tn = _by_role(p["target_next"], p["group"])
     y = tn["target"].reindex(x.index)
     ok = (p["sample"] >= MIN_FIT_SAMPLE) & (tn["n"].reindex(x.index).fillna(0) >= MIN_TARGET_SAMPLE) & y.notna() & x["shrunk_runs"].notna()
@@ -539,6 +539,8 @@ def fit_grade_weights(pairs: list[dict], model: ValueModel) -> list[dict]:
         if pool_name == features.HITTER_POOL and model.direct_batting:
             batting = GRADE_COMPONENTS["batting"][0]
             cols = [c for c in cols if c not in batting] + [*features.BATTING_INPUTS, "shrunk_runs"]
+        if pool_name == "RP" and model.reliever_inputs:
+            cols = [*cols, *features.PITCHER_INPUTS]
         if pool_name == features.HITTER_POOL and model.component_grades:
             # Batting, fielding and running each fitted to its own share of the target; the grade is their sum.
             for component, (members, target) in GRADE_COMPONENTS.items():
@@ -566,8 +568,8 @@ def reliability_k(pairs: list[dict], model: ValueModel) -> dict[str, float]:
             continue
         ca, _ = features.trait_composites(a["z"], a["pool"], model)
         cb, _ = features.trait_composites(b["z"], b["pool"], model)
-        xa = features.grade_features(ca, a["shrunk"], a["pool"], a["age"], a["z"] if model.direct_batting else None)
-        xb = features.grade_features(cb, b["shrunk"], b["pool"], b["age"], b["z"] if model.direct_batting else None)
+        xa = features.grade_features(ca, a["shrunk"], a["pool"], a["age"], a["z"], features.direct_inputs(model))
+        xb = features.grade_features(cb, b["shrunk"], b["pool"], b["age"], b["z"], features.direct_inputs(model))
         ga, gb = features.project_runs(xa, a["group"], model), features.project_runs(xb, b["group"], model)
         pools_a = _fit_pools(a)
         for trait in features.TRAITS:
@@ -707,7 +709,7 @@ def fit(last_dev_season: int = 2024, holdout_pair: tuple[int, int] | None = None
         calibration_model: ValueModel | None = None, market_cohort: dict | None = None,
         calibration_history: list[tuple[ValueModel, dict]] | None = None,
         tree: bool = False, expected_outcomes: bool = False, expected_blend: bool = False, components: bool = False,
-        direct_batting: bool = False, forward: bool = True) -> tuple[ValueModel, dict]:
+        direct_batting: bool = False, reliever_inputs: bool = False, forward: bool = True) -> tuple[ValueModel, dict]:
     """The fitted model and its evaluation report.
 
     ``forward`` adds the systems head-to-head (``head_to_head``) the site's performance page reads;
@@ -738,7 +740,7 @@ def fit(last_dev_season: int = 2024, holdout_pair: tuple[int, int] | None = None
     model.runs_per_win = runs_mod.runs_per_win(last_dev_season)
     log.info(f"window {offsets}, shrink {strength}, triple-a {aaa_scale}, runs/win {model.runs_per_win:.2f}")
     configure_hitter_shrink(data, dev_first, dev_seasons, model, tree=tree, expected_outcomes=expected_outcomes, expected_blend=expected_blend)
-    model.component_grades, model.direct_batting = components, direct_batting
+    model.component_grades, model.direct_batting, model.reliever_inputs = components, direct_batting, reliever_inputs
 
     pairs = [build_pair(data, t, model) for t in dev_first]
     model.trait_weights = fit_trait_weights(pairs)
@@ -825,7 +827,8 @@ def fit(last_dev_season: int = 2024, holdout_pair: tuple[int, int] | None = None
     model.evaluation["market"] = {"status": "not_validated"}
     if forward:
         model.evaluation["forward"] = report["forward"] = head_to_head.forward_block(
-            last_dev_season, tree=tree, expected_outcomes=expected_outcomes, expected_blend=expected_blend, components=components, direct_batting=direct_batting)
+            last_dev_season, tree=tree, expected_outcomes=expected_outcomes, expected_blend=expected_blend, components=components, direct_batting=direct_batting,
+            reliever_inputs=reliever_inputs)
     return model, report
 
 
@@ -833,6 +836,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Fit the player valuation model.")
     ap.add_argument("--last-dev-season", type=int, default=2024)
     ap.add_argument("--no-publish", action="store_true")
+    ap.add_argument("--reliever-inputs", action="store_true", help="The reliever grade also reads the pitcher inputs beside the composites")
     ap.add_argument("--skip-forward", action="store_true", help="Fit without the systems head-to-head; the site's forward panel goes dark until a row carries it")
     ap.add_argument("--calibration-model", type=Path, help="Frozen model trained strictly before the signing cohort")
     ap.add_argument("--calibration-history", type=Path, help="JSON list of {cohort, model} paths with frozen pre-signing forecasts")
@@ -845,7 +849,7 @@ def main() -> None:
     model, report = fit(args.last_dev_season,
                         calibration_model=ValueModel.load(args.calibration_model) if args.calibration_model else None,
                         market_cohort=json.loads(args.market_contracts.read_text()) if args.calibration_model else None,
-                        calibration_history=history, forward=not args.skip_forward)
+                        calibration_history=history, reliever_inputs=args.reliever_inputs, forward=not args.skip_forward)
     path = model.save(model_path(args.last_dev_season))
     (MODELS_DIR / f"evaluation_{args.last_dev_season}.json").write_text(json.dumps(report, indent=1, default=str), encoding="utf-8")
     log.info(f"saved {path}")

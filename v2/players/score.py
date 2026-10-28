@@ -140,7 +140,7 @@ def assemble_values(
         two_way_runs.loc[projected_pit.index] = projected_pit.values
     sample = rates_pop.set_index("player_id")["n"] if not rates_pop.empty else pd.Series(dtype="float64")
     sample = sample.reindex(pop.index).fillna(0.0)
-    design = features.grade_features(composites, shrunk, pool, pop["age"])
+    design = features.grade_features(composites, shrunk, pool, pop["age"], z, features.direct_inputs(model))
     two_way_ids = set(two_way["player_id"]) if not two_way.empty else set()
     projected = features.project_runs(design, group, model)
     has_fit = bool(model.grade_weights)

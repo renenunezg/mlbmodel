@@ -93,13 +93,15 @@ def batting_only(pairs: list[dict]) -> list[dict]:
 
 
 def variant_suffix(*, tree: bool = False, expected_outcomes: bool = False, expected_blend: bool = False, components: bool = False,
-                   direct_batting: bool = False) -> str:
+                   direct_batting: bool = False, reliever_inputs: bool = False) -> str:
     return "".join(f"_{name}" for name, on in (("tree", tree), ("expected", expected_outcomes), ("blend", expected_blend),
-                                               ("components", components), ("direct", direct_batting)) if on)
+                                               ("components", components), ("direct", direct_batting),
+                                               ("relief", reliever_inputs)) if on)
 
 
 def grade_models(last_dev_season: int, *, tree: bool = False, expected_outcomes: bool = False, expected_blend: bool = False,
-                 components: bool = False, direct_batting: bool = False, cache_dir=CACHE_DIR) -> tuple[ValueModel, ValueModel]:
+                 components: bool = False, direct_batting: bool = False, reliever_inputs: bool = False,
+                 cache_dir=CACHE_DIR) -> tuple[ValueModel, ValueModel]:
     """(full, batting-only) grade models from pairs ending in ``last_dev_season + 1``, cached on disk.
 
     Both share window, shrink and trait weights; only the hitter grade weights differ.
@@ -107,7 +109,8 @@ def grade_models(last_dev_season: int, *, tree: bool = False, expected_outcomes:
     expected outcomes, component grades) and name the cache file; a component
     model's batting component is its own batting-only grade, so both paths share one file.
     """
-    suffix = variant_suffix(tree=tree, expected_outcomes=expected_outcomes, expected_blend=expected_blend, components=components, direct_batting=direct_batting)
+    suffix = variant_suffix(tree=tree, expected_outcomes=expected_outcomes, expected_blend=expected_blend, components=components, direct_batting=direct_batting,
+                            reliever_inputs=reliever_inputs)
     path = cache_dir / f"forward_grade_model_{last_dev_season}{suffix}.json"
     batting_path = cache_dir / f"forward_grade_model_{last_dev_season}{suffix}_batting.json"
     if path.exists() and batting_path.exists():
@@ -124,7 +127,7 @@ def grade_models(last_dev_season: int, *, tree: bool = False, expected_outcomes:
     model.linear_weights = data.linear_weights[last_dev_season]
     model.pa_per_ip = data.pa_per_ip[last_dev_season]
     model.evaluation = {"hitter_shrink": configure_hitter_shrink(data, dev_first, dev_seasons, model, tree=tree, expected_outcomes=expected_outcomes, expected_blend=expected_blend)}
-    model.component_grades, model.direct_batting = components, direct_batting
+    model.component_grades, model.direct_batting, model.reliever_inputs = components, direct_batting, reliever_inputs
     pairs = [build_pair(data, t, model) for t in dev_first]
     model.trait_weights = fit_trait_weights(pairs)
     model.grade_weights = fit_grade_weights(pairs, model)
@@ -221,7 +224,7 @@ def grade_as_of(m: SeasonMaterial, as_of: date, current: tuple[pd.DataFrame, pd.
     leverage = values["workload.leverage"] if "workload.leverage" in values.columns else None
     shrunk = features.shrunk_runs(rates, m.model, group, leverage).reindex(values.index)
     comps, _ = features.trait_composites(z, pool, m.model)
-    x = features.grade_features(comps, shrunk, pool, m.ages, z if m.model.direct_batting else None)
+    x = features.grade_features(comps, shrunk, pool, m.ages, z, features.direct_inputs(m.model))
     batting = (features.project_runs(x, group, m.model, component="batting") if m.model.component_grades
                else features.project_runs(x, group, m.batting_model))
     out = pd.DataFrame({"grade": features.project_runs(x, group, m.model), "grade_batting": batting,

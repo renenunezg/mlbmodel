@@ -160,17 +160,23 @@ def pitching_runs_for(rates: pd.DataFrame, model: ValueModel, role: pd.Series, l
 
 
 BATTING_INPUTS = tuple(name for name, spec in INPUTS.items() if spec.role == "bat")
+PITCHER_INPUTS = tuple(name for name, spec in INPUTS.items() if spec.role == "pit")
 
 
-def grade_features(composites: pd.DataFrame, shrunk: pd.Series, pool: pd.Series, age: pd.Series, z: pd.DataFrame | None = None) -> pd.DataFrame:
+def direct_inputs(model: ValueModel) -> tuple[str, ...]:
+    """The inputs a model's grade reads directly beside the composites."""
+    return (BATTING_INPUTS if model.direct_batting else ()) + (PITCHER_INPUTS if model.reliever_inputs else ())
+
+
+def grade_features(composites: pd.DataFrame, shrunk: pd.Series, pool: pd.Series, age: pd.Series, z: pd.DataFrame | None = None,
+                   direct: tuple[str, ...] = ()) -> pd.DataFrame:
     """The design matrix for the group grade: trait composites, the shrunk-runs feature, and age.
 
-    ``z`` (the oriented input z-scores) adds the batting inputs for a model that reads them directly.
+    ``direct`` names oriented inputs from ``z`` added as their own columns (see ``direct_inputs``).
     """
     x = composites.copy()
-    if z is not None:
-        for name in BATTING_INPUTS:
-            x[name] = z[name].reindex(x.index) if name in z.columns else np.nan
+    for name in direct:
+        x[name] = z[name].reindex(x.index) if z is not None and name in z.columns else np.nan
     x["shrunk_runs"] = shrunk.reindex(x.index)
     centred = (pd.to_numeric(age, errors="coerce").astype("float64").reindex(x.index) - AGE_CENTER).fillna(0.0)
     x["age"], x["age2"] = centred, centred ** 2

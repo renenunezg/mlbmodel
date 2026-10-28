@@ -250,7 +250,7 @@ def comparison_block(frame: pd.DataFrame, pool: str, grade: str, statistic: str,
 
 
 def forward_block(last_dev_season: int, **switches) -> dict:
-    """The published forward block for a model developed through ``last_dev_season``, built with the same hitter-grade switches."""
+    """The published forward block for a model developed through ``last_dev_season``, built with the same grade switches."""
     seasons = seasons_for(last_dev_season)
     require_material(seasons)
     return assemble(*checkpoint_frames(seasons, **switches), seasons)
