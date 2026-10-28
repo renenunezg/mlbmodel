@@ -35,7 +35,9 @@ jobs:
           ref: 2d46cd64f004d9493bc10bf73272f60200b984a9
 
       - name: Restore Statcast cache
-        uses: actions/cache@v4
+        # Restore only: this job adds nothing to the Statcast cache, and a save under a fresh key would
+        # upload another 700 MB copy that evicts the caches the train job depends on.
+        uses: actions/cache/restore@v4
         with:
           path: cache
           key: statcast-${{ runner.os }}-${{ github.run_id }}
