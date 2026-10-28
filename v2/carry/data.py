@@ -29,6 +29,7 @@ COLUMNS = [
 ]
 SWINGS = {"hit_into_play", "foul", "foul_tip", "swinging_strike", "swinging_strike_blocked", "foul_bunt", "missed_bunt"}
 WHIFFS = {"swinging_strike", "swinging_strike_blocked", "missed_bunt"}
+BUNTS = {"foul_bunt", "missed_bunt"}
 NOT_AB = {"walk", "intent_walk", "hit_by_pitch", "sac_fly", "sac_bunt", "catcher_interf", "sac_fly_double_play",
           "sac_bunt_double_play"}
 TOTAL_BASES = {"single": 1, "double": 2, "triple": 3, "home_run": 4}

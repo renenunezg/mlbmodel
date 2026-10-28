@@ -12,7 +12,6 @@ import argparse
 import json
 import logging
 
-import numpy as np
 import pandas as pd
 
 from backend.log import setup_logging
@@ -48,7 +47,7 @@ def build(season: int) -> tuple[dict, pd.DataFrame, pd.DataFrame]:
         bips.append(data.batted_balls(pitches, temps))
         counts.append(data.hitter_counts(pitches))
         if year >= FIRST_CHANGER_SEASON:
-            swings.append(pitches.loc[pitches.description.isin(data.SWINGS), SWING_COLUMNS])
+            swings.append(pitches.loc[pitches.description.isin(data.SWINGS - data.BUNTS), SWING_COLUMNS])
         log.info(f"{year}: {len(bips[-1])} balls in play")
     bip = pd.concat(bips, ignore_index=True)
     counts = pd.concat(counts, ignore_index=True)
@@ -59,27 +58,24 @@ def build(season: int) -> tuple[dict, pd.DataFrame, pd.DataFrame]:
     air = air.join(swing.at_belt_high(air, curves))
     log.info(f"carry: {len(air)} balls in the air, per-ball sd {air.carry.std():.1f} ft")
 
-    spun, typicals, uncorrected = [], {}, {}
+    spun, typicals, uncorrected = [], {}, []
     for year in range(FIRST_PHYSICS_SEASON, season + 1):
         balls = swing.spin_balls(air[air.season == year])
         out, typicals[year] = swing.solve(balls, balls.tilt_rel.to_numpy(), detail=True)
         spun.append(balls.join(out))
         if year >= season - 1:
             raw, _ = swing.solve(balls, balls.tilt_rel.to_numpy(), tilt_correction=0.0)
-            uncorrected[year] = balls.assign(spin_effect=raw.spin_effect)
+            uncorrected.append(balls.join(raw))
         log.info(f"{year}: collision solved for {len(balls)} balls, median efficiency {out.q.median():.3f}")
     spun = pd.concat(spun, ignore_index=True)
 
-    def share(frame: pd.DataFrame) -> float:
-        h = frame.groupby(["batter", "season"]).agg(n=("carry", "size"), carry=("carry", "mean"), e=("spin_effect", "mean")).reset_index()
-        now, before = h[(h.season == season) & (h.n >= 60)], h[(h.season == season - 1) & (h.n >= 60)]
-        c = np.polyfit(now.e, now.carry, 1)
-        return 1 - ((before.carry - np.polyval(c, before.e)) ** 2).sum() / ((before.carry - before.carry.mean()) ** 2).sum()
-
-    hitters = _hitter_table(air, spun, profiles, counts, 1.0, list(range(FIRST_PHYSICS_SEASON, season + 1)))
-    explained = study.explained(hitters, air, season, share(pd.concat(uncorrected.values())))
+    physics_seasons = list(range(FIRST_PHYSICS_SEASON, season + 1))
+    hitters = _hitter_table(air, spun, profiles, counts, 1.0, physics_seasons)
+    # The same hitters and the same carry, with spin effects solved without the steep-swing correction.
+    uncorrected_hitters = _hitter_table(air, pd.concat(uncorrected, ignore_index=True), profiles, counts, 1.0, [season - 1, season])
+    explained = study.explained(hitters, uncorrected_hitters, air, season)
     slope = explained["coef"][0]
-    hitters = _hitter_table(air, spun, profiles, counts, slope, list(range(FIRST_PHYSICS_SEASON, season + 1)))
+    hitters = _hitter_table(air, spun, profiles, counts, slope, physics_seasons)
 
     current = spun[spun.season == season]
     grids, generic = lab.grids(current, current, typicals[season], slope)

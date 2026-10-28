@@ -20,12 +20,17 @@ def rounded(x: float, nd: int = 2) -> float | None:
 
 
 def split_half(balls: pd.DataFrame, col: str, min_n: int) -> float:
+    """Correlation between the means of each hitter's odd and even balls, for hitters with min_n balls."""
     b = balls.sort_values(["game_date", "game_pk", "at_bat_number"]).copy()
     b["half"] = b.groupby("batter").cumcount() % 2
     m = b.groupby(["batter", "half"])[col].agg(["mean", "size"]).unstack()
     m = m[(m["size"] >= min_n / 2).all(axis=1)]
-    r = m["mean"][0].corr(m["mean"][1])
-    return 2 * r / (1 + r)
+    return m["mean"][0].corr(m["mean"][1])
+
+
+def full_season(split_half_r: float) -> float:
+    """Spearman-Brown: the reliability of the whole season's mean implied by the correlation between its halves."""
+    return 2 * split_half_r / (1 + split_half_r)
 
 
 def year_to_year(table: pd.DataFrame, col: str) -> float:
@@ -57,7 +62,8 @@ def examples(air: pd.DataFrame, season: int) -> dict:
 
 def repeatability(air: pd.DataFrame, hitters: pd.DataFrame, season: int) -> dict:
     q = hitters[hitters.n_air >= QUALIFIED_AIR]
-    return {"split_half": rounded(split_half(air[air.season == season], "carry", QUALIFIED_AIR)),
+    r = split_half(air[air.season == season], "carry", QUALIFIED_AIR)
+    return {"split_half": rounded(r), "full_season": rounded(full_season(r)),
             "year_to_year": rounded(year_to_year(q, "carry")), "hitters": int((q.season == season).sum())}
 
 
@@ -107,15 +113,29 @@ def sidespin(spun: pd.DataFrame) -> list[dict]:
             for k, v in g]
 
 
-def explained(hitters: pd.DataFrame, air: pd.DataFrame, season: int, share_without_correction: float) -> dict:
-    s = hitters[(hitters.season == season) & (hitters.n_spin >= 60)]
-    prior = hitters[(hitters.season == season - 1) & (hitters.n_spin >= 60)]
+MIN_SPIN_BALLS = 60
+
+
+def share(hitters: pd.DataFrame, season: int) -> tuple[np.ndarray, float]:
+    """Carry on spin effect, fitted across hitters in `season`; the share of the prior season's between-hitter carry variance
+    that fit predicts (out-of-sample R-squared), for hitters with MIN_SPIN_BALLS spin balls in each."""
+    s = hitters[(hitters.season == season) & (hitters.n_spin >= MIN_SPIN_BALLS)]
+    prior = hitters[(hitters.season == season - 1) & (hitters.n_spin >= MIN_SPIN_BALLS)]
     coef = np.polyfit(s.spin_effect, s.carry, 1)
     pred = np.polyval(coef, prior.spin_effect)
-    share = 1 - ((prior.carry - pred) ** 2).sum() / ((prior.carry - prior.carry.mean()) ** 2).sum()
+    return coef, 1 - ((prior.carry - pred) ** 2).sum() / ((prior.carry - prior.carry.mean()) ** 2).sum()
+
+
+def explained(hitters: pd.DataFrame, uncorrected: pd.DataFrame, air: pd.DataFrame, season: int) -> dict:
+    """`uncorrected` is the same hitter table with spin effects solved without the steep-swing correction, so the two
+    shares differ only in that correction."""
+    coef, explained_share = share(hitters, season)
+    _, share_without_correction = share(uncorrected, season)
+    s = hitters[(hitters.season == season) & (hitters.n_spin >= MIN_SPIN_BALLS)]
     leftover = hitters.assign(left=hitters.carry - np.polyval(coef, hitters.spin_effect))
-    return {"coef": [rounded(coef[0], 4), rounded(coef[1], 3)], "share": rounded(share), "share_without_steep_correction": rounded(share_without_correction),
-            "ceiling": rounded(split_half(air[air.season == season - 1], "carry", 60)),
+    return {"coef": [rounded(coef[0], 4), rounded(coef[1], 3)], "share": rounded(explained_share),
+            "share_without_steep_correction": rounded(share_without_correction),
+            "ceiling": rounded(full_season(split_half(air[air.season == season - 1], "carry", MIN_SPIN_BALLS))),
             "leftover_year_to_year": rounded(year_to_year(leftover[leftover.n_spin >= 50], "left")),
             "backspin_carry_corr": rounded(s.backspin.corr(s.carry))}
 

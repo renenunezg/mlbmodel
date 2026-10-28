@@ -12,18 +12,23 @@ from v2.carry.swing import at_belt_high
 
 MIN_SWINGS = 300
 MIN_PA = 250
+COMPETITIVE_SHARE = 0.9
 OUTCOMES = ["ba", "obp", "slg", "ops", "hr600", "so600", "bb600", "carry"]
 TILT_GROUPS = [-np.inf, -1.5, -0.5, 0.5, 1.5, np.inf]
 TILT_LABELS = ["flattened 1.5+", "flattened a bit", "about the same", "steepened a bit", "steepened 1.5+"]
 
 
 def swing_profiles(pitches: pd.DataFrame, curves: dict[str, list[float]]) -> pd.DataFrame:
-    """Mean belt-high tilt and attack angle and mean bat speed over every tracked swing of each hitter-season."""
+    """Mean belt-high tilt and attack angle over every tracked swing of each hitter-season (the build passes no bunts), and
+    mean bat speed over his competitive swings: the fastest 90%, Baseball Savant's definition, which drops checked and
+    defensive swings."""
     tracked = pitches[pitches.swing_path_tilt.notna() & pitches.attack_angle.notna() & pitches.plate_z.notna()]
     belt = at_belt_high(tracked, curves)
     frame = pd.concat([tracked[["batter", "season", "bat_speed"]], belt[["tilt", "attack"]]], axis=1)
-    out = frame.groupby(["batter", "season"]).agg(tracked=("tilt", "size"), tilt=("tilt", "mean"), attack=("attack", "mean"),
-                                                  bat_speed=("bat_speed", "mean"))
+    by = frame.groupby(["batter", "season"])
+    competitive = frame[frame.bat_speed >= by.bat_speed.transform(lambda s: s.quantile(1 - COMPETITIVE_SHARE))]
+    out = by.agg(tracked=("tilt", "size"), tilt=("tilt", "mean"), attack=("attack", "mean"))
+    out["bat_speed"] = competitive.groupby(["batter", "season"]).bat_speed.mean()
     return out.reset_index()
 
 
@@ -53,7 +58,8 @@ def pairs(profiles: pd.DataFrame, counts: pd.DataFrame, carry: pd.DataFrame) -> 
 
 def coefficients(p: pd.DataFrame) -> dict:
     """Per outcome: change per degree of tilt, per degree of attack angle at average whiff rate, and the extra per degree
-    of attack angle per standard deviation of whiff rate; bat speed change held as a control."""
+    of attack angle per standard deviation of whiff rate; bat speed change held as a control. `cov` is the coefficients'
+    covariance in that order, so a combined change's error can carry their correlation."""
     whiff_mean, whiff_sd = float(p.whiff_0.mean()), float(p.whiff_0.std())
     z = (p.whiff_0 - whiff_mean) / whiff_sd
     names = ["d_tilt", "d_attack", "d_attack_x_whiff", "d_bat_speed"]
@@ -65,9 +71,13 @@ def coefficients(p: pd.DataFrame) -> dict:
         X, y = design[ok], y[ok]
         beta, *_ = np.linalg.lstsq(X, y, rcond=None)
         resid = y - X @ beta
-        se = np.sqrt(np.diag(np.linalg.inv(X.T @ X)) * resid.var() * len(y) / (len(y) - X.shape[1]))
-        out["outcomes"][col] = {name: [round(float(b), 5), round(float(s), 5)] for name, b, s in zip(names, beta[1:], se[1:])}
+        cov = np.linalg.inv(X.T @ X)[1:, 1:] * (resid @ resid) / (len(y) - X.shape[1])
+        out["outcomes"][col] = {**{name: _sig(b) for name, b in zip(names, beta[1:])}, "cov": [[_sig(c) for c in row] for row in cov]}
     return out
+
+
+def _sig(x: float, digits: int = 6) -> float:
+    return float(f"{float(x):.{digits}g}")
 
 
 def groups(p: pd.DataFrame) -> list[dict]:

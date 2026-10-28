@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from v2.carry import data, expected
-from v2.carry.study import rounded, split_half, year_to_year
+from v2.carry.study import full_season, rounded, split_half, year_to_year
 
 log = logging.getLogger(__name__)
 
@@ -39,7 +39,8 @@ def _level(level: str, season: int) -> tuple[pd.DataFrame, dict]:
                                                       elevation=("elevation_ft", "first")).reset_index()
     parks = parks[parks.n >= MIN_PARK_AIR]
     parks["measured"] -= s.carry_raw.mean()
-    summary = {"seasons": years, "split_half": rounded(split_half(s, "carry", QUALIFIED_AIR[level])),
+    r = split_half(s, "carry", QUALIFIED_AIR[level])
+    summary = {"seasons": years, "split_half": rounded(r), "full_season": rounded(full_season(r)),
                "year_to_year": rounded(year_to_year(q, "carry")), "qualified": int((q.season == season).sum()),
                "qualified_air": QUALIFIED_AIR[level],
                "parks": [{"venue": p.venue_name, "elevation": None if not np.isfinite(p.elevation) else int(p.elevation),

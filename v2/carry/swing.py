@@ -8,7 +8,8 @@ import pandas as pd
 
 from v2.carry import physics as ph
 
-SPIN_LAUNCH = (15.0, 40.0)       # below 15 degrees spin barely moves distance; above 40 the ball is a pop-up
+SPIN_LAUNCH = (10.0, 40.0)       # above 40 degrees the ball is a pop-up; low liners move little with spin but their solved
+                                 # spin is the best read on a hitter's tendency (10-15 degree balls alone predict carry at .6)
 BELT_HIGH_FT = 2.5
 
 
