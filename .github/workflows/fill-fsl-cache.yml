@@ -1,9 +1,15 @@
 name: Fill prospect-level Statcast caches
 
-# One-time (or after a cache eviction) backfill of the Florida State League and spring training Statcast
-# pitches the prospect stuff grades read. The nightly train job only tops the cache up, inside its time budget.
+# One-time (or after a cache eviction) backfill of the Triple-A, Florida State League and spring training
+# Statcast pitches the player and prospect grades read. The nightly train job only tops the cache up, inside
+# its time budget, so a season it cannot finish in one window is seeded here from a release's parquet files.
 on:
   workflow_dispatch:
+    inputs:
+      triple_a_release:
+        description: "Release tag whose statcast_aaa_<season>.parquet assets seed the Triple-A cache (optional)"
+        required: false
+        default: ""
 
 concurrency:
   group: fill-fsl-cache
@@ -23,6 +29,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
+            cache/statcast_aaa_*.parquet
             cache/statcast_fsl_*.parquet
             cache/statcast_spring_*.parquet
           key: statcast-prospect-levels-${{ runner.os }}-${{ github.run_id }}
@@ -37,6 +44,15 @@ jobs:
 
       - name: Install dependencies
         run: pip install -c constraints.txt -r requirements.txt -r v2/requirements.txt && pip install --no-deps -e .
+
+      - name: Seed the Triple-A cache from the release's parquet files
+        if: inputs.triple_a_release != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p cache
+          gh release download "${{ inputs.triple_a_release }}" --repo "${{ github.repository }}" --pattern 'statcast_aaa_*.parquet' --dir cache --clobber
+          ls -l cache/statcast_aaa_*.parquet
 
       - name: Build the FSL cache for the scoring window
         env:

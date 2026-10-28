@@ -32,11 +32,12 @@ jobs:
           restore-keys: |
             statcast-${{ runner.os }}-
 
-      # FSL and spring pitches keep their own cache so the workflows that share the Statcast cache cannot race it away.
+      # Minor-league pitches keep their own cache so the workflows that share the Statcast cache cannot race it away.
       - name: Restore prospect-level Statcast caches
         uses: actions/cache@v4
         with:
           path: |
+            cache/statcast_aaa_*.parquet
             cache/statcast_fsl_*.parquet
             cache/statcast_spring_*.parquet
           key: statcast-prospect-levels-${{ runner.os }}-${{ github.run_id }}
@@ -84,6 +85,7 @@ jobs:
         run: if [ "$(date -u +%u)" = "1" ]; then python -m v2.players.contracts --season "$(date -u +%Y)"; fi
 
       - name: Score player values
+        id: score_players
         continue-on-error: true
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -136,3 +138,10 @@ jobs:
             v2/bayesian/posteriors/diagnostics.json
             v2/simulator/tables/*.parquet
           key: sim-v3-bundle-${{ runner.os }}-${{ github.run_id }}
+
+      # continue-on-error lets the training steps run after a scoring failure; the job must still end red.
+      - name: Fail the job when player scoring failed
+        if: steps.score_players.outcome == 'failure'
+        run: |
+          echo "::error::Score player values failed; the nightly grades were not refreshed"
+          exit 1
