@@ -773,7 +773,8 @@ def fit(last_dev_season: int = 2024, holdout_pair: tuple[int, int] | None = None
     model.production_aging = {}
     war_panel = production.panel(production.load_lines(last_dev_season + 1), last_dev_season + 1)
     model.production = production.fit(war_panel, last_dev_season + 1)
-    model.model_version = "player-value-v2-fwar"
+    # The lineage the scorer and the site key on; a refit replaces the live row rather than opening a new version.
+    model.model_version = "player-value-v3-grade"
 
     # Contract transactions and frozen forecasts are distinct from current payroll.
     # Never infer free agency or arbitration from how the team acquired the player.
