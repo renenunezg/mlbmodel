@@ -64,8 +64,11 @@ FIRST_PAIR_SEASON = 2021
 MONTHS = (4, 5, 6, 7, 8, 9)
 POOLS = (features.HITTER_POOL, "SP", "RP")
 PROJECTION_SYSTEMS = ("zips", "the_bat", "steamer")
+# Preseason page types per system: hitters, pitchers (THE BAT X projects hitters, THE BAT pitchers).
+PRESEASON_PAGES = {"zips": ("zips", "zips"), "the_bat": ("thebatx", "thebat"), "steamer": ("steamer", "steamer")}
 # Rest-of-season sets exist only as dated page snapshots; a checkpoint on a snapshot's date gets them as extra baselines.
 ROS_SYSTEMS = {"zips_ros": "rzips", "the_bat_ros": "rthebatx"}
+PROJECTED_STATS = {"bat": ("wOBA", "WAR", "PA"), "pit": ("ERA", "FIP", "WAR", "IP")}
 RESULT_PATH = CACHE_DIR / "forward_evaluation.json"
 FANGRAPHS = ("https://www.fangraphs.com/api/leaders/major-league/data?age=&pos=all&stats={stats}&lg=all&qual=0"
              "&season={season}&season1={season}&startdate={season}-03-01&enddate={end}&month=1000&hand=&team=0"
@@ -289,53 +292,75 @@ def _fangraphs_ids() -> dict[str, int]:
     return ids
 
 
-def projections(season: int, as_of: date | None = None) -> dict[str, pd.Series]:
-    """Each cached system's ordering: wOBA for hitters, FIP (sign flipped) for pitchers, by (player_id, role).
+def projection_page(system: str, role: str, season: int, as_of: date | None = None):
+    """Cache path of a system's page: the preseason set, or the rest-of-season snapshot dated ``as_of``."""
+    if system in ROS_SYSTEMS:
+        return CACHE_DIR / f"fangraphs_projection_{ROS_SYSTEMS[system]}_{role}_{season}_{as_of.isoformat()}.json"
+    return CACHE_DIR / f"fangraphs_projection_{PRESEASON_PAGES[system][role == 'pit']}_{role}_{season}.json"
+
+
+def projection_stats(season: int, as_of: date | None = None) -> dict[str, pd.DataFrame]:
+    """Each cached system's projected statistics by (player_id, role): wOBA, WAR and PA for hitters; ERA, FIP, WAR and IP for pitchers.
 
     Preseason sets always; rest-of-season sets when a snapshot dated ``as_of`` is cached (hitters only).
     """
-    out: dict[str, pd.Series] = {}
     ids = _fangraphs_ids()
-    if as_of is not None:
-        for system, typ in ROS_SYSTEMS.items():
-            path = CACHE_DIR / f"fangraphs_projection_{typ}_bat_{season}_{as_of.isoformat()}.json"
-            if path.exists():
-                rows = json.loads(path.read_text())["rows"]
-                frame = pd.DataFrame([{"player_id": r.get("xMLBAMID") or ids.get(str(r.get("playerid"))), "value": r.get("wOBA")} for r in rows]).dropna()
-                frame = frame.astype({"player_id": "int64"}).drop_duplicates("player_id")
-                out[system] = pd.Series(frame["value"].to_numpy(float), index=pd.MultiIndex.from_arrays([frame["player_id"], ["bat"] * len(frame)], names=["player_id", "role"]))
-    for system, bat_type, pit_type in (("zips", "zips", "zips"), ("the_bat", "thebatx", "thebat"), ("steamer", "steamer", "steamer")):
-        parts = []
-        for role, typ, column, sign in (("bat", bat_type, "wOBA", 1.0), ("pit", pit_type, "FIP", -1.0)):
-            path = CACHE_DIR / f"fangraphs_projection_{typ}_{role}_{season}.json"
-            if not path.exists():
-                continue
-            rows = json.loads(path.read_text())["rows"]
-            frame = pd.DataFrame([{"player_id": r.get("xMLBAMID") or ids.get(str(r.get("playerid"))), "value": r.get(column)} for r in rows]).dropna()
-            frame = frame.astype({"player_id": "int64"}).drop_duplicates("player_id")
-            parts.append(pd.Series(sign * frame["value"].to_numpy(float), index=pd.MultiIndex.from_arrays([frame["player_id"], [role] * len(frame)], names=["player_id", "role"])))
+
+    def read(path, role: str) -> pd.DataFrame:
+        rows = json.loads(path.read_text())["rows"]
+        frame = pd.DataFrame([{"player_id": r.get("xMLBAMID") or ids.get(str(r.get("playerid"))), **{c: r.get(c) for c in PROJECTED_STATS[role]}} for r in rows])
+        frame = frame.dropna(subset=["player_id"]).astype({"player_id": "int64"}).drop_duplicates("player_id")
+        index = pd.MultiIndex.from_arrays([frame["player_id"], [role] * len(frame)], names=["player_id", "role"])
+        return frame[list(PROJECTED_STATS[role])].astype(float).set_index(index)
+
+    out: dict[str, pd.DataFrame] = {}
+    systems = [*(ROS_SYSTEMS if as_of is not None else ()), *PRESEASON_PAGES]
+    for system in systems:
+        roles = ("bat",) if system in ROS_SYSTEMS else ("bat", "pit")
+        parts = [read(path, role) for role in roles if (path := projection_page(system, role, season, as_of)).exists()]
         if parts:
             out[system] = pd.concat(parts)
+    return out
+
+
+def projections(season: int, as_of: date | None = None) -> dict[str, pd.Series]:
+    """Each cached system's ordering: wOBA for hitters, FIP (sign flipped) for pitchers, by (player_id, role)."""
+    out: dict[str, pd.Series] = {}
+    for system, stats in projection_stats(season, as_of).items():
+        bat = stats.index.get_level_values("role") == "bat"
+        value = np.where(bat, stats.get("wOBA", np.nan), -stats.get("FIP", np.nan))
+        out[system] = pd.Series(value, index=stats.index).dropna()
     return out
 
 
 # Scoring.
 
 
-def score_month(m: SeasonMaterial, as_of: date) -> list[dict]:
+def checkpoint(m: SeasonMaterial, as_of: date) -> pd.DataFrame:
+    """Every graded player at ``as_of`` with the rest-of-season target, its sample, and whether he is scored.
+
+    ``eligible`` means the window held ``MIN_FIT_SAMPLE`` weighted PA or batters faced and the rest of the season ``MIN_TARGET_SAMPLE``.
+    """
     graded = grade_as_of(m, as_of)
     target = rest_of_season(m, as_of, graded["group"])
-    y = target["runs"].reindex(graded.index)
-    ok = (graded["sample"] >= MIN_FIT_SAMPLE) & (target["n"].reindex(graded.index).fillna(0) >= MIN_TARGET_SAMPLE) & y.notna()
+    graded["target"] = target["runs"].reindex(graded.index)
+    graded["target_n"] = target["n"].reindex(graded.index).fillna(0.0)
+    graded["eligible"] = (graded["sample"] >= MIN_FIT_SAMPLE) & (graded["target_n"] >= MIN_TARGET_SAMPLE) & graded["target"].notna()
+    return graded
+
+
+def score_month(m: SeasonMaterial, as_of: date) -> list[dict]:
+    frame = checkpoint(m, as_of)
+    frame = frame[frame["eligible"]]
     columns = ["grade", "grade_batting", "shrunk_only", "to_date_runs", "marcel", "prior_fwar", "fwar_pace", *PROJECTION_SYSTEMS, *ROS_SYSTEMS]
     rows = []
     for pool in POOLS:
-        members = ok & graded["fit_pool"].eq(pool)
-        row = {"season": m.season, "as_of": as_of.isoformat(), "pool": pool, "n": int(members.sum())}
+        members = frame[frame["fit_pool"].eq(pool)]
+        row = {"season": m.season, "as_of": as_of.isoformat(), "pool": pool, "n": len(members)}
         for column in columns:
             if column == "grade_batting" and pool != features.HITTER_POOL:
                 continue  # pitcher weights are the same in both models
-            row[column] = spearman(graded.loc[members, column], y[members]) if column in graded else np.nan
+            row[column] = spearman(members[column], members["target"]) if column in members else np.nan
         rows.append(row)
         log.info(" ".join(f"{k} {v:.3f}" if isinstance(v, float) else f"{k} {v}" for k, v in row.items()))
     return rows

@@ -203,12 +203,7 @@ class SeasonData:
             traits["reliability"] = traits["reliability"].fillna(0) + board["reliability.blocking_runs"].reindex(rates.index).fillna(0)
         group = groups.reindex(rates.index)
         role = rates["role"]
-        fld = (runs_mod.RUNS_PER_OAA * board.get("range.oaa_per_600", pd.Series(dtype=float)).reindex(rates.index).fillna(0.0)
-               + board.get("reliability.framing_runs", pd.Series(dtype=float)).reindex(rates.index).fillna(0.0).where(group.eq("C"), 0.0)
-               + board.get("reliability.blocking_runs", pd.Series(dtype=float)).reindex(rates.index).fillna(0.0).where(group.eq("C"), 0.0))
-        run = board.get("baserunning.runs", pd.Series(dtype=float)).reindex(rates.index).fillna(0.0)
-        per_600 = runs_mod.FULL_SEASON_PA / rates["n"].where(rates["n"] > 0)
-        fld_runs, run_runs = fld * per_600, run * per_600
+        fld_runs, run_runs = fielding_running_runs(board, rates["n"], group)
         hitter_total = rates["bat_runs"] + fld_runs + run_runs
         per_pa = rates[list(OUTCOMES)].values @ w
         innings = np.where(group.eq("SP"), runs_mod.STARTER_INNINGS, runs_mod.RELIEVER_INNINGS)
@@ -217,6 +212,20 @@ class SeasonData:
                                "bat_runs": rates["bat_runs"], "fld_runs": fld_runs, "run_runs": run_runs, "woba": rates["woba"]})
         traits["role"] = role
         return traits.reset_index(), target.reset_index()
+
+
+def fielding_running_runs(board: pd.DataFrame, n: pd.Series, group: pd.Series) -> tuple[pd.Series, pd.Series]:
+    """(fielding, baserunning) runs per 600 PA from a season's boards: OAA for everyone, framing and blocking for catchers.
+
+    Boards are season totals, so they are prorated by 600 over the season's ``n`` plate appearances.
+    """
+    def column(name: str) -> pd.Series:
+        return board[name].reindex(n.index).fillna(0.0) if name in board.columns else pd.Series(0.0, index=n.index)
+
+    catcher = group.reindex(n.index).eq("C")
+    fld = runs_mod.RUNS_PER_OAA * column("range.oaa_per_600") + column("reliability.framing_runs").where(catcher, 0.0) + column("reliability.blocking_runs").where(catcher, 0.0)
+    per_600 = runs_mod.FULL_SEASON_PA / n.where(n > 0)
+    return fld * per_600, column("baserunning.runs") * per_600
 
 
 # Pair assembly.
@@ -698,12 +707,21 @@ def fit(last_dev_season: int = 2024, holdout_pair: tuple[int, int] | None = None
         calibration_model: ValueModel | None = None, market_cohort: dict | None = None,
         calibration_history: list[tuple[ValueModel, dict]] | None = None,
         tree: bool = False, expected_outcomes: bool = False, expected_blend: bool = False, components: bool = False,
-        direct_batting: bool = False) -> tuple[ValueModel, dict]:
+        direct_batting: bool = False, forward: bool = True) -> tuple[ValueModel, dict]:
+    """The fitted model and its evaluation report.
+
+    ``forward`` adds the systems head-to-head (``head_to_head``) the site's performance page reads;
+    it is checked for its cached material before the fit starts so a missing page fails early.
+    """
+    from v2.players import head_to_head  # imports forward, which imports this module
+
     holdout_pair = holdout_pair or (last_dev_season+1, last_dev_season+2)
     if holdout_pair[0] <= last_dev_season or holdout_pair[1] != holdout_pair[0]+1:
         raise ValueError("Grade development and holdout pairs overlap or are not consecutive")
     if calibration_history and calibration_model is not None:
         raise ValueError("Choose either chronological calibration history or a single cohort")
+    if forward:
+        head_to_head.require_material(head_to_head.seasons_for(last_dev_season))
     dev_first = list(range(2021, last_dev_season + 1))
     dev_seasons = list(range(2021, last_dev_season + 2))
     seasons = list(range(2021 - 2, holdout_pair[1] + 1))
@@ -804,6 +822,9 @@ def fit(last_dev_season: int = 2024, holdout_pair: tuple[int, int] | None = None
     })
     model.evaluation = {k: report[k] for k in ("dev_pairs", "holdout", "dollar_calibration")}
     model.evaluation["market"] = {"status": "not_validated"}
+    if forward:
+        model.evaluation["forward"] = report["forward"] = head_to_head.forward_block(
+            last_dev_season, tree=tree, expected_outcomes=expected_outcomes, expected_blend=expected_blend, components=components, direct_batting=direct_batting)
     return model, report
 
 
@@ -811,6 +832,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Fit the player valuation model.")
     ap.add_argument("--last-dev-season", type=int, default=2024)
     ap.add_argument("--no-publish", action="store_true")
+    ap.add_argument("--skip-forward", action="store_true", help="Fit without the systems head-to-head; the site's forward panel goes dark until a row carries it")
     ap.add_argument("--calibration-model", type=Path, help="Frozen model trained strictly before the signing cohort")
     ap.add_argument("--calibration-history", type=Path, help="JSON list of {cohort, model} paths with frozen pre-signing forecasts")
     ap.add_argument("--market-contracts", type=Path, default=Path(__file__).parent / "data/free_agent_signings_2025.json")
@@ -822,7 +844,7 @@ def main() -> None:
     model, report = fit(args.last_dev_season,
                         calibration_model=ValueModel.load(args.calibration_model) if args.calibration_model else None,
                         market_cohort=json.loads(args.market_contracts.read_text()) if args.calibration_model else None,
-                        calibration_history=history)
+                        calibration_history=history, forward=not args.skip_forward)
     path = model.save(model_path(args.last_dev_season))
     (MODELS_DIR / f"evaluation_{args.last_dev_season}.json").write_text(json.dumps(report, indent=1, default=str), encoding="utf-8")
     log.info(f"saved {path}")
