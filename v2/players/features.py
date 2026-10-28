@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 
 from v2.data.pa_dataset import OUTCOMES
+from v2.players import inputs
 from v2.players import runs as runs_mod
 from v2.players.inputs import INPUTS, prior_rates
 from v2.players.model import ValueModel
@@ -158,9 +159,18 @@ def pitching_runs_for(rates: pd.DataFrame, model: ValueModel, role: pd.Series, l
     return runs_mod.pitching_runs(pit, model.linear_weights, role.reindex(pit.index).fillna("SP"), model.pa_per_ip, leverage)
 
 
-def grade_features(composites: pd.DataFrame, shrunk: pd.Series, pool: pd.Series, age: pd.Series) -> pd.DataFrame:
-    """The design matrix for the group grade: trait composites, the shrunk-runs feature, and age."""
+BATTING_INPUTS = tuple(name for name, spec in INPUTS.items() if spec.role == "bat")
+
+
+def grade_features(composites: pd.DataFrame, shrunk: pd.Series, pool: pd.Series, age: pd.Series, z: pd.DataFrame | None = None) -> pd.DataFrame:
+    """The design matrix for the group grade: trait composites, the shrunk-runs feature, and age.
+
+    ``z`` (the oriented input z-scores) adds the batting inputs for a model that reads them directly.
+    """
     x = composites.copy()
+    if z is not None:
+        for name in BATTING_INPUTS:
+            x[name] = z[name].reindex(x.index) if name in z.columns else np.nan
     x["shrunk_runs"] = shrunk.reindex(x.index)
     centred = (pd.to_numeric(age, errors="coerce").astype("float64").reindex(x.index) - AGE_CENTER).fillna(0.0)
     x["age"], x["age2"] = centred, centred ** 2
@@ -168,27 +178,82 @@ def grade_features(composites: pd.DataFrame, shrunk: pd.Series, pool: pd.Series,
     return x
 
 
-def project_runs(features: pd.DataFrame, group: pd.Series, model: ValueModel) -> pd.Series:
+def project_runs(features: pd.DataFrame, group: pd.Series, model: ValueModel, component: str | None = None) -> pd.Series:
     """Projected next-season runs above average per full season, by the fitted grade weights.
 
     Pools for the grade fit are hitter, SP, and RP; a missing composite counts as average.
+    A component model's hitter grade is the sum of its batting, fielding and running
+    fits; ``component`` returns one of them alone (pitchers have no components).
     """
     gw = model.grade_weight_frame()
+    if component is not None:
+        gw = gw[gw["component"].eq(component) | gw["pool"].isin(PITCHER_GROUPS)]
     out = pd.Series(np.nan, index=features.index)
     fit_pool = pd.Series(np.where(group.isin(PITCHER_GROUPS), group, HITTER_POOL), index=features.index)
-    for pool_name, rows in gw.groupby("pool"):
+    for pool_name, pool_rows in gw.groupby("pool"):
         members = fit_pool == pool_name
         if not members.any():
             continue
-        coef = rows.set_index("feature")["coefficient"]
-        intercept = float(coef.get("intercept", 0.0))
-        total = pd.Series(intercept, index=features.index[members])
-        for feature, c in coef.items():
-            if feature == "intercept" or feature not in features.columns:
-                continue
-            total = total + float(c) * features.loc[members, feature].fillna(0.0)
+        total = pd.Series(0.0, index=features.index[members])
+        for _, rows in pool_rows.groupby("component"):
+            coef = rows.set_index("feature")["coefficient"]
+            total = total + float(coef.get("intercept", 0.0))
+            for feature, c in coef.items():
+                if feature == "intercept" or feature not in features.columns:
+                    continue
+                total = total + float(c) * features.loc[members, feature].fillna(0.0)
         out.loc[members] = total
     return out
+
+
+def blend_counts(counts: pd.DataFrame, expected_counts: pd.DataFrame, share: float) -> pd.DataFrame:
+    """Batting rows with ``share`` of each outcome count replaced by the expected count; pitching rows untouched.
+
+    The expected counts total the same plate appearances, so the sample behind the shrink does not change.
+    """
+    out = counts.copy()
+    out[list(OUTCOMES)] = out[list(OUTCOMES)].astype(float)
+    bat = out["role"].eq("bat")
+    exp = expected_counts.drop_duplicates("player_id").set_index("player_id")[list(OUTCOMES)].reindex(out.loc[bat, "player_id"])
+    have = exp.notna().all(axis=1).to_numpy()
+    for k in OUTCOMES:
+        observed = out.loc[bat, k].to_numpy(float)
+        out.loc[bat, k] = np.where(have, (1.0 - share) * observed + share * exp[k].to_numpy(float), observed)
+    return out
+
+
+def outcome_rates(model: ValueModel, counts_by_season: dict[int, pd.DataFrame], group_of: pd.Series, weights: dict[int, float],
+                  aaa_by_season: dict[int, pd.DataFrame], expected_by_season: dict[int, pd.DataFrame] | None) -> pd.DataFrame:
+    """Shrunk outcome rates over a window under the model's shrink settings.
+
+    The flat Dirichlet shrink toward the position group, with translated Triple-A
+    plate appearances behind the prior mean, is the served behaviour. Statcast
+    expected outcomes join the prior mean when ``model.expected_scale`` is on, and
+    hitters take the nested per-node shrink when the model carries a tree, and
+    ``model.expected_blend`` first replaces that share of each hitter's observed
+    counts with his expected counts. ``weights`` map the window's seasons to their weights.
+    """
+    from v2.players import minors  # minors imports production, which would import features back
+
+    if model.expected_blend > 0 and expected_by_season:
+        counts_by_season = {s: blend_counts(f, expected_by_season[s], model.expected_blend) if s in expected_by_season else f for s, f in counts_by_season.items()}
+    present = {s for s, f in counts_by_season.items() if not f.empty}
+    counts = inputs.window_counts(counts_by_season, weights)
+    prior = minors.prior_counts(aaa_by_season, weights, present, model.aaa_scale)
+    if model.expected_scale > 0 and expected_by_season:
+        extra = inputs.window_counts(expected_by_season, weights, present)
+        extra = extra[extra["role"].eq("bat")].set_index("player_id")[list(OUTCOMES)] * model.expected_scale
+        prior = extra if prior is None else prior.add(extra, fill_value=0.0)
+    flat = inputs.shrunk_rates(counts, group_of, model.shrink_strength, prior)
+    if not model.shrink_tree:
+        return flat
+    last = max(weights)  # the window's anchor season, present or not (a preseason checkpoint has no current-season counts)
+    tree = {node: {"window": {last - back: w for back, w in spec["window"].items()}, "strength": spec["strength"]}
+            for node, spec in model.shrink_tree.items()}
+    priors = [(aaa_by_season, model.aaa_scale)]
+    if model.expected_scale > 0 and expected_by_season:
+        priors.append((expected_by_season, model.expected_scale))
+    return inputs.apply_tree_rates(flat, inputs.tree_shrunk_rates(counts_by_season, group_of, tree, present, priors))
 
 
 def to_grade_scale(values: pd.Series, group: pd.Series, reference: pd.Series | None = None) -> pd.Series:

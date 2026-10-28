@@ -39,13 +39,14 @@ import pandas as pd
 
 from backend.log import setup_logging
 from v2.data.pa_dataset import OUTCOMES
-from v2.players import bio, features, inputs, minors
+from v2.players import bio, expected, features, inputs, minors
 from v2.players.fit import (
     MIN_FIT_SAMPLE,
     MIN_TARGET_SAMPLE,
     SeasonData,
     build_pair,
     choose_window_and_shrink,
+    configure_hitter_shrink,
     fit_grade_weights,
     fit_trait_weights,
     marcel,
@@ -88,35 +89,51 @@ def batting_only(pairs: list[dict]) -> list[dict]:
     return out
 
 
-def grade_models(last_dev_season: int) -> tuple[ValueModel, ValueModel]:
+def variant_suffix(*, tree: bool = False, expected_outcomes: bool = False, expected_blend: bool = False, components: bool = False,
+                   direct_batting: bool = False) -> str:
+    return "".join(f"_{name}" for name, on in (("tree", tree), ("expected", expected_outcomes), ("blend", expected_blend),
+                                               ("components", components), ("direct", direct_batting)) if on)
+
+
+def grade_models(last_dev_season: int, *, tree: bool = False, expected_outcomes: bool = False, expected_blend: bool = False,
+                 components: bool = False, direct_batting: bool = False, cache_dir=CACHE_DIR) -> tuple[ValueModel, ValueModel]:
     """(full, batting-only) grade models from pairs ending in ``last_dev_season + 1``, cached on disk.
 
     Both share window, shrink and trait weights; only the hitter grade weights differ.
+    The switches select the candidate hitter paths (per-node shrink tree, Statcast
+    expected outcomes, component grades) and name the cache file; a component
+    model's batting component is its own batting-only grade, so both paths share one file.
     """
-    path = CACHE_DIR / f"forward_grade_model_{last_dev_season}.json"
-    batting_path = CACHE_DIR / f"forward_grade_model_{last_dev_season}_batting.json"
+    suffix = variant_suffix(tree=tree, expected_outcomes=expected_outcomes, expected_blend=expected_blend, components=components, direct_batting=direct_batting)
+    path = cache_dir / f"forward_grade_model_{last_dev_season}{suffix}.json"
+    batting_path = cache_dir / f"forward_grade_model_{last_dev_season}{suffix}_batting.json"
     if path.exists() and batting_path.exists():
         return ValueModel.load(path), ValueModel.load(batting_path)
     dev_first = list(range(FIRST_PAIR_SEASON, last_dev_season + 1))
-    seasons = [s for s in range(FIRST_PAIR_SEASON, last_dev_season + 2) if _has_statcast(s)]
+    dev_seasons = list(range(FIRST_PAIR_SEASON, last_dev_season + 2))
+    seasons = [s for s in dev_seasons if _has_statcast(s)]
     if last_dev_season + 1 not in seasons:
         raise FileNotFoundError(f"Grade model through {last_dev_season} needs Statcast for {last_dev_season + 1}")
     data = SeasonData(seasons)
-    model = ValueModel.empty(list(range(FIRST_PAIR_SEASON, last_dev_season + 2)), (last_dev_season + 1, last_dev_season + 2))
+    model = ValueModel.empty(dev_seasons, (last_dev_season + 1, last_dev_season + 2))
     model.window_weights, model.shrink_strength, model.aaa_scale = choose_window_and_shrink(data, dev_first)
     model.aaa_input_offsets = minors.input_offsets(data.inputs, data.aaa_inputs)
     model.linear_weights = data.linear_weights[last_dev_season]
     model.pa_per_ip = data.pa_per_ip[last_dev_season]
+    model.evaluation = {"hitter_shrink": configure_hitter_shrink(data, dev_first, dev_seasons, model, tree=tree, expected_outcomes=expected_outcomes, expected_blend=expected_blend)}
+    model.component_grades, model.direct_batting = components, direct_batting
     pairs = [build_pair(data, t, model) for t in dev_first]
     model.trait_weights = fit_trait_weights(pairs)
     model.grade_weights = fit_grade_weights(pairs, model)
-    model.model_version = f"forward-grade-{last_dev_season}"
+    model.model_version = f"forward-grade-{last_dev_season}{suffix}"
     model.save(path)
     batting = ValueModel.from_payload(model.to_payload())
-    batting.grade_weights = fit_grade_weights(batting_only(pairs), model)
-    batting.model_version = f"forward-grade-{last_dev_season}-batting"
+    if not components:
+        batting.grade_weights = fit_grade_weights(batting_only(pairs), model)
+    batting.model_version = f"forward-grade-{last_dev_season}{suffix}-batting"
     batting.save(batting_path)
-    log.info(f"grade model through {last_dev_season}: window {model.window_weights}, shrink {model.shrink_strength}")
+    log.info(f"grade model through {last_dev_season}{suffix}: window {model.window_weights}, shrink {model.shrink_strength}, "
+             f"tree {model.shrink_tree or 'off'}, expected scale {model.expected_scale}, expected blend {model.expected_blend}")
     return model, batting
 
 
@@ -128,8 +145,7 @@ class SeasonMaterial:
 
     def __init__(self, season: int, model: ValueModel, batting_model: ValueModel):
         self.season, self.model, self.batting_model = season, model, batting_model
-        self.pitches = inputs.load_pitches(season)
-        self.pitches["game_date"] = pd.to_datetime(self.pitches["game_date"]).dt.date
+        self._pitches: pd.DataFrame | None = None
         self.prior = [s for s in (season - 1, season - 2) if _has_statcast(s)]
         self.prior_inputs = {s: inputs.season_inputs(s) for s in self.prior}
         self.prior_aaa_inputs = {s: minors.season_inputs(s) for s in self.prior}
@@ -139,9 +155,26 @@ class SeasonMaterial:
         self.ages = bio.ages(season)
         war = load_war(season - 1)
         self.prior_war = war[war["season"].eq(season - 1)].set_index(["player_id", "role"])["war"]
+        self.events = {s: expected.pa_events(s) for s in (*self.prior, season)} if model.expected_model else {}
+        self.prior_expected = {s: expected.expected_counts(self.events[s], self.prior_inputs[s], model.expected_model, s) for s in self.prior} if self.events else {}
+
+    @property
+    def pitches(self) -> pd.DataFrame:
+        """The season's regular-season pitches, loaded on first use (a caller with pre-cut frames never needs them)."""
+        if self._pitches is None:
+            self._pitches = inputs.load_pitches(self.season)
+            self._pitches["game_date"] = pd.to_datetime(self._pitches["game_date"]).dt.date
+        return self._pitches
 
     def weights(self) -> dict[int, float]:
         return {self.season - back: w for back, w in self.model.window_weights.items()}
+
+    def current_frames(self, as_of: date) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame] | None:
+        """(inputs, outcome counts, positions) from the season's pitches before ``as_of``; None before the first pitch."""
+        before = self.pitches[self.pitches["game_date"] < as_of]
+        if before.empty:
+            return None
+        return inputs.statcast_inputs(before, self.season), inputs.count_outcomes(before, self.season), bio.positions([self.season], before=as_of)
 
 
 def run_value(counts: pd.DataFrame, group: pd.Series, model: ValueModel) -> pd.DataFrame:
@@ -154,33 +187,41 @@ def run_value(counts: pd.DataFrame, group: pd.Series, model: ValueModel) -> pd.D
     return pd.DataFrame({"runs": runs, "n": n.to_numpy(float), "role": rows["role"].to_numpy()}, index=rows.index)
 
 
-def grade_as_of(m: SeasonMaterial, as_of: date) -> pd.DataFrame:
-    """Grade, shrunk runs, sample, pool and group per player from inputs before ``as_of``."""
-    before = m.pitches[m.pitches["game_date"] < as_of]
+def grade_as_of(m: SeasonMaterial, as_of: date, current: tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame] | None = None) -> pd.DataFrame:
+    """Grade, shrunk runs, sample, pool and group per player from inputs before ``as_of``.
+
+    ``current`` supplies the season's pre-cut (inputs, counts, positions) frames; by default they are built from the pitches.
+    """
+    current = current if current is not None else m.current_frames(as_of)
     weights = m.weights()
     frames, counts, pos = dict(m.prior_inputs), dict(m.prior_counts), m.prior_positions
-    if not before.empty:
-        frames[m.season] = inputs.statcast_inputs(before, m.season)
-        counts[m.season] = inputs.count_outcomes(before, m.season)
-        pos = pd.concat([pos, bio.positions([m.season], before=as_of)], ignore_index=True)
+    if current is not None:
+        frames[m.season], counts[m.season], season_positions = current
+        pos = pd.concat([pos, season_positions], ignore_index=True)
     players = pd.Index(pd.concat([f["player_id"] for f in frames.values()]).unique())
     for s in m.prior:
         frames[s] = pd.concat([frames[s], minors.translated_inputs(m.prior_aaa_inputs[s], m.model.aaa_input_offsets, m.model.shrink_strength, m.model.aaa_scale, players)], ignore_index=True)
     win = inputs.window(frames, weights)
-    wc = inputs.window_counts(counts, weights)
-    prior = minors.prior_counts(m.prior_pseudo, weights, set(frames), m.model.aaa_scale)
     groups = bio.primary_position(pos, weights).set_index("player_id")["position_group"]
     values, _ = features.wide_inputs(win)
     group = groups.reindex(values.index).fillna("DH")
     pool = pd.Series(features.pool_of(group), index=values.index)
     z = features.oriented_z(values, pool)
-    rates = inputs.shrunk_rates(wc, groups, m.model.shrink_strength, prior)
+    expected_by_season = None
+    if m.model.expected_model:
+        expected_by_season = dict(m.prior_expected)
+        if m.season in counts:
+            events = m.events[m.season]
+            expected_by_season[m.season] = expected.expected_counts(events[events["game_date"] < as_of], frames[m.season], m.model.expected_model, m.season)
+    rates = features.outcome_rates(m.model, counts, groups, weights, m.prior_pseudo, expected_by_season)
     sample = features.role_rows(rates, group).set_index("player_id")["n"].reindex(values.index).fillna(0.0)
     leverage = values["workload.leverage"] if "workload.leverage" in values.columns else None
     shrunk = features.shrunk_runs(rates, m.model, group, leverage).reindex(values.index)
     comps, _ = features.trait_composites(z, pool, m.model)
-    x = features.grade_features(comps, shrunk, pool, m.ages)
-    out = pd.DataFrame({"grade": features.project_runs(x, group, m.model), "grade_batting": features.project_runs(x, group, m.batting_model),
+    x = features.grade_features(comps, shrunk, pool, m.ages, z if m.model.direct_batting else None)
+    batting = (features.project_runs(x, group, m.model, component="batting") if m.model.component_grades
+               else features.project_runs(x, group, m.batting_model))
+    out = pd.DataFrame({"grade": features.project_runs(x, group, m.model), "grade_batting": batting,
                         "shrunk_only": x["shrunk_runs"], "sample": sample, "group": group}, index=values.index)
     out["fit_pool"] = np.where(group.isin(features.PITCHER_GROUPS), group, features.HITTER_POOL)
     out["to_date_runs"] = run_value(counts[m.season], group, m.model)["runs"].reindex(out.index) if m.season in counts else np.nan

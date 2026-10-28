@@ -461,6 +461,90 @@ def shrunk_rates(counts: pd.DataFrame, group_of: pd.Series, strength: float, pri
     return out
 
 
+# Nested hitter shrink: one Dirichlet per node, each with its own window and strength.
+# A plate appearance is first a strikeout, walk, hit by pitch or ball in play; a ball in
+# play is a home run or fielded; a fielded ball is a single, double, triple or out. The
+# multinomial likelihood of the eight outcomes factorises over the nodes, so each node's
+# window and strength can be chosen on its own conditional likelihood.
+SHRINK_TREE: dict[str, dict[str, tuple[str, ...]]] = {
+    "plate": {"K": ("K",), "BB": ("BB",), "HBP": ("HBP",), "in_play": ("1B", "2B", "3B", "HR", "OUT")},
+    "contact": {"HR": ("HR",), "fielded": ("1B", "2B", "3B", "OUT")},
+    "fielded": {"1B": ("1B",), "2B": ("2B",), "3B": ("3B",), "OUT": ("OUT",)},
+}
+# Which node branch each outcome's rate is the product of: (node, child) pairs from the root.
+TREE_PATHS: dict[str, tuple[tuple[str, str], ...]] = {
+    "K": (("plate", "K"),), "BB": (("plate", "BB"),), "HBP": (("plate", "HBP"),),
+    "HR": (("plate", "in_play"), ("contact", "HR")),
+    "1B": (("plate", "in_play"), ("contact", "fielded"), ("fielded", "1B")),
+    "2B": (("plate", "in_play"), ("contact", "fielded"), ("fielded", "2B")),
+    "3B": (("plate", "in_play"), ("contact", "fielded"), ("fielded", "3B")),
+    "OUT": (("plate", "in_play"), ("contact", "fielded"), ("fielded", "OUT")),
+}
+
+
+def node_counts(counts_by_season: dict[int, pd.DataFrame], weights: dict[int, float], present: set[int], children: dict[str, tuple[str, ...]]) -> pd.DataFrame:
+    """Season-weighted batting counts of one node's children, by player_id."""
+    frames = {s: f for s, f in counts_by_season.items() if s in weights and not f.empty}
+    if not frames:
+        return pd.DataFrame(columns=list(children), dtype=float)
+    win = window_counts(frames, weights, present)
+    win = win[win["role"].eq("bat")].set_index("player_id")
+    return pd.DataFrame({child: win[list(cols)].sum(axis=1) for child, cols in children.items()})
+
+
+def node_rates(counts: pd.DataFrame, group: pd.Series, strength: float, own: pd.DataFrame | None) -> pd.DataFrame:
+    """Shrunk conditional rates at one node: counts toward the group's split, the prior mean leaning on own pseudo-counts."""
+    children = list(counts.columns)
+    totals = counts.groupby(group.reindex(counts.index).fillna("DH").values)[children].sum()
+    prior = totals.div(totals.sum(axis=1), axis=0).reindex(group.reindex(counts.index).fillna("DH").values)
+    prior = pd.DataFrame(prior.to_numpy(), index=counts.index, columns=children)
+    if own is not None and not own.empty:
+        own = own.reindex(counts.index).fillna(0.0)
+        a = own.sum(axis=1)
+        prior = (strength * prior + own).div(strength + a, axis=0)
+    n = counts.sum(axis=1)
+    return (counts + strength * prior).div(n + strength, axis=0)
+
+
+def tree_shrunk_rates(counts_by_season: dict[int, pd.DataFrame], group_of: pd.Series, tree: dict[str, dict], present: set[int],
+                      priors: list[tuple[dict[int, pd.DataFrame], float]]) -> pd.DataFrame:
+    """Hitter outcome rates from the nested shrink, one row per player_id with the eight rate columns.
+
+    ``tree`` maps node to {"window": {season: weight}, "strength": s}; ``priors`` are
+    (pseudo-counts by season, scale) sources such as translated Triple-A plate
+    appearances and Statcast expected outcomes, windowed like the node's counts.
+    """
+    conditional: dict[str, pd.DataFrame] = {}
+    for node, children in SHRINK_TREE.items():
+        spec = tree[node]
+        counts = node_counts(counts_by_season, spec["window"], present, children)
+        own = None
+        for frames, scale in priors:
+            if scale <= 0:
+                continue
+            part = node_counts(frames, spec["window"], present, children) * scale
+            own = part if own is None else own.add(part, fill_value=0.0)
+        conditional[node] = node_rates(counts, group_of, float(spec["strength"]), own)
+    players = pd.Index(conditional["plate"].index)
+    out = pd.DataFrame(index=players)
+    for outcome, path in TREE_PATHS.items():
+        rate = pd.Series(1.0, index=players)
+        for node, child in path:
+            rate = rate * conditional[node][child].reindex(players).fillna(conditional[node][child].mean())
+        out[outcome] = rate
+    return out
+
+
+def apply_tree_rates(flat: pd.DataFrame, tree_rates: pd.DataFrame) -> pd.DataFrame:
+    """The flat shrink frame with its batting rows' rates replaced by the tree's; sample and prior columns stand."""
+    out = flat.copy()
+    bat = out["role"].eq("bat")
+    replacement = tree_rates.reindex(out.loc[bat, "player_id"])
+    for k in OUTCOMES:
+        out.loc[bat, k] = replacement[k].to_numpy()
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Compute per-player valuation inputs for a season.")
     ap.add_argument("--season", type=int, required=True)

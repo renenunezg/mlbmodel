@@ -52,6 +52,18 @@ class ValueModel:
     shrink_strength: float = DEFAULT_SHRINK
     aaa_scale: float = 0.0  # Triple-A plate appearances per MLB plate appearance in the outcome window
     aaa_input_offsets: dict[str, float] = field(default_factory=dict)  # input -> MLB level minus Triple-A level
+    # Hitter outcome shrink as a nested tree with its own window and strength per node
+    # (see inputs.SHRINK_TREE); empty keeps the single flat Dirichlet shrink.
+    shrink_tree: dict[str, dict] = field(default_factory=dict)
+    # Statcast expected outcomes as pseudo-counts behind the hitter prior mean (expected.py); zero switches them off.
+    expected_scale: float = 0.0
+    # Share of each hitter's observed outcome counts replaced by his Statcast expected counts before the shrink; zero is off.
+    expected_blend: float = 0.0
+    expected_model: dict = field(default_factory=dict)
+    # Hitter grade as the sum of batting, fielding and running components, each fitted to its own target.
+    component_grades: bool = False
+    # Diagnostic: the hitter grade reads the oriented batting inputs directly in place of the five batting composites.
+    direct_batting: bool = False
     # One row per (pool, trait, input): weight within the trait, status.
     trait_weights: list[dict] = field(default_factory=list)
     # One row per (pool, feature): coefficient on the z-scored feature, plus the intercept rows.
@@ -118,12 +130,15 @@ class ValueModel:
         return pd.DataFrame(self.trait_weights, columns=["pool", "trait", "input", "weight", "status"])
 
     def grade_weight_frame(self) -> pd.DataFrame:
-        return pd.DataFrame(self.grade_weights, columns=["pool", "feature", "coefficient"])
+        frame = pd.DataFrame(self.grade_weights, columns=["pool", "feature", "coefficient", "component"])
+        frame["component"] = frame["component"].fillna("")
+        return frame
 
     def to_payload(self) -> dict:
         payload = asdict(self)
         payload["holdout_pair"] = list(self.holdout_pair)
         payload["window_weights"] = {str(k): v for k, v in self.window_weights.items()}
+        payload["shrink_tree"] = {node: {**spec, "window": {str(k): v for k, v in spec["window"].items()}} for node, spec in self.shrink_tree.items()}
         payload["age_curves"] = {c: {str(a): v for a, v in curve.items()} for c, curve in self.age_curves.items()}
         payload["arb_fractions"] = {str(k): v for k, v in self.arb_fractions.items()}
         return payload
@@ -133,6 +148,7 @@ class ValueModel:
         p = dict(payload)
         p["holdout_pair"] = tuple(p.get("holdout_pair", (0, 0)))
         p["window_weights"] = {int(k): float(v) for k, v in p.get("window_weights", {}).items()}
+        p["shrink_tree"] = {node: {**spec, "window": {int(k): float(v) for k, v in spec["window"].items()}} for node, spec in p.get("shrink_tree", {}).items()}
         p["age_curves"] = {c: {int(a): float(v) for a, v in curve.items()} for c, curve in p.get("age_curves", {}).items()}
         p["arb_fractions"] = {int(k): float(v) for k, v in p.get("arb_fractions", {}).items()}
         known = {f for f in cls.__dataclass_fields__}
