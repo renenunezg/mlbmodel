@@ -132,10 +132,13 @@ def explained(hitters: pd.DataFrame, uncorrected: pd.DataFrame, air: pd.DataFram
     coef, explained_share = share(hitters, season)
     _, share_without_correction = share(uncorrected, season)
     s = hitters[(hitters.season == season) & (hitters.n_spin >= MIN_SPIN_BALLS)]
+    prior = hitters[(hitters.season == season - 1) & (hitters.n_spin >= MIN_SPIN_BALLS)]
+    # The ceiling is the reliability of the carry the share is scored on: the same hitters, the same season, every air ball.
+    prior_air = air[(air.season == season - 1) & air.batter.isin(prior.batter)]
     leftover = hitters.assign(left=hitters.carry - np.polyval(coef, hitters.spin_effect))
     return {"coef": [rounded(coef[0], 4), rounded(coef[1], 3)], "share": rounded(explained_share),
             "share_without_steep_correction": rounded(share_without_correction),
-            "ceiling": rounded(full_season(split_half(air[air.season == season - 1], "carry", MIN_SPIN_BALLS))),
+            "ceiling": rounded(full_season(split_half(prior_air, "carry", MIN_SPIN_BALLS))),
             "leftover_year_to_year": rounded(year_to_year(leftover[leftover.n_spin >= 50], "left")),
             "backspin_carry_corr": rounded(s.backspin.corr(s.carry))}
 

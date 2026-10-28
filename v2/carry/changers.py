@@ -19,16 +19,16 @@ TILT_LABELS = ["flattened 1.5+", "flattened a bit", "about the same", "steepened
 
 
 def swing_profiles(pitches: pd.DataFrame, curves: dict[str, list[float]]) -> pd.DataFrame:
-    """Mean belt-high tilt and attack angle over every tracked swing of each hitter-season (the build passes no bunts), and
-    mean bat speed over his competitive swings: the fastest 90%, Baseball Savant's definition, which drops checked and
-    defensive swings."""
+    """Mean belt-high tilt and attack angle over every swing with a tracked path, and mean bat speed over the fastest 90% of
+    every swing with a tracked speed (Savant's competitive-swing rule, which drops checked and defensive swings), per
+    hitter-season. The build passes no bunts."""
     tracked = pitches[pitches.swing_path_tilt.notna() & pitches.attack_angle.notna() & pitches.plate_z.notna()]
     belt = at_belt_high(tracked, curves)
-    frame = pd.concat([tracked[["batter", "season", "bat_speed"]], belt[["tilt", "attack"]]], axis=1)
-    by = frame.groupby(["batter", "season"])
-    competitive = frame[frame.bat_speed >= by.bat_speed.transform(lambda s: s.quantile(1 - COMPETITIVE_SHARE))]
-    out = by.agg(tracked=("tilt", "size"), tilt=("tilt", "mean"), attack=("attack", "mean"))
-    out["bat_speed"] = competitive.groupby(["batter", "season"]).bat_speed.mean()
+    out = pd.concat([tracked[["batter", "season"]], belt[["tilt", "attack"]]], axis=1).groupby(["batter", "season"]).agg(
+        tracked=("tilt", "size"), tilt=("tilt", "mean"), attack=("attack", "mean"))
+    speeds = pitches.loc[pitches.bat_speed.notna(), ["batter", "season", "bat_speed"]]
+    floor = speeds.groupby(["batter", "season"]).bat_speed.transform(lambda s: s.quantile(1 - COMPETITIVE_SHARE))
+    out["bat_speed"] = speeds[speeds.bat_speed >= floor].groupby(["batter", "season"]).bat_speed.mean()
     return out.reset_index()
 
 
@@ -59,21 +59,30 @@ def pairs(profiles: pd.DataFrame, counts: pd.DataFrame, carry: pd.DataFrame) -> 
 def coefficients(p: pd.DataFrame) -> dict:
     """Per outcome: change per degree of tilt, per degree of attack angle at average whiff rate, and the extra per degree
     of attack angle per standard deviation of whiff rate; bat speed change held as a control. `cov` is the coefficients'
-    covariance in that order, so a combined change's error can carry their correlation."""
+    covariance in that order, clustered by hitter because a hitter contributes one pair per consecutive-season span."""
     whiff_mean, whiff_sd = float(p.whiff_0.mean()), float(p.whiff_0.std())
     z = (p.whiff_0 - whiff_mean) / whiff_sd
     names = ["d_tilt", "d_attack", "d_attack_x_whiff", "d_bat_speed"]
     design = np.column_stack([np.ones(len(p)), p.d_tilt, p.d_attack, p.d_attack * z, p.d_bat_speed])
-    out = {"n": int(len(p)), "whiff_mean": round(whiff_mean, 4), "whiff_sd": round(whiff_sd, 4), "outcomes": {}}
+    out = {"n": int(len(p)), "n_hitters": int(p.batter.nunique()), "whiff_mean": round(whiff_mean, 4),
+           "whiff_sd": round(whiff_sd, 4), "outcomes": {}}
     for col in OUTCOMES:
         y = p[f"d_{col}"].to_numpy()
         ok = np.isfinite(y)
         X, y = design[ok], y[ok]
         beta, *_ = np.linalg.lstsq(X, y, rcond=None)
-        resid = y - X @ beta
-        cov = np.linalg.inv(X.T @ X)[1:, 1:] * (resid @ resid) / (len(y) - X.shape[1])
+        cov = _clustered_cov(X, y - X @ beta, p.batter.to_numpy()[ok])[1:, 1:]
         out["outcomes"][col] = {**{name: _sig(b) for name, b in zip(names, beta[1:])}, "cov": [[_sig(c) for c in row] for row in cov]}
     return out
+
+
+def _clustered_cov(X: np.ndarray, resid: np.ndarray, cluster: np.ndarray) -> np.ndarray:
+    """Cluster-robust (sandwich) covariance of OLS coefficients with the usual small-sample scaling."""
+    n, k = X.shape
+    bread = np.linalg.inv(X.T @ X)
+    scores = pd.DataFrame(X * resid[:, None]).groupby(cluster).sum().to_numpy()
+    g = len(scores)
+    return bread @ (scores.T @ scores) @ bread * g / (g - 1) * (n - 1) / (n - k)
 
 
 def _sig(x: float, digits: int = 6) -> float:
