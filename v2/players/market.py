@@ -51,7 +51,7 @@ def historical_projection(model: ValueModel, first: int, last: int) -> pd.DataFr
                                "fa_year": last + 1, "how_acquired": "Free Agency"}
                               for pid in ids for year in range(first, last + 1)])
     details = []
-    result, _ = score.assemble_values(pop, group_frame, rates, win, pd.DataFrame(), pt, contracts, model, first, projection_details=details)
+    result, _ = score.assemble_values(pop, group_frame, rates, win, pt, contracts, model, first, projection_details=details)
     return result.set_index("player_id").join(pd.DataFrame(details).set_index("player_id"))
 
 

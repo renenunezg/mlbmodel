@@ -28,7 +28,7 @@ from v2.data.pa_dataset import OUTCOMES
 from v2.players import aging, bio, expected, features, inputs, minors, pricing, production, workload
 from v2.players import runs as runs_mod
 from v2.players.inputs import INPUTS
-from v2.players.model import MODELS_DIR, ValueModel, model_path, publish_model
+from v2.players.model import MODEL_VERSION, MODELS_DIR, ValueModel, model_path, publish_model
 from v2.players.savant import load_board
 
 log = logging.getLogger(__name__)
@@ -775,8 +775,7 @@ def fit(last_dev_season: int = 2024, holdout_pair: tuple[int, int] | None = None
     model.production_aging = {}
     war_panel = production.panel(production.load_lines(last_dev_season + 1), last_dev_season + 1)
     model.production = production.fit(war_panel, last_dev_season + 1)
-    # The lineage the scorer and the site key on; a refit replaces the live row rather than opening a new version.
-    model.model_version = "player-value-v3-grade"
+    model.model_version = MODEL_VERSION
 
     # Contract transactions and frozen forecasts are distinct from current payroll.
     # Never infer free agency or arbitration from how the team acquired the player.

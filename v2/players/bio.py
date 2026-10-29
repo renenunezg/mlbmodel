@@ -42,7 +42,11 @@ def _get(path: str, **params) -> dict:
 
 
 def season_dates(season: int) -> tuple[date, date]:
-    payload = _get("seasons", sportId=1, season=season)["seasons"][0]
+    """Regular-season start and end; LookupError when the league has not published the season yet."""
+    seasons = _get("seasons", sportId=1, season=season)["seasons"]
+    if not seasons:
+        raise LookupError(f"season {season} dates are not published")
+    payload = seasons[0]
     return date.fromisoformat(payload["regularSeasonStartDate"]), date.fromisoformat(payload["regularSeasonEndDate"])
 
 
@@ -220,30 +224,6 @@ def primary_position(pos: pd.DataFrame, window_weights: dict[int, float]) -> pd.
     out = primary[["player_id", "position_group"]].merge(secondary, on="player_id", how="left")
     out["secondary_positions"] = out["secondary_positions"].apply(lambda v: v if isinstance(v, list) else [])
     return out
-
-
-def il_days(seasons: list[int], as_of: date) -> pd.DataFrame:
-    """Days on the injured list per player-season from placement and activation transactions."""
-    out = []
-    for season in seasons:
-        tx = _season_transactions(season, as_of)
-        _, season_end = season_dates(season)
-        text = tx["description"].str.lower()
-        placed = tx[text.str.contains("placed") & text.str.contains("injured list")]
-        activated = tx[text.str.contains("activated") & text.str.contains("injured list")]
-        for player_id, group in placed.groupby("player_id"):
-            ends = activated.loc[activated["player_id"] == player_id, "date"].sort_values().tolist()
-            starts = sorted(group["date"])
-            days = 0
-            for i, start in enumerate(starts):
-                # A stint ends at the next activation, the next placement, or the season's end.
-                limit = min(season_end, as_of)
-                if i + 1 < len(starts):
-                    limit = min(limit, starts[i + 1])
-                end = next((e for e in ends if e > start), limit)
-                days += max(0, (min(end, limit) - start).days)
-            out.append({"player_id": int(player_id), "season": season, "il_days": days})
-    return pd.DataFrame(out, columns=["player_id", "season", "il_days"])
 
 
 def season_lines(player_ids: list[int], group: str) -> pd.DataFrame:

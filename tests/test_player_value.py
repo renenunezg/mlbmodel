@@ -107,7 +107,7 @@ def one_hitter(status: str, pa: float) -> dict:
     rates = pd.DataFrame([{"player_id": 1, "role": "bat", "group": "2B", "n": pa,
                            "K": 0.22, "BB": 0.08, "HBP": 0.01, "1B": 0.15, "2B": 0.045, "3B": 0.004, "HR": 0.03, "OUT": 0.461}])
     inputs = pd.DataFrame([{"player_id": 1, "season": 2026, "role": "bat", "input": "contact.k_rate", "value": 0.22, "sample": pa}])
-    return {"population": population, "groups": groups, "rates": rates, "inputs": inputs, "il_days": pd.DataFrame(columns=["player_id", "season", "il_days"]),
+    return {"population": population, "groups": groups, "rates": rates, "inputs": inputs,
             "playing_time": pd.DataFrame([{"player_id": 1, "role": "bat", "pa": pa}])}
 
 

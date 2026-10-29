@@ -51,7 +51,7 @@ def current_season(as_of: date) -> int:
     for season in (as_of.year, as_of.year - 1):
         try:
             starts[season], _ = bio.season_dates(season)
-        except Exception:  # the next season's dates are not published yet
+        except LookupError:  # the next season's dates are not published yet
             continue
     return season_for(as_of, starts)
 
@@ -65,7 +65,7 @@ def window_weights_by_season(model: ValueModel, last_season: int) -> dict[int, f
     return {last_season - back: w for back, w in model.window_weights.items()}
 
 
-def fingerprint(as_of: date, population: pd.DataFrame, contracts: pd.DataFrame, model: ValueModel, seasons: list[int]) -> str:
+def fingerprint(population: pd.DataFrame, contracts: pd.DataFrame, model: ValueModel, seasons: list[int]) -> str:
     parts = [model.model_version, model.fitted_at, json.dumps(bio.FIELD_POSITIONS, sort_keys=True),
              json.dumps(model.price, sort_keys=True), json.dumps(model.workload, sort_keys=True)]
     if model.production:
@@ -98,7 +98,7 @@ def _contract_years(rows: pd.DataFrame) -> list[value.ContractYear]:
 
 
 def assemble_values(
-    population: pd.DataFrame, groups: pd.DataFrame, rates: pd.DataFrame, inputs: pd.DataFrame, il_days: pd.DataFrame,
+    population: pd.DataFrame, groups: pd.DataFrame, rates: pd.DataFrame, inputs: pd.DataFrame,
     playing_time: pd.DataFrame, contracts: pd.DataFrame, model: ValueModel, next_season: int,
     actual: pd.DataFrame | None = None, draws: np.ndarray | None = None, as_of: date | None = None,
     projection_details: list[dict] | None = None,
@@ -476,7 +476,6 @@ def gather(as_of: date, model: ValueModel, season: int | None = None) -> dict:
     wc = inputs.window_counts(counts, weights)
     group_of = groups.set_index("player_id")["position_group"]
     rates = inputs.shrunk_rates(wc, group_of, model.shrink_strength, prior)
-    il = bio.il_days(seasons, as_of)
     contracts = load_contracts(season)
     # Players Baseball-Reference does not list yet (this year's debuts) get an
     # estimated pre-arbitration schedule from their debut date.
@@ -527,7 +526,7 @@ def gather(as_of: date, model: ValueModel, season: int | None = None) -> dict:
     scale_draw = np.where(is_bat, FULL_SEASON_PA, -model.pa_per_ip * innings)
     draw_frame = pd.DataFrame(per * scale_draw[:, None], index=wc_role["player_id"].to_numpy())
     return {
-        "population": population, "groups": groups, "rates": rates, "inputs": win, "il_days": il, "playing_time": pt,
+        "population": population, "groups": groups, "rates": rates, "inputs": win, "playing_time": pt,
         "contracts": contracts, "model": model, "next_season": nxt, "actual": actual, "draws": draw_frame, "as_of": as_of,
         "seasons": seasons,
     }
@@ -538,13 +537,15 @@ def score(as_of: date, model: ValueModel, *, write: bool, force: bool = False, p
         model.require_market_validation()
     data = gather(as_of, model)
     seasons = data.pop("seasons")
-    fp = fingerprint(as_of, data["population"], data["contracts"], model, seasons)
+    fp = fingerprint(data["population"], data["contracts"], model, seasons)
     if write and not force and LAST_SCORED.exists():
         last = json.loads(LAST_SCORED.read_text())
         if last.get("fingerprint") == fp:
             log.info(f"inputs unchanged since {last.get('as_of')}; skipping write")
             return pd.DataFrame(), pd.DataFrame()
     values_frame, traits_frame = assemble_values(**data)
+    # The site compares this with mlb.player_value_evaluation.fitted_at to detect grades scored by another fit.
+    values_frame = values_frame.assign(model_fitted_at=model.fitted_at)
     if players:
         values_frame = values_frame[values_frame["player_id"].isin(players)]
         traits_frame = traits_frame[traits_frame["player_id"].isin(players)]

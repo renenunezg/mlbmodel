@@ -27,7 +27,8 @@ from v2.players.runs import PUBLISHED_POSITIONAL_RUNS
 
 log = logging.getLogger(__name__)
 
-MODEL_VERSION = "player-value-v1"
+# The lineage the scorer and the site key on; a refit replaces this row rather than opening a new version.
+MODEL_VERSION = "player-value-v3-grade"
 MARKET_VALIDATION_CHECKS = frozenset({
     "fwar_improves_on_each_paired_role_and_year", "broad_contract_error_and_bias_pass",
     "original_contract_regression_removed", "later_arbitration_salary_accuracy_improves",
@@ -186,8 +187,9 @@ def publish_model(model: ValueModel) -> None:
 
 def load_latest_from_db() -> ValueModel:
     with engine.connect() as conn:
-        row = conn.execute(text("SELECT payload FROM player_value_models ORDER BY fitted_at DESC LIMIT 1")).fetchone()
+        row = conn.execute(text("SELECT payload FROM player_value_models WHERE model_version = :v "
+                                "ORDER BY fitted_at DESC LIMIT 1"), {"v": MODEL_VERSION}).fetchone()
     if row is None:
-        raise RuntimeError("No player value model published; run python -m v2.players.fit first")
+        raise RuntimeError(f"No {MODEL_VERSION} model published; run python -m v2.players.fit first")
     payload = row[0] if isinstance(row[0], dict) else json.loads(row[0])
     return ValueModel.from_payload(payload)
