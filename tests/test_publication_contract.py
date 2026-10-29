@@ -35,7 +35,8 @@ def test_publication_and_evaluation_recovery(monkeypatch):
                      root / "backend/sql/live_evaluation_reconciliation.sql",
                      root / "backend/sql/20261007171918_mlb_live_evaluation_completion.sql",
                      root / "backend/sql/history_record_bounds.sql",
-                     root / "backend/sql/20261029120000_mlb_evaluation_integrity.sql"):
+                     root / "backend/sql/20261029120000_mlb_evaluation_integrity.sql",
+                     root / "backend/sql/20261029130000_mlb_forecast_history.sql"):
             subprocess.run(["psql", "-X", local_url.render_as_string(hide_password=False),
                             "-v", "ON_ERROR_STOP=1", "-f", str(path)],
                            check=True, capture_output=True)
@@ -85,8 +86,14 @@ def test_publication_and_evaluation_recovery(monkeypatch):
             conn.execute(text("UPDATE games SET start_time = clock_timestamp() - interval '1 second'"))
         writer.publish_forecasts([{**row, "expected_runs": 99,
                                   "prediction_updated_at": now} for row in rows])
-        with db.connect() as conn:
+        with db.begin() as conn:
             assert conn.execute(text("SELECT expected_runs FROM model_outputs")).scalars().all() == [4, 4]
+            # The database keeps every published version and refuses any write once first pitch has passed.
+            assert conn.execute(text("SELECT count(*) FROM forecast_history")).scalar_one() == 2
+            with pytest.raises(DBAPIError, match="frozen"), conn.begin_nested():
+                conn.execute(text("UPDATE model_outputs_season SET win_prob = 0.9 WHERE game_pk = 1"))
+            # The checks below load already-graded fixtures, which that trigger exists to refuse.
+            conn.execute(text("ALTER TABLE mlb.model_outputs_season DISABLE TRIGGER refuse_started_forecast_write"))
         import pipeline
         monkeypatch.setattr(pipeline, "engine", db)
         moved_day = day + pd.Timedelta(days=1)
