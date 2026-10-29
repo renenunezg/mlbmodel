@@ -5,7 +5,6 @@ from datetime import date, timedelta
 
 import pandas as pd
 import requests
-import statsapi
 
 from backend.data.game_types import INACTIVE_GAME_STATUSES, PREDICTION_GAME_TYPES
 from backend.log import setup_logging
@@ -28,8 +27,6 @@ def _schedule_status(game: dict) -> str:
     if game.get("ifNecessary") == "Y" and status.get("abstractGameState") == "Preview":
         return "If Necessary"
     return status.get("abstractGameState", "Scheduled")
-
-
 
 
 def _batch_fetch_handedness(pitcher_ids: list[int]) -> dict[int, str]:
@@ -122,68 +119,6 @@ def fetch_schedule(game_date: date = None) -> pd.DataFrame:
         _batch_fetch_handedness(list(set(all_pitcher_ids)))
         df["home_pitcher_hand"] = df["home_pitcher_id"].map(_handedness_cache)
         df["away_pitcher_hand"] = df["away_pitcher_id"].map(_handedness_cache)
-
-    return df
-
-
-def fetch_schedule_range(start_date: date, end_date: date) -> pd.DataFrame:
-    """Fetch schedule for a date range. Useful for loading historical data.
-
-    Includes probable pitcher info when available.
-    """
-    params = {
-        "sportId": 1,
-        "startDate": start_date.strftime("%Y-%m-%d"),
-        "endDate": end_date.strftime("%Y-%m-%d"),
-        "hydrate": "probablePitcher(note),venue,team",
-        "gameTypes": ",".join(PREDICTION_GAME_TYPES),
-    }
-    resp = requests.get(f"{BASE_URL}/schedule", params=params, timeout=15)
-    resp.raise_for_status()
-    data = resp.json()
-
-    rows = []
-    for date_entry in data.get("dates", []):
-        for game in date_entry.get("games", []):
-            if game.get("gameType") not in PREDICTION_GAME_TYPES:
-                continue
-            home = game.get("teams", {}).get("home", {})
-            away = game.get("teams", {}).get("away", {})
-            home_pitcher = home.get("probablePitcher", {})
-            away_pitcher = away.get("probablePitcher", {})
-
-            rows.append({
-                "game_pk": game["gamePk"],
-                "game_type": game["gameType"],
-                "game_date": game.get("officialDate") or date_entry["date"],
-                "start_time": game.get("rescheduleDate") or game.get("gameDate"),
-                "home_team": _team_code(home, game["gamePk"]),
-                "away_team": _team_code(away, game["gamePk"]),
-                "home_score": home.get("score"),
-                "away_score": away.get("score"),
-                "status": _schedule_status(game),
-                "venue": game.get("venue", {}).get("name", ""),
-                "home_pitcher_name": home_pitcher.get("fullName"),
-                "home_pitcher_id": home_pitcher.get("id"),
-                "away_pitcher_name": away_pitcher.get("fullName"),
-                "away_pitcher_id": away_pitcher.get("id"),
-            })
-
-    df = pd.DataFrame(rows)
-    if not df.empty:
-        df["home_team"] = df["home_team"].apply(normalize_team)
-        df["away_team"] = df["away_team"].apply(normalize_team)
-        df = df[df.home_team.isin(TEAM_ID_BY_CODE) & df.away_team.isin(TEAM_ID_BY_CODE)].copy()
-
-        # Batch fetch handedness for all pitchers
-        all_pitcher_ids = (
-            df["home_pitcher_id"].dropna().astype(int).tolist() +
-            df["away_pitcher_id"].dropna().astype(int).tolist()
-        )
-        if all_pitcher_ids:
-            _batch_fetch_handedness(list(set(all_pitcher_ids)))
-            df["home_pitcher_hand"] = df["home_pitcher_id"].map(_handedness_cache)
-            df["away_pitcher_hand"] = df["away_pitcher_id"].map(_handedness_cache)
 
     return df
 
@@ -325,101 +260,6 @@ def fetch_game_pitchers(game_pk: int) -> dict[str, list[int]]:
     return result
 
 
-def fetch_batting_splits(season: int = None, split: str = "vs_rhp") -> pd.DataFrame:
-    """Fetch team batting splits from MLB Stats API.
-
-    Args:
-        season: MLB season year (defaults to current year)
-        split: 'vs_rhp' or 'vs_lhp'
-
-    Returns DataFrame with columns:
-        team, season, split, pa, wrc_plus, woba, ops, slg, obp, iso, babip, k_pct, bb_pct
-    """
-    if season is None:
-        season = date.today().year
-
-    sit_code = "vr" if split == "vs_rhp" else "vl"
-
-    params = {
-        "stats": "season",
-        "group": "hitting",
-        "sportIds": 1,
-        "season": season,
-        "sitCodes": sit_code,
-        "fields": (
-            "records,teamName,stat,plateAppearances,onBasePercentage,"
-            "sluggingPercentage,ops,iso,babip,strikeOuts,baseOnBalls,"
-            "atBats,hits,doubles,triples,homeRuns,stolenBases"
-        ),
-    }
-
-    try:
-        stats_data = statsapi.get(
-            "teams_stats",
-            {
-                "stats": "season",
-                "group": "hitting",
-                "sportIds": 1,
-                "season": season,
-                "sitCodes": sit_code,
-            },
-        )
-    except Exception as e:
-        log.warning(f"statsapi.get failed, falling back to direct request: {e}")
-        resp = requests.get(f"{BASE_URL}/teams/stats", params=params, timeout=15)
-        resp.raise_for_status()
-        stats_data = resp.json()
-
-    rows = []
-    for split_group in stats_data.get("stats", []):
-        for team_entry in split_group.get("splits", []):
-            stat = team_entry.get("stat", {})
-            team_info = team_entry.get("team", {})
-
-            # Compute derived metrics
-            pa = int(stat.get("plateAppearances", 0))
-            ab = int(stat.get("atBats", 0))
-            bb = int(stat.get("baseOnBalls", 0))
-            so = int(stat.get("strikeOuts", 0))
-            hits = int(stat.get("hits", 0))
-            hr = int(stat.get("homeRuns", 0))
-
-            obp = float(stat.get("obp", 0))
-            slg = float(stat.get("slg", 0))
-            ops_val = float(stat.get("ops", 0))
-
-            # ISO = SLG - AVG
-            avg = hits / ab if ab > 0 else 0
-            iso = slg - avg
-
-            # BABIP = (H - HR) / (AB - SO - HR + SF)
-            sf = int(stat.get("sacFlies", 0))
-            babip_denom = ab - so - hr + sf
-            babip = (hits - hr) / babip_denom if babip_denom > 0 else 0
-
-            # K% and BB%
-            k_pct = (so / pa * 100) if pa > 0 else 0
-            bb_pct = (bb / pa * 100) if pa > 0 else 0
-
-            rows.append({
-                "team": normalize_team(team_info.get("abbreviation", team_info.get("name", ""))),
-                "season": season,
-                "split": split,
-                "pa": pa,
-                "wrc_plus": None,  # Not directly available from MLB API
-                "woba": None,  # Not directly available from MLB API
-                "ops": round(ops_val, 3),
-                "slg": round(slg, 3),
-                "obp": round(obp, 3),
-                "iso": round(iso, 3),
-                "babip": round(babip, 3),
-                "k_pct": round(k_pct, 1),
-                "bb_pct": round(bb_pct, 1),
-            })
-
-    return pd.DataFrame(rows)
-
-
 if __name__ == "__main__":
     setup_logging()
     print("=== Today's Schedule ===")
@@ -437,9 +277,3 @@ if __name__ == "__main__":
     else:
         print("No probable starters announced.")
 
-    print("\n=== Team Batting vs RHP ===")
-    batting = fetch_batting_splits(split="vs_rhp")
-    if not batting.empty:
-        print(batting.head(10).to_string(index=False))
-    else:
-        print("No batting data available (season may not have started).")

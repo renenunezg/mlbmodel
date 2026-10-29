@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 import re
-import time
 from datetime import date
 
 import requests
@@ -139,21 +138,4 @@ def update_weather_for_date(d: date) -> int:
     )
     n = sum(fetch_weather(int(gp)) is not None for gp in games["game_pk"])
     log.info(f"update_weather_for_date {d}: {n}/{len(games)} games")
-    return n
-
-
-def backfill_weather(start: date, end: date, sleep: float = 0.05) -> int:
-    """Populate weather for every game in [start, end]. Idempotent."""
-    import pandas as pd
-
-    games = pd.read_sql(
-        text("SELECT game_pk FROM games WHERE game_date BETWEEN :s AND :e"),
-        engine, params={"s": start, "e": end},
-    )
-    n = 0
-    for gp in games["game_pk"].astype(int):
-        if fetch_weather(gp) is not None:
-            n += 1
-        time.sleep(sleep)
-    log.info(f"backfill_weather {start}..{end}: {n}/{len(games)} games populated")
     return n

@@ -1,9 +1,7 @@
 from datetime import date
 from unittest.mock import Mock
 
-import pandas as pd
-
-from backend.data.mlb_api import fetch_probable_starters, fetch_schedule, fetch_schedule_range
+from backend.data.mlb_api import fetch_probable_starters, fetch_schedule
 
 
 def test_schedule_uses_rescheduled_date_and_start(monkeypatch):
@@ -37,7 +35,5 @@ def test_schedule_uses_rescheduled_date_and_start(monkeypatch):
     assert schedule.loc[0, "start_time"] == "2026-06-03T17:35:00Z"
     assert schedule.loc[0, "away_team"] == "NYY"
     assert schedule.loc[0, "game_type"] == "F"
-    ranged = fetch_schedule_range(date(2026, 6, 1), date(2026, 6, 3))
-    pd.testing.assert_frame_equal(schedule, ranged)
     starters = fetch_probable_starters(date(2026, 6, 1))
     assert starters.loc[0, "game_date"] == "2026-06-03"

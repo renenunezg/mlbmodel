@@ -8,7 +8,6 @@ typing_extensions
 requests
 beautifulsoup4
 lxml
-MLB-StatsAPI
 scikit-learn
 xgboost==3.0.0
 pybaseball
