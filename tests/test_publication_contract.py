@@ -34,7 +34,8 @@ def test_publication_and_evaluation_recovery(monkeypatch):
                      root / "backend/sql/interval_coverage_population.sql",
                      root / "backend/sql/live_evaluation_reconciliation.sql",
                      root / "backend/sql/20261007171918_mlb_live_evaluation_completion.sql",
-                     root / "backend/sql/history_record_bounds.sql"):
+                     root / "backend/sql/history_record_bounds.sql",
+                     root / "backend/sql/20261029120000_mlb_evaluation_integrity.sql"):
             subprocess.run(["psql", "-X", local_url.render_as_string(hide_password=False),
                             "-v", "ON_ERROR_STOP=1", "-f", str(path)],
                            check=True, capture_output=True)
@@ -206,7 +207,10 @@ def test_publication_and_evaluation_recovery(monkeypatch):
         with db.connect() as conn:
             counts = dict(conn.execute(text("""SELECT eval_window, total_predictions
                 FROM model_evaluation WHERE date = :date"""), {"date": fixture["date"]}).all())
-            assert counts == fixture["window_counts"]
+            # The shared contract covers the four live windows; season_v2 is nightly-only and,
+            # with every fixture game after the v1 cutover, equals the season window.
+            assert {k: counts[k] for k in fixture["window_counts"]} == fixture["window_counts"]
+            assert counts["season_v2"] == counts["season"]
         narrow, wide = [0.0]*21, [0.0]*21
         narrow[4], wide[0], wide[8] = 1.0, .5, .5
         first = probabilistic_summary([.5], [1], histograms=[narrow], actual_runs=[6])

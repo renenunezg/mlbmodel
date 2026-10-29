@@ -77,15 +77,18 @@ def brier_score(probs, outcomes):
     return float(np.mean((probs[mask] - outcomes[mask]) ** 2))
 
 
+def log_loss_terms(probs, outcomes, eps=1e-7):
+    """Per-forecast binary cross-entropy with safe clipping to avoid log(0)."""
+    p = np.clip(np.asarray(probs, dtype=float), eps, 1 - eps)
+    y = np.asarray(outcomes, dtype=float)
+    return -(y * np.log(p) + (1 - y) * np.log(1 - p))
+
+
 def log_loss(probs, outcomes, eps=1e-7):
-    """Binary cross-entropy with safe clipping to avoid log(0)."""
-    probs = np.clip(np.asarray(probs, dtype=float), eps, 1 - eps)
-    outcomes = np.asarray(outcomes, dtype=float)
-    mask = ~(np.isnan(probs) | np.isnan(outcomes))
-    if not mask.any():
-        return np.nan
-    p, y = probs[mask], outcomes[mask]
-    return float(-np.mean(y * np.log(p) + (1 - y) * np.log(1 - p)))
+    """Mean binary cross-entropy over forecasts with both a probability and an outcome."""
+    terms = log_loss_terms(probs, outcomes, eps)
+    terms = terms[~np.isnan(terms)]
+    return float(np.mean(terms)) if terms.size else np.nan
 
 
 def sharpness(probs):
@@ -128,6 +131,10 @@ def calibration_curve(probs, outcomes, n_bins=10):
 def prediction_interval_coverage(histograms, actual_runs, level=0.80):
     """Equal-tail coverage of the persisted PMF; its last bin is 20+ runs.
 
+    One histogram is one team's runs, so coverage counts team rows, not games
+    or game totals. Runs are integers and both endpoints are inclusive, so the
+    interval holds at least the nominal mass and coverage runs above the
+    nominal level by construction (most visibly at 50%).
     Missing legacy PMFs are excluded explicitly, never approximated from means.
     """
     covered = []
@@ -164,6 +171,45 @@ def probabilistic_summary(probs, outcomes, *, histograms=None, actual_runs=None)
             if actual_runs is not None else np.nan
         )
     return result
+
+
+# ---------------------------------------------------------------------------
+# Bootstrap intervals
+# ---------------------------------------------------------------------------
+
+BOOTSTRAP_RESAMPLES = 2000
+BOOTSTRAP_SEED = 20261029
+
+
+def _resample_indices(n):
+    """Fixed-seed resample matrix, so a rerun on the same rows gives the same interval."""
+    rng = np.random.default_rng(BOOTSTRAP_SEED)
+    return rng.integers(0, n, size=(BOOTSTRAP_RESAMPLES, n))
+
+
+def bootstrap_mean_ci(values):
+    """95% percentile interval of the mean of one value per game."""
+    values = np.asarray(values, dtype=float)
+    values = values[~np.isnan(values)]
+    if values.size < 2:
+        return np.nan, np.nan
+    means = values[_resample_indices(values.size)].mean(axis=1)
+    return float(np.percentile(means, 2.5)), float(np.percentile(means, 97.5))
+
+
+def bootstrap_roi_ci(ledger):
+    """95% percentile interval of ROI, resampling games so bets on one game stay together."""
+    if ledger is None or ledger.empty:
+        return np.nan, np.nan
+    by_game = ledger.groupby("game_pk").agg(stake=("stake", "sum"), payout=("payout", "sum"))
+    stake = by_game["stake"].to_numpy(dtype=float)
+    pnl = by_game["payout"].to_numpy(dtype=float) - stake
+    if stake.size < 2:
+        return np.nan, np.nan
+    idx = _resample_indices(stake.size)
+    staked = stake[idx].sum(axis=1)
+    rois = np.divide(pnl[idx].sum(axis=1), staked, out=np.full(staked.shape, np.nan), where=staked > 0)
+    return float(np.nanpercentile(rois, 2.5)), float(np.nanpercentile(rois, 97.5))
 
 
 # ---------------------------------------------------------------------------
