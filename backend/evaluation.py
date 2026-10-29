@@ -8,12 +8,14 @@ import numpy as np
 import pandas as pd
 
 from backend.metrics import (
+    SEGMENT_ROI_COLUMNS,
     bootstrap_mean_ci,
     bootstrap_roi_ci,
     calibration_curve,
     equity_curve_from_ledger,
     financial_summary,
     hit_rate_by_edge_bucket,
+    ledger_segments,
     log_loss_terms,
     probabilistic_summary,
     regression_summary,
@@ -36,17 +38,6 @@ WINDOWS = {
 }
 
 
-# ROI segments that carry a bootstrap interval, keyed by the model_evaluation column stem.
-ROI_SEGMENTS = {
-    "roi": lambda b: b,
-    "roi_favorites": lambda b: b[(b["bet_type"] == "ml") & (b["american_odds"] < 0)],
-    "roi_underdogs": lambda b: b[(b["bet_type"] == "ml") & (b["american_odds"] > 0)],
-    "roi_run_line": lambda b: b[b["bet_type"] == "rl"],
-    "overs_roi": lambda b: b[b["totals_side"] == "over"],
-    "unders_roi": lambda b: b[b["totals_side"] == "under"],
-}
-
-
 EXCLUSION_REASONS = ("no_forecast", "v1_outage_hindsight_only", "forecast_dated_other_day")
 
 
@@ -58,11 +49,31 @@ def normalize_ledger(ledger):
     ledger["date"] = pd.to_datetime(ledger["date"])
     for column in ("won", "push", "rewritten"):
         ledger[column] = ledger[column].astype(bool)
-    # v1 stored no publish time, so lateness is unknown there; it is not counted as late.
-    ledger["written_after_start"] = ledger["written_after_start"].astype("boolean").fillna(False).astype(bool)
+    # bet_ledger_v owns the flag; only v1, which stored no publish time, may leave it unknown.
+    ledger["written_after_start"] = _known_for_v2(ledger["written_after_start"].astype("boolean"),
+                                                  ledger["model_version"], "bet_ledger_v.written_after_start")
     for column in ("stake", "decimal_odds", "payout", "edge", "american_odds"):
         ledger[column] = pd.to_numeric(ledger[column], errors="raise")
     return ledger
+
+
+def _known_for_v2(flag, model_version, what):
+    """Unknown lateness counts as on time only for v1; for any later model it is a data error."""
+    unknown = flag.isna() & model_version.ne("v1")
+    if unknown.any():
+        raise ValueError(f"{what} is unknown for {int(unknown.sum())} non-v1 rows")
+    return flag.fillna(False).astype(bool)
+
+
+def written_after_start(rows):
+    """Per forecast row: published at or after first pitch (prediction_updated_at vs the game's start_time).
+
+    bet_ledger_v computes the same flag for bets; this covers every graded forecast, bet or not.
+    """
+    published = pd.to_datetime(rows["prediction_updated_at"], utc=True)
+    start = pd.to_datetime(rows["game_start_time"], utc=True)
+    flag = (published >= start).astype("boolean").mask(published.isna() | start.isna())
+    return _known_for_v2(flag, rows["model_version"], "forecast publish or start time")
 
 
 def clean_row(row):
@@ -231,7 +242,7 @@ def _market_comparison(window_df):
     priced = games["moneyline"].abs().ge(100) & games["moneyline_away"].abs().ge(100)
     games = games[priced]
     if games.empty:
-        return {"paired_games": 0}, None
+        return {"paired_games": 0}
     implied_home = games["moneyline"].map(american_to_prob)
     implied_away = games["moneyline_away"].map(american_to_prob)
     market = implied_home / (implied_home + implied_away)
@@ -240,8 +251,7 @@ def _market_comparison(window_df):
     model_sq = ((games["win_prob"] - y) ** 2 + (games["win_prob_away"] - (1 - y)) ** 2) / 2
     model_ll = (log_loss_terms(games["win_prob"], y) + log_loss_terms(games["win_prob_away"], 1 - y)) / 2
     market_sq = (market - y) ** 2
-    diff = (model_sq - market_sq).to_numpy()
-    low, high = bootstrap_mean_ci(diff)
+    low, high = bootstrap_mean_ci((model_sq - market_sq).to_numpy())
     return {
         "paired_games": int(len(games)),
         "paired_brier": float(model_sq.mean()),
@@ -250,10 +260,10 @@ def _market_comparison(window_df):
         "market_log_loss": float(log_loss_terms(market, y).mean()),
         "brier_vs_market_ci95_low": low,
         "brier_vs_market_ci95_high": high,
-    }, diff
+    }
 
 
-def _interval_columns(window_df, window_ledger):
+def _interval_columns(window_df, window_ledger, segments):
     out = {}
     per_game_sq = (window_df["win_prob"] - window_df["actual_win"]) ** 2
     out["brier_ci95_low"], out["brier_ci95_high"] = bootstrap_mean_ci(
@@ -261,9 +271,10 @@ def _interval_columns(window_df, window_ledger):
     picks = _favorite_picks(window_df).sort_values("game_pk")
     out["total_accuracy_ci95_low"], out["total_accuracy_ci95_high"] = bootstrap_mean_ci(
         (picks["actual_win"] == 1).astype(float).to_numpy())
-    for stem, select in ROI_SEGMENTS.items():
-        segment = select(window_ledger) if not window_ledger.empty else window_ledger
-        out[f"{stem}_ci95_low"], out[f"{stem}_ci95_high"] = bootstrap_roi_ci(segment)
+    out["roi_ci95_low"], out["roi_ci95_high"] = bootstrap_roi_ci(window_ledger)
+    for name, bets in segments.items():
+        column = SEGMENT_ROI_COLUMNS[name]
+        out[f"{column}_ci95_low"], out[f"{column}_ci95_high"] = bootstrap_roi_ci(bets)
     return out
 
 
@@ -292,6 +303,7 @@ def evaluate(eval_df, ledger, exclusions, rewritten_days, eval_date):
     Returns ({window: (base_row, metrics, buckets)}, season_calibration_bins).
     """
     results = {}
+    cal_bins = []
     for window_name, (days_back, model) in WINDOWS.items():
         window_df, window_ledger, window_excluded, population_ledger = _window_slices(
             eval_df, ledger, exclusions, eval_date, days_back, model)
@@ -308,19 +320,16 @@ def evaluate(eval_df, ledger, exclusions, rewritten_days, eval_date):
         reg = regression_summary(y_true, y_pred)
         prob = probabilistic_summary(probs, outcomes, histograms=window_df["runs_hist"].tolist(), actual_runs=y_true)
         fin = financial_summary(window_ledger)
-        seg = segment_summary(window_ledger)
-        market, _ = _market_comparison(window_df)
+        segments = ledger_segments(window_ledger)
+        seg = segment_summary(window_ledger, segments)
+        market = _market_comparison(window_df)
 
         # Equity is cumulative from the first graded bet of this window's model population.
         eq = equity_curve_from_ledger(population_ledger)
         equity_end = float(eq["equity"].iloc[-1]) if not eq.empty else 1.0
 
         window_dates = set(window_df["game_date"].dt.date)
-        late_games = window_df.loc[
-            window_df["prediction_updated_at"].notna()
-            & (pd.to_datetime(window_df["prediction_updated_at"], utc=True)
-               >= pd.to_datetime(window_df["game_start_time"], utc=True)),
-            "game_pk"].nunique()
+        late_games = window_df.loc[written_after_start(window_df), "game_pk"].nunique()
         excluded = window_excluded["reason"].value_counts()
 
         metrics = {
@@ -329,11 +338,10 @@ def evaluate(eval_df, ledger, exclusions, rewritten_days, eval_date):
             **fin,
             **seg,
             **market,
-            **_interval_columns(window_df, window_ledger),
+            **_interval_columns(window_df, window_ledger, segments),
             "equity_end_units": round(equity_end, 4),
             "scored_games": int(window_df["game_pk"].nunique()),
             "n_bets": int(len(window_ledger)),
-            "calibration_bins": calibration_curve(probs, outcomes),
             "predictions_rewritten": bool(window_dates & set(rewritten_days)),
             "rewritten_bets": int(window_ledger["rewritten"].sum()) if not window_ledger.empty else 0,
             "late_forecast_games": int(late_games),
@@ -345,7 +353,6 @@ def evaluate(eval_df, ledger, exclusions, rewritten_days, eval_date):
 
         buckets = hit_rate_by_edge_bucket(window_ledger) if not window_ledger.empty else []
         results[window_name] = (base_row, metrics, buckets)
-
-    season_rows = _window_slices(eval_df, ledger, exclusions, eval_date, None, None)[0]
-    cal_bins = calibration_curve(season_rows["win_prob"].values, season_rows["actual_win"].values)
+        if window_name == "season":
+            cal_bins = calibration_curve(probs, outcomes)
     return results, cal_bins

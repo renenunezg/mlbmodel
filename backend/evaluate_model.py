@@ -38,17 +38,12 @@ from backend.strategy import EV_THRESHOLDS, V1_CUTOVER_DATE
 log = logging.getLogger(__name__)
 
 
-def _build_bet_ledger(eval_df=None):
+def _build_bet_ledger():
     """Bet ledger from the canonical SQL view `bet_ledger_v`.
 
     The site queries the same view, so the two sides cannot drift on
     filter or grading logic.
-
-    `eval_df` is accepted for backwards compatibility with callers but
-    ignored - the view computes its own join against `model_outputs_season`
-    and `games`.
     """
-    del eval_df
     ledger = pd.read_sql(text(f"SELECT {', '.join(LEDGER_COLUMNS)} FROM bet_ledger_v"), con=engine)
     return normalize_ledger(ledger)
 
@@ -62,14 +57,19 @@ def check_grading_rules():
         raise RuntimeError(f"mlb.grading_rules {rules} differs from backend.strategy.EV_THRESHOLDS {expected}")
 
 
-def _write_evaluation_row(eval_date, eval_window, base_row, metric_dict):
+def _evaluation_table():
+    """model_evaluation as reflected now; reflect once per run, not per row."""
+    metadata = MetaData()
+    metadata.reflect(bind=engine, only=["model_evaluation"])
+    return metadata.tables["model_evaluation"]
+
+
+def _write_evaluation_row(eval_date, eval_window, base_row, metric_dict, table=None):
     """Upsert one row into model_evaluation."""
     if eval_date < V1_CUTOVER_DATE:
         log.info(f"skip model_evaluation write for {eval_date} ({eval_window}); pre-cutover")
         return
-    metadata = MetaData()
-    metadata.reflect(bind=engine)
-    table = metadata.tables["model_evaluation"]
+    table = table if table is not None else _evaluation_table()
 
     row = {**base_row, **metric_dict, "date": eval_date, "eval_window": eval_window,
            "evaluation_state": "canonical", "evaluation_started_at": datetime.datetime.now(datetime.UTC)}
@@ -149,7 +149,10 @@ def _write_edge_buckets(eval_date, eval_window, buckets):
 
 
 def load_inputs(today):
-    """Everything evaluate() needs, read from the database."""
+    """Forecasts joined to results, exclusions and rewritten days, read from the database.
+
+    The bet ledger is read separately (_build_bet_ledger) so callers with their own ledger query skip it.
+    """
     # Continuous v1+v2 track record. The unified view routes pre-cutover
     # dates to the frozen v1 archive (real v1 live picks) and post-cutover
     # to the live v2 table. v2's hindsight backfill rows for pre-cutover
@@ -166,7 +169,7 @@ def load_inputs(today):
     games = final_games(games_df, today)
     eval_df = prepare_eval_frame(model_df, games)
     exclusions = classify_exclusions(games, eval_df, forecast_dates)
-    return eval_df, _build_bet_ledger(), exclusions, rewritten_days
+    return eval_df, exclusions, rewritten_days
 
 
 def main(as_of: datetime.date | None = None, dry_run: bool = False):
@@ -179,7 +182,8 @@ def main(as_of: datetime.date | None = None, dry_run: bool = False):
     """
     today = as_of if as_of is not None else datetime.date.today()
     check_grading_rules()
-    eval_df, ledger, exclusions, rewritten_days = load_inputs(today)
+    eval_df, exclusions, rewritten_days = load_inputs(today)
+    ledger = _build_bet_ledger()
 
     if eval_df.empty:
         log.info("No predictions matched to completed games yet.")
@@ -196,8 +200,9 @@ def main(as_of: datetime.date | None = None, dry_run: bool = False):
                              default=str, sort_keys=True))
         return results
 
+    table = _evaluation_table()
     for window_name, (base_row, metrics, buckets) in results.items():
-        _write_evaluation_row(eval_date, window_name, base_row, metrics)
+        _write_evaluation_row(eval_date, window_name, base_row, metrics, table)
         _write_edge_buckets(eval_date, window_name, buckets)
     _write_calibration(eval_date, cal_bins)
 

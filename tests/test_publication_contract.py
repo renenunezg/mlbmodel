@@ -36,7 +36,8 @@ def test_publication_and_evaluation_recovery(monkeypatch):
                      root / "backend/sql/20261007171918_mlb_live_evaluation_completion.sql",
                      root / "backend/sql/history_record_bounds.sql",
                      root / "backend/sql/20261029120000_mlb_evaluation_integrity.sql",
-                     root / "backend/sql/20261029130000_mlb_forecast_history.sql"):
+                     root / "backend/sql/20261029130000_mlb_forecast_history.sql",
+                     root / "backend/sql/20261029160000_mlb_drop_calibration_bins.sql"):
             subprocess.run(["psql", "-X", local_url.render_as_string(hide_password=False),
                             "-v", "ON_ERROR_STOP=1", "-f", str(path)],
                            check=True, capture_output=True)
@@ -203,12 +204,13 @@ def test_publication_and_evaluation_recovery(monkeypatch):
         with db.begin() as conn:
             for prediction, game in zip(fixture["predictions"], fixture["games"], strict=True):
                 conn.execute(text("""INSERT INTO games
-                    (game_pk, game_date, home_team, away_team, home_score, away_score, status)
-                    VALUES (:pk, :date, 'H', 'A', 4, 2, 'Final')"""),
+                    (game_pk, game_date, home_team, away_team, home_score, away_score, status, start_time)
+                    VALUES (:pk, :date, 'H', 'A', 4, 2, 'Final', CAST(:date AS date) + time '19:00')"""),
                     {"pk": game["game_pk"] + 100, "date": game["game_date"]})
                 conn.execute(text("""INSERT INTO model_outputs_season
-                    (game_pk, date, team, expected_runs, win_prob, ev_flag, run_line_ev_flag, total_play)
-                    VALUES (:pk, :date, 'H', 4, 0.6, 'No Play', 'No Play', 'No Play')"""),
+                    (game_pk, date, team, expected_runs, win_prob, ev_flag, run_line_ev_flag, total_play,
+                     prediction_updated_at)
+                    VALUES (:pk, :date, 'H', 4, 0.6, 'No Play', 'No Play', 'No Play', CAST(:date AS date) + time '12:00')"""),
                     {"pk": prediction["game_pk"] + 100, "date": prediction["date"]})
         evaluate_model.main(as_of=(pd.Timestamp(fixture["date"]) + pd.Timedelta(days=1)).date())
         with db.connect() as conn:
@@ -218,6 +220,13 @@ def test_publication_and_evaluation_recovery(monkeypatch):
             # with every fixture game after the v1 cutover, equals the season window.
             assert {k: counts[k] for k in fixture["window_counts"]} == fixture["window_counts"]
             assert counts["season_v2"] == counts["season"]
+        # Lateness fails closed: only v1, which stored no publish time, may leave it unknown.
+        from backend.evaluation import written_after_start
+        unknown = pd.DataFrame({"prediction_updated_at": [pd.NaT, pd.NaT], "game_start_time": [now, now],
+                                "model_version": ["v1", "v2"]})
+        assert not written_after_start(unknown.iloc[:1]).any()
+        with pytest.raises(ValueError, match="unknown for 1 non-v1"):
+            written_after_start(unknown)
         narrow, wide = [0.0]*21, [0.0]*21
         narrow[4], wide[0], wide[8] = 1.0, .5, .5
         first = probabilistic_summary([.5], [1], histograms=[narrow], actual_runs=[6])

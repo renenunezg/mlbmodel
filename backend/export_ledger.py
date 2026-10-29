@@ -21,6 +21,7 @@ from sqlalchemy import text
 
 from backend.db import engine
 from backend.evaluate_model import load_inputs
+from backend.evaluation import written_after_start
 from backend.log import setup_logging
 
 log = logging.getLogger(__name__)
@@ -43,7 +44,7 @@ def _json_or_blank(value):
 
 
 def export(out_dir: Path, today: datetime.date) -> tuple[int, int, int]:
-    eval_df, _, exclusions, rewritten_days = load_inputs(today)
+    eval_df, exclusions, rewritten_days = load_inputs(today)
     eval_date = today - datetime.timedelta(days=1)
     offers = pd.read_sql(text(
         "SELECT game_pk, team, prediction_context->'market_offers' AS market_offers "
@@ -62,9 +63,7 @@ def export(out_dir: Path, today: datetime.date) -> tuple[int, int, int]:
         runs_hist=forecasts["runs_hist"].map(_json_or_blank),
         market_offers=forecasts["market_offers"].map(_json_or_blank),
         rewritten=forecasts["game_date"].dt.date.isin(set(rewritten_days)),
-        written_after_start=(pd.to_datetime(forecasts["prediction_updated_at"], utc=True)
-                             >= pd.to_datetime(forecasts["game_start_time"], utc=True))
-        .where(forecasts["prediction_updated_at"].notna()),
+        written_after_start=written_after_start(forecasts).where(forecasts["model_version"].ne("v1")),
         exclusion_reason="",
     )
     excluded = exclusions[exclusions["game_date"] <= pd.Timestamp(eval_date)].rename(

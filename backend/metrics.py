@@ -338,14 +338,41 @@ def hit_rate_by_edge_bucket(ledger, buckets=(0.045, 0.065, 0.10, 0.20)):
     return results
 
 
-def segment_summary(ledger):
-    """Bet-segment metrics: favorites/underdogs (ML only) and totals over/under.
+# Segment name -> its model_evaluation ROI column.
+SEGMENT_ROI_COLUMNS = {
+    "favorites": "roi_favorites", "underdogs": "roi_underdogs", "run_line": "roi_run_line",
+    "overs": "overs_roi", "unders": "unders_roi",
+}
 
-    Expects optional columns:
-      - american_odds (numeric, present for ML rows)
-      - totals_side ("over" | "under", present for total rows)
-    Missing columns are tolerated; segments collapse to zero counts.
+
+def ledger_segments(ledger):
+    """The bets behind each segment, defined once for the point metrics and their intervals.
+
+    Favorites and underdogs are moneyline bets (the only rows with american_odds) by sign
+    of the price; run line by bet_type; overs and unders by totals_side. A missing column
+    leaves its segments empty.
     """
+    empty = ledger.iloc[0:0] if ledger is not None else pd.DataFrame()
+    if ledger is None or ledger.empty:
+        return {name: empty for name in SEGMENT_ROI_COLUMNS}
+    ml = ledger[ledger["american_odds"].notna()] if "american_odds" in ledger.columns else empty
+    has_side = "totals_side" in ledger.columns
+    return {
+        "favorites": ml[ml["american_odds"] < 0] if not ml.empty else empty,
+        "underdogs": ml[ml["american_odds"] > 0] if not ml.empty else empty,
+        "run_line": ledger[ledger["bet_type"] == "rl"] if "bet_type" in ledger.columns else empty,
+        "overs": ledger[ledger["totals_side"] == "over"] if has_side else empty,
+        "unders": ledger[ledger["totals_side"] == "under"] if has_side else empty,
+    }
+
+
+def _segment_roi(bets):
+    staked = float(bets["stake"].sum())
+    return round(float(bets["payout"].sum() - staked) / staked, 4) if staked > 0 else None
+
+
+def segment_summary(ledger, segments=None):
+    """Bet-segment metrics from ledger_segments: favorites/underdogs (ML only), run line, totals over/under."""
     out = {
         "roi_favorites": None, "n_favorites": 0, "favorites_correct": 0,
         "roi_underdogs": None, "n_underdogs": 0, "underdogs_correct": 0,
@@ -356,54 +383,29 @@ def segment_summary(ledger):
     }
     if ledger is None or ledger.empty:
         return out
+    segments = segments if segments is not None else ledger_segments(ledger)
+    counts = {"favorites": ("n_favorites", "favorites_correct"), "underdogs": ("n_underdogs", "underdogs_correct"),
+              "run_line": ("n_run_line", "run_line_bets_correct"), "overs": ("overs_predictions", "overs_correct"),
+              "unders": ("unders_predictions", "unders_correct")}
+    for name, bets in segments.items():
+        n_key, correct_key = counts[name]
+        out[n_key] = int(len(bets))
+        if len(bets):
+            out[SEGMENT_ROI_COLUMNS[name]] = _segment_roi(bets)
+            out[correct_key] = int(bets["won"].sum())
 
-    if "bet_type" in ledger.columns:
-        rl = ledger[ledger["bet_type"] == "rl"]
-        n = int(len(rl))
-        out["n_run_line"] = n
-        if n > 0:
-            staked = float(rl["stake"].sum())
-            pnl = float(rl["payout"].sum() - staked)
-            out["roi_run_line"] = round(pnl / staked, 4) if staked > 0 else None
-            out["run_line_bets_correct"] = int(rl["won"].sum())
-
-    if "american_odds" in ledger.columns:
-        ml = ledger[ledger["american_odds"].notna()].copy()
-        if not ml.empty:
-            favs = ml[ml["american_odds"] < 0]
-            dogs = ml[ml["american_odds"] > 0]
-            for label, sub in (("favorites", favs), ("underdogs", dogs)):
-                n = int(len(sub))
-                out[f"n_{label}"] = n
-                if n > 0:
-                    staked = float(sub["stake"].sum())
-                    pnl = float(sub["payout"].sum() - staked)
-                    out[f"roi_{label}"] = round(pnl / staked, 4) if staked > 0 else None
-                    correct_key = "favorites_correct" if label == "favorites" else "underdogs_correct"
-                    out[correct_key] = int(sub["won"].sum())
-            # Average via implied probability - averaging American odds directly is
-            # meaningless because of the discontinuity at ±100.
-            odds = ml["american_odds"].astype(float)
-            implied = np.where(odds > 0, 100.0 / (odds + 100.0), -odds / (-odds + 100.0))
-            mean_p = float(np.mean(implied))
-            if mean_p >= 0.5:
-                avg_american = -100.0 * mean_p / (1.0 - mean_p)
-            else:
-                avg_american = 100.0 * (1.0 - mean_p) / mean_p
-            out["avg_ml_line"] = round(avg_american, 2)
-
-    if "totals_side" in ledger.columns:
-        for side in ("over", "under"):
-            sub = ledger[ledger["totals_side"] == side]
-            n = int(len(sub))
-            key = "overs" if side == "over" else "unders"
-            out[f"{key}_predictions"] = n
-            if n > 0:
-                wins = int(sub["won"].sum())
-                staked = float(sub["stake"].sum())
-                pnl = float(sub["payout"].sum() - staked)
-                out[f"{key}_correct"] = wins
-                out[f"{key}_roi"] = round(pnl / staked, 4) if staked > 0 else None
+    ml = pd.concat([segments["favorites"], segments["underdogs"]])
+    if not ml.empty:
+        # Average via implied probability - averaging American odds directly is
+        # meaningless because of the discontinuity at ±100.
+        odds = ml["american_odds"].astype(float)
+        implied = np.where(odds > 0, 100.0 / (odds + 100.0), -odds / (-odds + 100.0))
+        mean_p = float(np.mean(implied))
+        if mean_p >= 0.5:
+            avg_american = -100.0 * mean_p / (1.0 - mean_p)
+        else:
+            avg_american = 100.0 * (1.0 - mean_p) / mean_p
+        out["avg_ml_line"] = round(avg_american, 2)
     return out
 
 
