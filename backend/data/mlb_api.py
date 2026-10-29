@@ -53,6 +53,14 @@ def _batch_fetch_handedness(pitcher_ids: list[int]) -> dict[int, str]:
     return _handedness_cache
 
 
+def _team_code(side: dict, game_pk: int) -> str:
+    """A schedule row without a team code must stop the load, not store ''."""
+    code = (side.get("team") or {}).get("abbreviation")
+    if not code:
+        raise ValueError(f"Schedule game {game_pk} has no team abbreviation; check the hydrate=team payload")
+    return code
+
+
 def fetch_schedule(game_date: date = None) -> pd.DataFrame:
     """Regular-season and playoff schedule, including probable pitchers and game type."""
     if game_date is None:
@@ -86,8 +94,8 @@ def fetch_schedule(game_date: date = None) -> pd.DataFrame:
                 "game_type": game["gameType"],
                 "game_date": game.get("officialDate") or date_entry["date"],
                 "start_time": game.get("rescheduleDate") or game.get("gameDate"),
-                "home_team": home.get("team", {}).get("abbreviation", ""),
-                "away_team": away.get("team", {}).get("abbreviation", ""),
+                "home_team": _team_code(home, game["gamePk"]),
+                "away_team": _team_code(away, game["gamePk"]),
                 "home_score": home.get("score"),
                 "away_score": away.get("score"),
                 "status": _schedule_status(game),
@@ -149,8 +157,8 @@ def fetch_schedule_range(start_date: date, end_date: date) -> pd.DataFrame:
                 "game_type": game["gameType"],
                 "game_date": game.get("officialDate") or date_entry["date"],
                 "start_time": game.get("rescheduleDate") or game.get("gameDate"),
-                "home_team": home.get("team", {}).get("abbreviation", ""),
-                "away_team": away.get("team", {}).get("abbreviation", ""),
+                "home_team": _team_code(home, game["gamePk"]),
+                "away_team": _team_code(away, game["gamePk"]),
                 "home_score": home.get("score"),
                 "away_score": away.get("score"),
                 "status": _schedule_status(game),
