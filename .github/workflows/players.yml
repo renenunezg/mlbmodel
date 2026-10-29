@@ -37,8 +37,10 @@ jobs:
             statcast-${{ runner.os }}-
 
       # Minor-league pitches keep their own cache so the workflows that share the Statcast cache cannot race it away.
+      # Restored here and saved at the end only when the files changed, so an idle week uploads nothing.
       - name: Restore prospect-level Statcast caches
-        uses: actions/cache@v4
+        id: prospect_levels
+        uses: actions/cache/restore@v4
         with:
           path: |
             cache/statcast_aaa_*.parquet
@@ -47,6 +49,20 @@ jobs:
           key: statcast-prospect-levels-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
             statcast-prospect-levels-${{ runner.os }}-
+
+      # The state this job owns and nothing else saves: the players and prospects skip-write fingerprints
+      # (last_scored.json), the prospect feed chunks the time-boxed refresh resumes from, rosters and bios.
+      # It overlays the stale copy inside the train job's Statcast cache.
+      - name: Restore player and prospect state
+        id: state
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            cache/players
+            cache/prospects
+          key: players-state-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            players-state-${{ runner.os }}-
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -109,6 +125,26 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           PYTHONPATH: "."
         run: timeout --preserve-status 5m python -m v2.season_stats
+
+      # Content-keyed saves: skipped when the restored entry already holds these exact files.
+      - name: Save prospect-level Statcast caches when they changed
+        if: always() && steps.prospect_levels.outputs.cache-matched-key != format('statcast-prospect-levels-{0}-{1}', runner.os, hashFiles('cache/statcast_aaa_*.parquet', 'cache/statcast_fsl_*.parquet', 'cache/statcast_spring_*.parquet'))
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            cache/statcast_aaa_*.parquet
+            cache/statcast_fsl_*.parquet
+            cache/statcast_spring_*.parquet
+          key: statcast-prospect-levels-${{ runner.os }}-${{ hashFiles('cache/statcast_aaa_*.parquet', 'cache/statcast_fsl_*.parquet', 'cache/statcast_spring_*.parquet') }}
+
+      - name: Save player and prospect state when it changed
+        if: always() && steps.state.outputs.cache-matched-key != format('players-state-{0}-{1}', runner.os, hashFiles('cache/players/**', 'cache/prospects/**'))
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            cache/players
+            cache/prospects
+          key: players-state-${{ runner.os }}-${{ hashFiles('cache/players/**', 'cache/prospects/**') }}
 
       # continue-on-error lets the later steps run after a scoring failure; the job must still end red.
       - name: Fail the job when player scoring failed
