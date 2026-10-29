@@ -21,7 +21,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 
 from backend.data.game_types import (
     INACTIVE_GAME_STATUSES,
@@ -111,8 +111,8 @@ def fetch_games_for_date(date: str) -> pd.DataFrame:
     q = text("""
         SELECT game_pk, game_date, game_type, start_time, home_team, away_team
         FROM games WHERE game_date = :d
-          AND status <> ALL(:inactive)
-    """)
+          AND status NOT IN :inactive
+    """).bindparams(bindparam("inactive", expanding=True))
     with engine.begin() as conn:
         return pd.read_sql(q, conn, params={"d": date, "inactive": list(INACTIVE_GAME_STATUSES)})
 
