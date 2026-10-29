@@ -33,6 +33,10 @@ PEOPLE_COLUMNS = ["player_id", "full_name", "birth_date", "bats", "throws", "pri
                   "mlb_debut", "draft_year", "draft_round", "draft_pick", "signing_bonus_musd", "school_type", "draft_school"]
 ROSTER_COLUMNS = ["player_id", "team_id", "start", "end", "status"]
 HS_PATTERN = re.compile(r"\bHS\b|HIGH SCHOOL|\(HS\)|\bH\.S\.")
+# The Stats API emits placeholder roster dates such as 0001-10-17. An ISO date before the first MLB season
+# or more than a year ahead is one of those and becomes unknown; any other value must parse as a date.
+FIRST_MLB_SEASON = 1871
+ISO_DATE = r"\d{4}-\d{2}-\d{2}"
 
 
 def _get(path: str, **params) -> dict:
@@ -123,18 +127,36 @@ def people(player_ids: list[int], *, refresh_ids: set[int] | None = None) -> tup
                 roster.to_parquet(ROSTER_PATH, index=False)
     cached["player_id"] = cached["player_id"].astype("int64")
     roster["player_id"] = roster["player_id"].astype("int64")
-    return cached[cached["player_id"].isin(player_ids)], roster[roster["player_id"].isin(player_ids)]
+    return cached[cached["player_id"].isin(player_ids)], roster_dates(roster[roster["player_id"].isin(player_ids)])
+
+
+def roster_dates(roster: pd.DataFrame) -> pd.DataFrame:
+    """Roster entries with start and end parsed strictly as dates.
+
+    A placeholder date (see FIRST_MLB_SEASON) leaves the entry's whole span unknown: start and end both
+    become NaT, so it never counts as active or open on any date. A malformed value still raises.
+    """
+    out = roster.copy()
+    lo, hi = f"{FIRST_MLB_SEASON}-01-01", (pd.Timestamp(date.today()) + pd.DateOffset(years=1)).strftime("%Y-%m-%d")
+    placeholder = pd.Series(False, index=out.index)
+    for column in ("start", "end"):
+        text = out[column].astype("string")
+        placeholder |= text.str.fullmatch(ISO_DATE).fillna(False) & ((text < lo) | (text > hi)).fillna(False)
+    if placeholder.any():
+        ids = sorted(out.loc[placeholder, "player_id"].astype(int).unique().tolist())
+        log.warning(f"roster: {int(placeholder.sum())} entries with placeholder dates set unknown for players {ids}")
+    for column in ("start", "end"):
+        out[column] = pd.to_datetime(out[column].where(~placeholder), format="%Y-%m-%d", errors="raise")
+    return out
 
 
 def active_mlb_days(roster: pd.DataFrame, as_of: date, mlb_ids: set[int]) -> pd.Series:
     """Days on an MLB active roster before September of each season, through ``as_of``, per player."""
-    r = roster[roster["team_id"].isin(mlb_ids) & roster["status"].eq("A")].copy()
+    r = roster[roster["team_id"].isin(mlb_ids) & roster["status"].eq("A") & roster["start"].notna()].copy()
+    r["end"] = r["end"].fillna(pd.Timestamp(as_of)).clip(upper=pd.Timestamp(as_of))
+    r = r[r["start"] <= r["end"]]
     if r.empty:
         return pd.Series(dtype="float64", name="mlb_days")
-    r["start"] = pd.to_datetime(r["start"])
-    r["end"] = pd.to_datetime(r["end"]).fillna(pd.Timestamp(as_of))
-    r["end"] = r["end"].clip(upper=pd.Timestamp(as_of))
-    r = r[r["start"] <= r["end"]]
     days = []
     for season in range(int(r["start"].dt.year.min()), as_of.year + 1):
         lo, hi = pd.Timestamp(season, 3, 15), pd.Timestamp(season, SEPTEMBER, 1)
@@ -167,11 +189,12 @@ def rookie_status(player_ids: list[int], as_of: date, roster: pd.DataFrame) -> p
 
 def on_forty_man(roster: pd.DataFrame, as_of: date, mlb_ids: frozenset[int]) -> pd.Series:
     """Whether a player has an open Active entry with an MLB club as of the date (a 40-man proxy)."""
-    r = roster[(pd.to_datetime(roster["start"]) <= pd.Timestamp(as_of)) & roster["end"].isna() & roster["status"].eq("A")]
+    # An unknown start (NaT) compares false, so a placeholder entry is never open.
+    r = roster[(roster["start"] <= pd.Timestamp(as_of)) & roster["end"].isna() & roster["status"].eq("A")]
     return r.groupby("player_id")["team_id"].agg(lambda t: bool(t.isin(mlb_ids).any())).rename("on_40_man")
 
 
 def mlb_linked(roster: pd.DataFrame, mlb_ids: frozenset[int]) -> set[int]:
     """Players whose cached roster history has an open entry with an MLB club: the ones whose eligibility can still move."""
-    r = roster[roster["end"].isna() & roster["team_id"].isin(mlb_ids)]
+    r = roster[roster["start"].notna() & roster["end"].isna() & roster["team_id"].isin(mlb_ids)]
     return set(r["player_id"].astype(int))
