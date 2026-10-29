@@ -38,7 +38,7 @@ Recommendations require known starters, complete posted lineups, and sufficient 
 Moneyline and run-line thresholds remain 4.5 percentage points above the executable price's implied probability, with quarter-Kelly sizing.
 Totals recommendations remain disabled.
 
-v2 replaced an XGBoost regressor (v1) after a 542-game head-to-head backtest: Brier −6.9%, log-loss −7.3%, max calibration gap from 41.9% down to 3.2%, ROI up on every market.
+v2 replaced an XGBoost regressor (v1) after a 542-game head-to-head backtest: Brier −6.9%, log-loss −7.3%, max calibration gap from 41.9% down to 3.2%, ROI up on every market. That comparison was in-sample for v2 (its skill posteriors were fit on 2024 to 2026 data that included the backtest games) against v1's live picks; the live record since 2026-05-12 (`eval_window = season_v2`) is the out-of-sample evidence.
 The comparison tooling was retired after cutover. v1 predictions before 2026-05-12 still live in `model_outputs_v1_archive` and `model_outputs_season_v1_archive`.
 
 ## Repository layout
