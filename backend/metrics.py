@@ -182,7 +182,10 @@ BOOTSTRAP_SEED = 20261029
 
 
 def _resample_indices(n):
-    """Fixed-seed resample matrix, so a rerun on the same rows gives the same interval."""
+    """Fixed-seed resample matrix, so a rerun on the same rows gives the same interval.
+
+    Callers pass values in game_pk order, so the interval does not depend on row order.
+    """
     rng = np.random.default_rng(BOOTSTRAP_SEED)
     return rng.integers(0, n, size=(BOOTSTRAP_RESAMPLES, n))
 

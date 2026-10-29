@@ -46,8 +46,8 @@ The comparison tooling was retired after cutover. v1 predictions before 2026-05-
 ```
 pipeline.py             Shared schedule and nightly evaluation orchestrator.
 backend/
-  data/                 Fetchers: MLB Stats API, Statcast (pybaseball), Savant,
-                        The Odds API, per-pitcher workload from boxscores.
+  data/                 Fetchers: MLB Stats API, The Odds API, ESPN odds,
+                        weather, per-pitcher workload from boxscores.
   db.py                 SQLAlchemy engine pointed at Supabase via DATABASE_URL;
                         blocks writes outside CI unless MLBMODEL_DB_WRITES=1.
   log.py                Logging setup for the CLI entry points.
@@ -55,6 +55,9 @@ backend/
   kelly.py, simulation.py, metrics.py, strategy.py
                         Kelly sizing, odds conversions, Brier and log-loss,
                         EV thresholds and market anchoring constants.
+  evaluation.py         Pure nightly evaluation (windows, market baseline,
+                        intervals, integrity flags); evaluate_model.py feeds it
+                        from the database, reproduce_performance.py from CSVs.
 v2/
   bayesian/             Batter, pitcher, and park models + fit_all
                         orchestrator. Posteriors saved to
@@ -102,6 +105,13 @@ python -m v2.market_model.acceptance --candidate cache/candidate.json --baseline
 # Market-relative research (only versioned raw forecasts qualify)
 python -m v2.market_model.residual --start 2026-03-26 --end 2026-07-21 --market ml
 python -m v2.market_model.features --start 2026-03-26 --end 2026-07-21
+
+# Nightly evaluation without writing (prints every model_evaluation row it would write)
+python -m backend.evaluate_model --dry-run
+
+# Export the graded record, then recompute every performance-page number from the CSVs alone
+python -m backend.export_ledger --out exports/ledger
+python -m backend.reproduce_performance exports/ledger
 
 # Lean production-critical suite
 pytest tests/
