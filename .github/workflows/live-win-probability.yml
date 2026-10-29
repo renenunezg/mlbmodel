@@ -22,6 +22,9 @@ jobs:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: actions/checkout@v4
+        # Production runs the release branch, never main (AGENTS.md, Safety and load-bearing behavior).
+        with:
+          ref: release
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
