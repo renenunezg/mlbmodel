@@ -7,7 +7,8 @@ above the floor, maps peak WAR onto the MLB grade scale, prices the control year
 traits, attaches per-pitch stuff for tracked pitchers (independent of the grade), and publishes when
 the published columns changed. Rows under the floor are published
 without a grade (``grade_reason`` set); a pool that failed the publish gate at fit time is published
-ungraded with ``model_not_validated``.
+ungraded with ``model_not_validated``. Each row also carries ``base_model_validated`` (its pool's base model
+passed the publish gate) and ``grade_gate`` (``base_model`` or ``stuff_adjustment``: the check that allowed its grade).
 
 Usage:
     python -m v2.prospects.score --as-of 2026-10-22 [--no-write] [--model path.json] [--stuff path.json]
@@ -222,6 +223,11 @@ def score(as_of: date, model: ProspectModel, stuff_model: stuff.StuffModel | Non
             rows.loc[graded.index, "trait_grades"] = pd.Series(g, index=graded.index, dtype=object)
             rows.loc[graded.index, "trait_pcts"] = pd.Series(pc, index=graded.index, dtype=object)
             rows.loc[graded.index, "tip"] = pd.Series(tip(contribs["peak_war"]), index=graded.index, dtype=object)
+        # Which check allowed each grade: the pool's base model, or (pitchers) the stuff adjustment's adoption rules
+        # while the base pitcher model itself may not have passed its gate.
+        rows["base_model_validated"] = bool(model.validated.get(pool, False))
+        rows["grade_gate"] = None
+        rows.loc[graded.index, "grade_gate"] = "stuff_adjustment" if pool == "pit" and gate else "base_model"
         pools.append(rows)
     out = pd.concat(pools, ignore_index=True)
     if stuff_model is not None:

@@ -24,7 +24,7 @@ VALUE_COLUMNS = [
     "p_regular", "p_mlb", "eta_season", "trade_value_musd", "trade_value_low", "trade_value_high",
     "market_value_musd", "expected_control_war", "peak_war", "risk", "on_40_man", "mlb_ab_or_ip",
     "service_days", "season_sample", "sample", "tracked_share", "trait_grades", "trait_pcts", "tip",
-    "pitch_mix", "command_grade", "stuff_level", "stuff_pitches",
+    "pitch_mix", "command_grade", "stuff_level", "stuff_pitches", "base_model_validated", "grade_gate",
 ]
 JSON_COLUMNS = {"tip"}
 ARRAY_COLUMNS = {"trait_grades", "trait_pcts"}
