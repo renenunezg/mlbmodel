@@ -12,7 +12,6 @@ from v2.bayesian import batter_skill, park_effects, pitcher_skill
 def test_training_readers_exclude_postseason_and_wrong_year_cache_rows(monkeypatch, tmp_path):
     from datetime import date
 
-    from backend.data import fangraphs
     from v2.data import build_cache, pa_dataset
     from v2.pipeline import score_games
     from v2.simulator import build_advancement_table, gb_quartiles
@@ -37,7 +36,7 @@ def test_training_readers_exclude_postseason_and_wrong_year_cache_rows(monkeypat
     mixed = pd.concat([regular, playoff, following_year], ignore_index=True)
     for year in (2026, 2027):
         mixed.to_parquet(tmp_path / f"statcast_{year}.parquet", index=False)
-    for module in (pa_dataset, build_cache, score_games, build_advancement_table, gb_quartiles, fangraphs):
+    for module in (pa_dataset, build_cache, score_games, build_advancement_table, gb_quartiles):
         monkeypatch.setattr(module, "CACHE_DIR", tmp_path)
 
     trained = pa_dataset.load_pa_dataset(2026, 2027)

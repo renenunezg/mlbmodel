@@ -1,4 +1,4 @@
-"""MLB model daily pipeline. Usage: python pipeline.py [nightly]"""
+"""MLB nightly pipeline: schedule, bullpen, weather and evaluation. Usage: python pipeline.py nightly"""
 
 import logging
 import os
@@ -11,14 +11,12 @@ from sqlalchemy import text
 
 from backend.data.bullpen_daily import update_bullpen_daily
 from backend.data.espn_odds import fetch_espn_odds
-from backend.data.fangraphs import fetch_bullpen_stats, fetch_pitcher_stats, fetch_team_batting
 from backend.data.mlb_api import fetch_probable_starters, fetch_schedule
 from backend.data.odds_api import (
     DEFAULT_BOOKS,
     fetch_odds,
     latest_quota_state,
 )
-from backend.data.savant import fetch_park_factors
 from backend.data.weather import update_weather_for_date
 from backend.db import engine
 from backend.log import setup_logging
@@ -63,12 +61,6 @@ def _batch_upsert_games(conn, games_df):
                 "start_time": g.get("start_time"),
             },
         )
-
-
-def _truncate_and_load(table_name, df):
-    with engine.begin() as conn:
-        conn.execute(text(f"TRUNCATE {table_name} RESTART IDENTITY"))
-        df.to_sql(table_name, conn, if_exists="append", index=False)
 
 
 def update_scores_and_schedule():
@@ -176,50 +168,6 @@ def upsert_probable_starters(starters: pd.DataFrame) -> int:
                 },
             )
     return len(starters)
-
-
-def fetch_statcast_stats():
-    """Pitcher / bullpen / batting stats. All share the same cached pitch data."""
-    pitchers = fetch_pitcher_stats()
-    if not pitchers.empty:
-        _truncate_and_load("pitcher_stats", pitchers)
-        log.info(f"{len(pitchers)} pitcher stats")
-    else:
-        log.info("No pitcher stats (Statcast may not have data yet)")
-
-    bullpen = fetch_bullpen_stats()
-    if not bullpen.empty:
-        _truncate_and_load("bullpen_stats", bullpen)
-        log.info(f"{len(bullpen)} bullpen team stats")
-    else:
-        log.info("No bullpen stats")
-
-    batting = fetch_team_batting()
-    if not batting.empty:
-        _truncate_and_load("team_batting", batting)
-        log.info(f"{len(batting)} team batting rows")
-    else:
-        log.info("No batting stats")
-
-
-def fetch_and_load_park_factors():
-    with engine.connect() as conn:
-        count = conn.execute(text("SELECT count(*) FROM park_factors")).scalar()
-
-    if count >= 28:
-        log.info(f"Already loaded ({count} rows)")
-        return
-
-    df = fetch_park_factors()
-    if df.empty:
-        log.info("No park factors available")
-        return
-
-    with engine.begin() as conn:
-        conn.execute(text("DELETE FROM park_factors"))
-        df.to_sql("park_factors", conn, if_exists="append", index=False)
-
-    log.info(f"{len(df)} park factors loaded")
 
 
 def _upcoming_games(target_date: date) -> pd.DataFrame:
@@ -420,18 +368,7 @@ def update_weather():
         update_weather_for_date(d)
 
 
-STEPS = [
-    ("Schedule & scores", update_scores_and_schedule),
-    ("Statcast stats", fetch_statcast_stats),
-    ("Bullpen daily", update_bullpen_daily),
-    ("Park factors", fetch_and_load_park_factors),
-    ("Odds", fetch_and_load_odds),
-    ("Weather", update_weather),
-    ("Evaluation", run_evaluation),
-]
-
-# Nightly: refresh scores first so late west-coast games are Final before eval.
-# Skip Statcast fetch and park factor reload; morning run handles those.
+# Refresh scores first so late west-coast games are Final before eval.
 NIGHTLY_STEPS = [
     ("Schedule & scores", update_scores_and_schedule),
     ("Bullpen daily", update_bullpen_daily),
@@ -460,23 +397,15 @@ def _run_steps(steps):
     return failed
 
 
-def main():
-    log.info(f"MLB pipeline - {date.today()}")
-    return _run_steps(STEPS)
-
-
 def nightly():
     log.info(f"MLB nightly - {date.today()}")
     return _run_steps(NIGHTLY_STEPS)
 
 
 if __name__ == "__main__":
-    setup_logging()
     import sys
-    mode = sys.argv[1] if len(sys.argv) > 1 else "full"
-    if mode == "nightly":
-        failed = nightly()
-    else:
-        failed = main()
-    if failed:
+    setup_logging()
+    if sys.argv[1:] != ["nightly"]:
+        sys.exit("Usage: python pipeline.py nightly")
+    if nightly():
         sys.exit(1)
