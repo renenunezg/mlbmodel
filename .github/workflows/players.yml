@@ -1,0 +1,118 @@
+name: Players and Prospects
+
+on:
+  schedule:
+    # Mondays and Thursdays at 13:07 UTC: after any same-day train run has saved its Statcast
+    # cache, and never more than four days apart so GitHub's 7-day idle eviction cannot drop
+    # the caches this job restores while training is off for the winter.
+    - cron: "7 13 * * 1,4"
+  workflow_dispatch:
+
+concurrency:
+  group: players
+  cancel-in-progress: false
+
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - uses: actions/checkout@v4
+        # Production runs the release branch, never main: promote a validated commit with
+        # `git push origin main:release` (see AGENTS.md, Safety and load-bearing behavior).
+        with:
+          ref: release
+
+      - name: Restore Statcast cache
+        # Restore only: train-v2 owns the MLB Statcast cache, and a save under a fresh key would
+        # upload another 700 MB copy that evicts the caches the train job depends on.
+        uses: actions/cache/restore@v4
+        with:
+          path: cache
+          key: statcast-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            statcast-${{ runner.os }}-
+
+      # Minor-league pitches keep their own cache so the workflows that share the Statcast cache cannot race it away.
+      - name: Restore prospect-level Statcast caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            cache/statcast_aaa_*.parquet
+            cache/statcast_fsl_*.parquet
+            cache/statcast_spring_*.parquet
+          key: statcast-prospect-levels-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            statcast-prospect-levels-${{ runner.os }}-
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -c constraints.txt -r requirements.txt -r v2/requirements.txt && pip install --no-deps -e .
+
+      - name: Refresh Triple-A Statcast caches (time-boxed, resumes across runs)
+        continue-on-error: true
+        env:
+          PYTHONPATH: "."
+        run: timeout --preserve-status 15m python -m v2.data.build_aaa_cache --years $(seq 2022 "$(date -u +%Y)")
+
+      - name: Top up the Florida State League Statcast cache (backfill runs in fill-fsl-cache.yml)
+        continue-on-error: true
+        env:
+          PYTHONPATH: "."
+        run: timeout --preserve-status 5m python -m v2.data.build_aaa_cache --level fsl --years $(seq $(( $(date -u +%Y) - 2 )) "$(date -u +%Y)")
+
+      - name: Top up the spring training Statcast cache (backfill runs in fill-fsl-cache.yml)
+        continue-on-error: true
+        env:
+          PYTHONPATH: "."
+        run: timeout --preserve-status 3m python -m v2.data.build_aaa_cache --level spring --years "$(date -u +%Y)"
+
+      - name: Refresh player contracts (Mondays)
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PYTHONPATH: "."
+        run: if [ "$(date -u +%u)" = "1" ]; then python -m v2.players.contracts --season "$(date -u +%Y)"; fi
+
+      - name: Score player values
+        id: score_players
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PYTHONPATH: "."
+        run: python -m v2.players.score --as-of "$(date -u +%F)"
+
+      - name: Refresh prospect feeds for the scoring window (time-boxed, resumes across runs)
+        continue-on-error: true
+        env:
+          PYTHONPATH: "."
+        run: timeout --preserve-status 16m python -m v2.prospects.feeds --years $(seq $(( $(date -u +%Y) - 2 )) "$(date -u +%Y)") --minutes 15
+
+      - name: Score prospects (Mondays; the publish is skipped when the board is unchanged)
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PYTHONPATH: "."
+        run: if [ "$(date -u +%u)" = "1" ]; then timeout --preserve-status 10m python -m v2.prospects.score --as-of "$(date -u +%F)"; fi
+
+      - name: Publish season stats beneath the grades (skipped when unchanged)
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PYTHONPATH: "."
+        run: timeout --preserve-status 5m python -m v2.season_stats
+
+      # continue-on-error lets the later steps run after a scoring failure; the job must still end red.
+      - name: Fail the job when player scoring failed
+        if: steps.score_players.outcome == 'failure'
+        run: |
+          echo "::error::Score player values failed; the grades were not refreshed"
+          exit 1
