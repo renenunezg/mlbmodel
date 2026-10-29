@@ -7,7 +7,7 @@ import pandas as pd
 import requests
 import statsapi
 
-from backend.data.game_types import PREDICTION_GAME_TYPES
+from backend.data.game_types import INACTIVE_GAME_STATUSES, PREDICTION_GAME_TYPES
 from backend.log import setup_logging
 from backend.team_mappings import TEAM_ID_BY_CODE, normalize_team
 
@@ -23,7 +23,7 @@ def _schedule_status(game: dict) -> str:
     status = game.get("status", {})
     detailed = status.get("detailedState", "")
     # These games can still have an abstract Preview state and a start time.
-    if detailed in {"Postponed", "Cancelled", "Canceled", "If Necessary"}:
+    if detailed in INACTIVE_GAME_STATUSES:
         return detailed
     if game.get("ifNecessary") == "Y" and status.get("abstractGameState") == "Preview":
         return "If Necessary"

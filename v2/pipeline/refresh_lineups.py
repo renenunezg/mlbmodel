@@ -22,7 +22,7 @@ from datetime import date
 import pandas as pd
 from sqlalchemy import text
 
-from backend.data.game_types import POSTSEASON_GAME_TYPES
+from backend.data.game_types import INACTIVE_GAME_STATUSES, POSTSEASON_GAME_TYPES
 from backend.data.mlb_api import fetch_lineup, fetch_probable_starters
 from backend.db import engine
 from backend.log import setup_logging
@@ -55,10 +55,10 @@ def _fetch_scheduled_games(date_str: str) -> pd.DataFrame:
           AND g.home_score IS NULL
           AND g.start_time IS NOT NULL
           AND g.start_time > NOW()
-          AND g.status NOT IN ('Postponed', 'Cancelled', 'Canceled', 'If Necessary')
+          AND g.status <> ALL(:inactive)
     """)
     with engine.begin() as conn:
-        return pd.read_sql(q, conn, params={"d": date_str})
+        return pd.read_sql(q, conn, params={"d": date_str, "inactive": list(INACTIVE_GAME_STATUSES)})
 
 
 def _starter_map(date_str: str) -> dict[int, tuple]:

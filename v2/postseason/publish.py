@@ -20,6 +20,7 @@ import numpy as np
 import requests
 from sqlalchemy import text
 
+from backend.data.game_types import INACTIVE_GAME_STATUSES
 from backend.db import engine
 from backend.strategy import HOME_FIELD_LOGIT
 from backend.team_mappings import normalize_team
@@ -152,7 +153,7 @@ def schedule_context(teams: list[dict], year: int) -> tuple[dict, dict]:
     completed, scheduled = {}, {}
     for game in games:
         # Postponed placeholders can have abstract state Final without a score.
-        if game["status"].get("detailedState") in {"Postponed", "Cancelled", "Canceled", "If Necessary"}:
+        if game["status"].get("detailedState") in INACTIVE_GAME_STATUSES:
             continue
         sides = [game["teams"][s] for s in ("home", "away")]
         if any(s["team"]["id"] not in by_id for s in sides):

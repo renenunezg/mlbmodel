@@ -5,6 +5,9 @@ import pandas as pd
 
 POSTSEASON_GAME_TYPES = ("F", "D", "L", "W")
 PREDICTION_GAME_TYPES = ("R", *POSTSEASON_GAME_TYPES)
+# Scheduled games that will not be played as listed. The Stats API spells
+# cancellation both ways. backend/sql/live_win_probability.sql mirrors this set.
+INACTIVE_GAME_STATUSES = ("Postponed", "Cancelled", "Canceled", "If Necessary")
 
 
 def regular_season_pitches(frame: pd.DataFrame, year: int | None = None) -> pd.DataFrame:

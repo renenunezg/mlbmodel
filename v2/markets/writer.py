@@ -19,6 +19,7 @@ import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import JSONB
 
+from backend.data.game_types import INACTIVE_GAME_STATUSES
 from backend.db import engine
 from backend.simulation import american_to_prob
 from backend.strategy import HOME_FIELD_LOGIT, MARKET_ANCHOR_W_MODEL
@@ -434,7 +435,7 @@ def publish_forecasts(rows: list[dict]) -> None:
             now = conn.execute(text("SELECT clock_timestamp()")).scalar_one()
             start = pd.Timestamp(game["start_time"])
             if pd.isna(start) or start <= pd.Timestamp(now) or game["status"] in {
-                "Live", "In Progress", "Final", "Postponed", "Cancelled", "Canceled", "If Necessary"
+                "Live", "In Progress", "Final", *INACTIVE_GAME_STATUSES
             }:
                 continue
             if set(group.team) != {game["home_team"], game["away_team"]}:

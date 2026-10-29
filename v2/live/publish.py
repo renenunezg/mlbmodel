@@ -18,12 +18,15 @@ from zoneinfo import ZoneInfo
 
 import requests
 
+from backend.data.game_types import INACTIVE_GAME_STATUSES
 from v2.live.feed import fetch_feed, score_feed
 from v2.live.model import WinExpectancy
 
 log = logging.getLogger(__name__)
 HEARTBEAT_SECONDS = 60
-INACTIVE_STATUSES = {"Postponed", "Cancelled", "Canceled", "Suspended", "If Necessary"}
+# A suspended game stops mid-play: inactive for the live feed, though pregame
+# scoring never sees it because it is already past first pitch.
+INACTIVE_STATUSES = {*INACTIVE_GAME_STATUSES, "Suspended"}
 
 
 def scheduled_games() -> list[dict]:

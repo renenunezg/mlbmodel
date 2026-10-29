@@ -23,7 +23,12 @@ import numpy as np
 import pandas as pd
 from sqlalchemy import text
 
-from backend.data.game_types import POSTSEASON_GAME_TYPES, PREDICTION_GAME_TYPES, regular_season_pitches
+from backend.data.game_types import (
+    INACTIVE_GAME_STATUSES,
+    POSTSEASON_GAME_TYPES,
+    PREDICTION_GAME_TYPES,
+    regular_season_pitches,
+)
 from backend.data.mlb_api import fetch_lineup
 from backend.data.odds_api import DEFAULT_BOOKS
 from backend.db import engine
@@ -106,10 +111,10 @@ def fetch_games_for_date(date: str) -> pd.DataFrame:
     q = text("""
         SELECT game_pk, game_date, game_type, start_time, home_team, away_team
         FROM games WHERE game_date = :d
-          AND status NOT IN ('Postponed', 'Cancelled', 'Canceled', 'If Necessary')
+          AND status <> ALL(:inactive)
     """)
     with engine.begin() as conn:
-        return pd.read_sql(q, conn, params={"d": date})
+        return pd.read_sql(q, conn, params={"d": date, "inactive": list(INACTIVE_GAME_STATUSES)})
 
 
 def fetch_starters(game_pks: list[int]) -> pd.DataFrame:
