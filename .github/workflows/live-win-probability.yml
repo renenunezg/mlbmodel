@@ -30,6 +30,15 @@ jobs:
           python-version: "3.13"
       - name: Install live publisher dependencies
         run: pip install -c constraints.txt numpy pandas requests SQLAlchemy psycopg2-binary python-dotenv
+      - name: Restore Odds API state
+        # The closing-line budget (quota headers and the day's request count) lives in this file; the
+        # morning pull and the nightly refresh save it under the same prefix.
+        uses: actions/cache/restore@v4
+        with:
+          path: cache/odds_api_state.json
+          key: odds-api-state-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            odds-api-state-${{ runner.os }}-
       - name: Download validated probability artifact
         run: |
           mkdir -p models
@@ -39,6 +48,16 @@ jobs:
       - name: Publish live snapshots
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          # Closing lines: one Odds API request per first-pitch cluster inside this budget, ESPN otherwise.
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          ODDS_API_CLOSING_RESERVE: ${{ vars.ODDS_API_CLOSING_RESERVE || '60' }}
+          ODDS_API_CLOSING_DAILY_CALLS: ${{ vars.ODDS_API_CLOSING_DAILY_CALLS || '2' }}
         # Hand off before the six-hour runner limit; the queued replacement
         # starts after this worker exits. Idle slates exit early.
         run: python -m v2.live.publish --artifact models/live_win_expectancy.json --watch --duration 20700 --publish
+      - name: Persist Odds API state
+        if: ${{ always() && hashFiles('cache/odds_api_state.json') != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: cache/odds_api_state.json
+          key: odds-api-state-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}

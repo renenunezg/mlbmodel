@@ -13,7 +13,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from backend.simulation import american_to_prob
+from backend.simulation import american_to_prob, paired_home_prob
 from backend.strategy import HOME_FIELD_LOGIT, MARKET_ANCHOR_W_MODEL
 
 
@@ -102,11 +102,8 @@ def paired_market_quotes(home_odds: dict | None, away_odds: dict | None) -> list
 
 
 def consensus_home_prob(home_odds: dict | None, away_odds: dict | None) -> float | None:
-    probs = []
-    for pair in paired_market_quotes(home_odds, away_odds):
-        h = american_to_prob(pair["home_moneyline"])
-        a = american_to_prob(pair["away_moneyline"])
-        probs.append(h / (h + a))
+    probs = [paired_home_prob(pair["home_moneyline"], pair["away_moneyline"])
+             for pair in paired_market_quotes(home_odds, away_odds)]
     return float(np.mean(probs)) if probs else None
 
 

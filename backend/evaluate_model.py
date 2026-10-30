@@ -24,6 +24,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from backend.db import engine
 from backend.evaluation import (
+    CLOSING_LINE_COLUMNS,
     LEDGER_COLUMNS,
     classify_exclusions,
     clean_row,
@@ -149,7 +150,7 @@ def _write_edge_buckets(eval_date, eval_window, buckets):
 
 
 def load_inputs(today):
-    """Forecasts joined to results, exclusions and rewritten days, read from the database.
+    """Forecasts joined to results, exclusions, rewritten days and closing lines, read from the database.
 
     The bet ledger is read separately (_build_bet_ledger) so callers with their own ledger query skip it.
     """
@@ -166,10 +167,11 @@ def load_inputs(today):
         "UNION SELECT DISTINCT game_pk, date::date, 'v1' FROM model_outputs_season_v1_archive"), con=engine)
     with engine.connect() as conn:
         rewritten_days = conn.execute(text("SELECT date FROM rewritten_forecast_days")).scalars().all()
+    closing_lines = pd.read_sql(text(f"SELECT {', '.join(CLOSING_LINE_COLUMNS)} FROM closing_lines"), con=engine)
     games = final_games(games_df, today)
     eval_df = prepare_eval_frame(model_df, games)
     exclusions = classify_exclusions(games, eval_df, forecast_dates)
-    return eval_df, exclusions, rewritten_days
+    return eval_df, exclusions, rewritten_days, closing_lines
 
 
 def main(as_of: datetime.date | None = None, dry_run: bool = False):
@@ -182,7 +184,7 @@ def main(as_of: datetime.date | None = None, dry_run: bool = False):
     """
     today = as_of if as_of is not None else datetime.date.today()
     check_grading_rules()
-    eval_df, exclusions, rewritten_days = load_inputs(today)
+    eval_df, exclusions, rewritten_days, closing_lines = load_inputs(today)
     ledger = _build_bet_ledger()
 
     if eval_df.empty:
@@ -192,7 +194,7 @@ def main(as_of: datetime.date | None = None, dry_run: bool = False):
     # eval_date is always yesterday so the same date can never be re-targeted
     # from a different angle (e.g. a manual rerun during the day shifting max).
     eval_date = today - datetime.timedelta(days=1)
-    results, cal_bins = evaluate(eval_df, ledger, exclusions, rewritten_days, eval_date)
+    results, cal_bins = evaluate(eval_df, ledger, exclusions, rewritten_days, eval_date, closing_lines)
 
     if dry_run:
         for window_name, (base_row, metrics, buckets) in results.items():

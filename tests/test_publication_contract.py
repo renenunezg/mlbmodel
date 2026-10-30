@@ -37,7 +37,8 @@ def test_publication_and_evaluation_recovery(monkeypatch):
                      root / "backend/sql/history_record_bounds.sql",
                      root / "backend/sql/20261029120000_mlb_evaluation_integrity.sql",
                      root / "backend/sql/20261029130000_mlb_forecast_history.sql",
-                     root / "backend/sql/20261029160000_mlb_drop_calibration_bins.sql"):
+                     root / "backend/sql/20261029160000_mlb_drop_calibration_bins.sql",
+                     root / "backend/sql/20261030120000_mlb_closing_lines.sql"):
             subprocess.run(["psql", "-X", local_url.render_as_string(hide_password=False),
                             "-v", "ON_ERROR_STOP=1", "-f", str(path)],
                            check=True, capture_output=True)

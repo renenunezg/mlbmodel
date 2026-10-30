@@ -1,7 +1,7 @@
 """Recompute every MLB performance-page number from the exported ledger CSVs alone.
 
-Reads forecasts.csv and bets.csv written by backend/export_ledger.py; no database or
-network access. It runs backend.evaluation.evaluate, the same function the nightly job
+Reads forecasts.csv, bets.csv and closing_lines.csv written by backend/export_ledger.py;
+no database or network access. It runs backend.evaluation.evaluate, the same function the nightly job
 uses, so its output should match mlb.model_evaluation for the same date to the last digit.
 
 Usage:
@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from backend.evaluation import clean_row, evaluate, normalize_ledger
+from backend.evaluation import CLOSING_LINE_COLUMNS, clean_row, evaluate, normalize_ledger
 
 
 def load(directory: Path):
@@ -30,7 +30,9 @@ def load(directory: Path):
         columns={"exclusion_reason": "reason"})
     rewritten_days = sorted(set(forecasts.loc[forecasts["rewritten"].astype(bool), "game_date"].dt.date))
     ledger = normalize_ledger(pd.read_csv(directory / "bets.csv", **flags))
-    return forecasts, ledger, excluded, rewritten_days
+    closing_path = directory / "closing_lines.csv"
+    closing = pd.read_csv(closing_path) if closing_path.exists() else pd.DataFrame(columns=CLOSING_LINE_COLUMNS)
+    return forecasts, ledger, excluded, rewritten_days, closing
 
 
 def main():
@@ -39,9 +41,9 @@ def main():
     parser.add_argument("--eval-date", type=datetime.date.fromisoformat,
                         help="Last game date graded (default: the latest game date in the export)")
     args = parser.parse_args()
-    forecasts, ledger, excluded, rewritten_days = load(args.directory)
+    forecasts, ledger, excluded, rewritten_days, closing = load(args.directory)
     eval_date = args.eval_date or forecasts["game_date"].max().date()
-    results, season_calibration = evaluate(forecasts, ledger, excluded, rewritten_days, eval_date)
+    results, season_calibration = evaluate(forecasts, ledger, excluded, rewritten_days, eval_date, closing)
     for window, (base_row, metrics, buckets) in results.items():
         print(json.dumps({"window": window, **clean_row({**base_row, **metrics}), "edge_buckets": buckets},
                          default=str, sort_keys=True))

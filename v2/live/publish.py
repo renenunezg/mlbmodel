@@ -19,6 +19,7 @@ from zoneinfo import ZoneInfo
 import requests
 
 from backend.data.game_types import INACTIVE_GAME_STATUSES
+from v2.live import closing
 from v2.live.feed import fetch_feed, score_feed
 from v2.live.model import WinExpectancy
 
@@ -133,6 +134,29 @@ def publish_snapshots(
     return set(acknowledgements)
 
 
+def capture_closing_lines(capture: closing.ClosingLineCapture, games: list[dict], *, publish: bool) -> None:
+    """Hold each unstarted game's latest pregame quote and write its closing line once it starts.
+
+    Failures are logged and never interrupt live publication.
+    """
+    try:
+        now = datetime.now(UTC)
+        tracked = closing.tracked_games(games)
+        capture.observe(tracked, now)
+        rows = capture.due_rows(tracked, now)
+        if rows:
+            written = closing.write_closing_lines(rows) if publish else {row["game_pk"] for row in rows}
+            capture.acknowledge(written)
+            for row in rows:
+                log.info("Closing line %s from %s: ML %s/%s, RL %s, total %s%s", row["game_pk"], row["source"],
+                         row["home_moneyline"], row["away_moneyline"], row["home_spread"], row["total"],
+                         " (written)" if row["game_pk"] in written else
+                         " (not written)" if publish else " (read only)")
+        capture.prune(tracked)
+    except Exception:
+        log.exception("Closing line capture failed; live publication continues")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--artifact", type=Path, required=True)
@@ -159,6 +183,7 @@ def main() -> None:
     deadline = time.monotonic() + args.duration if args.duration else float("inf")
     expires_at = (datetime.now(UTC) + timedelta(seconds=args.duration)).isoformat() if args.duration else None
     restored = not args.publish
+    capture = closing.production_capture()
     with ThreadPoolExecutor(max_workers=4) as workers:
         while True:
             started = time.monotonic()
@@ -166,6 +191,7 @@ def main() -> None:
                 if started >= next_schedule:
                     games = scheduled_games()
                     next_schedule = started + 60
+                capture_closing_lines(capture, games, publish=args.publish)
                 if not restored:
                     completed.update(saved_finals([g["gamePk"] for g in games], digest))
                     restored = True

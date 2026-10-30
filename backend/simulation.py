@@ -22,3 +22,9 @@ def american_to_prob(odds):
         return 100 / (odds + 100)
     else:
         return abs(odds) / (abs(odds) + 100)
+
+
+def paired_home_prob(home_moneyline, away_moneyline):
+    """Home win probability from one book's two moneylines with the vig removed proportionally."""
+    home, away = american_to_prob(home_moneyline), american_to_prob(away_moneyline)
+    return home / (home + away)

@@ -21,7 +21,7 @@ from backend.metrics import (
     regression_summary,
     segment_summary,
 )
-from backend.simulation import american_to_prob
+from backend.simulation import paired_home_prob
 from backend.strategy import V1_CUTOVER_DATE
 
 LEDGER_COLUMNS = ["date", "bet_type", "team", "game_pk", "stake", "decimal_odds", "won", "payout", "edge",
@@ -232,34 +232,78 @@ def classify_exclusions(games, eval_df, forecast_dates):
     return missing
 
 
-def _market_comparison(window_df):
-    """Model and de-vigged market scores on games with both sides' stored prices."""
+CLOSING_LINE_COLUMNS = ["game_pk", "source", "home_moneyline", "away_moneyline"]
+
+
+def _paired_forecasts(window_df):
+    """One row per game: the home forecast beside the away forecast and the game's stored prices."""
     rows = window_df.assign(home=window_df["team"] == window_df["home_team"])
     home = rows[rows["home"]].set_index("game_pk")
     away = rows[~rows["home"]].set_index("game_pk")
-    games = home[["win_prob", "actual_win", "moneyline"]].join(
+    return home[["win_prob", "actual_win", "moneyline"]].join(
         away[["win_prob", "moneyline"]], rsuffix="_away", how="inner").sort_index()
-    priced = games["moneyline"].abs().ge(100) & games["moneyline_away"].abs().ge(100)
+
+
+def _benchmark_scores(games, home_moneyline, away_moneyline):
+    """Model and same-book de-vigged benchmark scores on the games whose two prices both exist, or None."""
+    home_moneyline = pd.to_numeric(home_moneyline, errors="coerce")
+    away_moneyline = pd.to_numeric(away_moneyline, errors="coerce")
+    priced = home_moneyline.abs().ge(100) & away_moneyline.abs().ge(100)
     games = games[priced]
     if games.empty:
-        return {"paired_games": 0}
-    implied_home = games["moneyline"].map(american_to_prob)
-    implied_away = games["moneyline_away"].map(american_to_prob)
-    market = implied_home / (implied_home + implied_away)
+        return None
+    benchmark = pd.Series([paired_home_prob(h, a) for h, a in zip(home_moneyline[priced], away_moneyline[priced])],
+                          index=games.index)
     y = games["actual_win"].astype(float)
     # Model error averages both team rows, matching brier_score on the full window.
     model_sq = ((games["win_prob"] - y) ** 2 + (games["win_prob_away"] - (1 - y)) ** 2) / 2
     model_ll = (log_loss_terms(games["win_prob"], y) + log_loss_terms(games["win_prob_away"], 1 - y)) / 2
-    market_sq = (market - y) ** 2
-    low, high = bootstrap_mean_ci((model_sq - market_sq).to_numpy())
+    benchmark_sq = (benchmark - y) ** 2
+    low, high = bootstrap_mean_ci((model_sq - benchmark_sq).to_numpy())
+    return {"games": games, "paired_brier": float(model_sq.mean()), "paired_log_loss": float(model_ll.mean()),
+            "benchmark_brier": float(benchmark_sq.mean()),
+            "benchmark_log_loss": float(log_loss_terms(benchmark, y).mean()),
+            "ci95_low": low, "ci95_high": high}
+
+
+def _market_comparison(window_df):
+    """Model and de-vigged market scores on games with both sides' stored prices (the forecast's own quote)."""
+    games = _paired_forecasts(window_df)
+    scores = _benchmark_scores(games, games["moneyline"], games["moneyline_away"])
+    if scores is None:
+        return {"paired_games": 0}
     return {
-        "paired_games": int(len(games)),
-        "paired_brier": float(model_sq.mean()),
-        "paired_log_loss": float(model_ll.mean()),
-        "market_brier": float(market_sq.mean()),
-        "market_log_loss": float(log_loss_terms(market, y).mean()),
-        "brier_vs_market_ci95_low": low,
-        "brier_vs_market_ci95_high": high,
+        "paired_games": int(len(scores["games"])),
+        "paired_brier": scores["paired_brier"],
+        "paired_log_loss": scores["paired_log_loss"],
+        "market_brier": scores["benchmark_brier"],
+        "market_log_loss": scores["benchmark_log_loss"],
+        "brier_vs_market_ci95_low": scores["ci95_low"],
+        "brier_vs_market_ci95_high": scores["ci95_high"],
+    }
+
+
+def _closing_comparison(window_df, closing_lines):
+    """The same forecasts against the captured closing moneylines, on the games that have both.
+
+    closing_games_by_source counts the scored games per feed ('odds_api:median', 'espn:draftkings') so the
+    pooled score is never read as one book's.
+    """
+    closing = closing_lines[CLOSING_LINE_COLUMNS].drop_duplicates("game_pk").set_index("game_pk")
+    games = _paired_forecasts(window_df).join(closing, how="inner")
+    scores = _benchmark_scores(games, games["home_moneyline"], games["away_moneyline"])
+    if scores is None:
+        return {"closing_paired_games": 0, "closing_games_by_source": {}}
+    by_source = scores["games"]["source"].value_counts()
+    return {
+        "closing_paired_games": int(len(scores["games"])),
+        "closing_paired_brier": scores["paired_brier"],
+        "closing_paired_log_loss": scores["paired_log_loss"],
+        "closing_market_brier": scores["benchmark_brier"],
+        "closing_market_log_loss": scores["benchmark_log_loss"],
+        "brier_vs_closing_ci95_low": scores["ci95_low"],
+        "brier_vs_closing_ci95_high": scores["ci95_high"],
+        "closing_games_by_source": {str(source): int(count) for source, count in by_source.items()},
     }
 
 
@@ -297,11 +341,14 @@ def _window_slices(eval_df, ledger, exclusions, eval_date, days_back, model):
     return eval_df[in_frame], ledger[in_ledger], exclusions[in_excluded], ledger[in_population]
 
 
-def evaluate(eval_df, ledger, exclusions, rewritten_days, eval_date):
+def evaluate(eval_df, ledger, exclusions, rewritten_days, eval_date, closing_lines=None):
     """Every model_evaluation row, edge bucket set and the season calibration for one eval_date.
 
+    closing_lines holds mlb.closing_lines (CLOSING_LINE_COLUMNS); None means no close was captured.
     Returns ({window: (base_row, metrics, buckets)}, season_calibration_bins).
     """
+    if closing_lines is None:
+        closing_lines = pd.DataFrame(columns=CLOSING_LINE_COLUMNS)
     results = {}
     cal_bins = []
     for window_name, (days_back, model) in WINDOWS.items():
@@ -323,6 +370,7 @@ def evaluate(eval_df, ledger, exclusions, rewritten_days, eval_date):
         segments = ledger_segments(window_ledger)
         seg = segment_summary(window_ledger, segments)
         market = _market_comparison(window_df)
+        closing = _closing_comparison(window_df, closing_lines)
 
         # Equity is cumulative from the first graded bet of this window's model population.
         eq = equity_curve_from_ledger(population_ledger)
@@ -338,6 +386,7 @@ def evaluate(eval_df, ledger, exclusions, rewritten_days, eval_date):
             **fin,
             **seg,
             **market,
+            **closing,
             **_interval_columns(window_df, window_ledger, segments),
             "equity_end_units": round(equity_end, 4),
             "scored_games": int(window_df["game_pk"].nunique()),

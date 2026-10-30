@@ -3,6 +3,7 @@
 forecasts.csv: one row per graded team forecast (row_type=forecast) plus one row per
 completed game with no graded forecast (row_type=excluded, with exclusion_reason).
 bets.csv: one row per graded bet from mlb.bet_ledger_v, with the market's grading rule.
+closing_lines.csv: the captured closing moneyline per game (mlb.closing_lines), the closing benchmark's input.
 
 backend/reproduce_performance.py reads only these files and prints every number on the
 MLB performance page. Read-only against the database.
@@ -21,7 +22,7 @@ from sqlalchemy import text
 
 from backend.db import engine
 from backend.evaluate_model import load_inputs
-from backend.evaluation import written_after_start
+from backend.evaluation import CLOSING_LINE_COLUMNS, written_after_start
 from backend.log import setup_logging
 
 log = logging.getLogger(__name__)
@@ -44,7 +45,7 @@ def _json_or_blank(value):
 
 
 def export(out_dir: Path, today: datetime.date) -> tuple[int, int, int]:
-    eval_df, exclusions, rewritten_days = load_inputs(today)
+    eval_df, exclusions, rewritten_days, closing_lines = load_inputs(today)
     eval_date = today - datetime.timedelta(days=1)
     offers = pd.read_sql(text(
         "SELECT game_pk, team, prediction_context->'market_offers' AS market_offers "
@@ -74,6 +75,7 @@ def export(out_dir: Path, today: datetime.date) -> tuple[int, int, int]:
     out_dir.mkdir(parents=True, exist_ok=True)
     rows.to_csv(out_dir / "forecasts.csv", index=False)
     bets[BET_COLUMNS].to_csv(out_dir / "bets.csv", index=False)
+    closing_lines[CLOSING_LINE_COLUMNS].sort_values("game_pk").to_csv(out_dir / "closing_lines.csv", index=False)
     return int((rows["row_type"] == "forecast").sum()), int((rows["row_type"] == "excluded").sum()), len(bets)
 
 
