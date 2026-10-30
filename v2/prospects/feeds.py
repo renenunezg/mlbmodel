@@ -6,13 +6,17 @@ parquet files under ``cache/prospects/feeds/{sport_id}/{season}/``:
 - ``games``: one row per game with venue, teams, parent organizations, league and tracked share
 - ``plays``: one row per play (plate appearance or runner event) with the call-code counts of its
   pitches, the stringer batted-ball description, and tracking fields where the last pitch had them
-- ``pitches``: one row per pitch, only for games whose pitches carry tracking
+- ``pitches``: one row per pitch, only for games whose pitches carry tracking; sport 17 rows also
+  carry the full pitch shape, location and count the stuff model reads (``v2/prospects/pitches.py``),
+  since the fall and winter leagues have no Savant cache
 - ``appearances``: one row per player per game from the boxscore (positions, batting order, counts)
 
 Levels are Stats API sport ids: 11 Triple-A, 12 Double-A, 13 High-A, 14 Single-A, 15 short-season
 A (through 2020), 16 Rookie (complex leagues, DSL, and the former advanced rookie leagues), and 17
-only for the Arizona Fall League (league 119). A run is resumable: games already cached are skipped,
-and ``--minutes`` time-boxes it. The 2005-plus history is built locally and never committed.
+for the Arizona Fall League (league 119) and the Dominican winter league (LIDOM, league 131, tracked
+since December 2024); the other winter leagues carry no tracking and are not fetched. A run is
+resumable: games already cached are skipped, and ``--minutes`` time-boxes it. The 2005-plus history
+is built locally and never committed.
 
 Usage:
     python -m v2.prospects.feeds --years 2005 2006 --levels 11 12 13 14 15 16 17
@@ -29,6 +33,7 @@ from datetime import date
 from pathlib import Path
 
 import pandas as pd
+import pyarrow.parquet as pq
 import requests
 
 from backend.log import setup_logging
@@ -42,6 +47,9 @@ SCHEDULE = f"{STATSAPI}/schedule"
 FEED = "https://statsapi.mlb.com/api/v1.1/game/{pk}/feed/live"
 SPORT_IDS = (11, 12, 13, 14, 15, 16, 17)
 AFL_LEAGUE_ID = 119
+LIDOM_LEAGUE_ID = 131
+SPORT_17_LEAGUES = (AFL_LEAGUE_ID, LIDOM_LEAGUE_ID)  # the fall and winter leagues fetched under sport 17
+STUFF_SPORT_IDS = {17}  # levels whose pitch rows carry the stuff model's columns (no Savant cache)
 FIRST_SEASON = 2005  # the first season with minor league feeds
 NO_SEASON = {2020}  # no minor league season was played
 WORKERS = 6
@@ -98,23 +106,57 @@ def schedule(sport_id: int, season: int) -> pd.DataFrame:
             if g["status"].get("abstractGameState") != "Final" or g["status"].get("codedGameState") in {"C", "D"}:
                 continue
             league = g["teams"]["home"]["team"].get("league", {}).get("id")
-            if sport_id == 17 and league != AFL_LEAGUE_ID:
+            if sport_id == 17 and league not in SPORT_17_LEAGUES:
                 continue
             rows.append({"game_pk": g["gamePk"], "date": g["officialDate"], "league_id": league,
                          "venue_id": g.get("venue", {}).get("id")})
     return pd.DataFrame(rows, columns=["game_pk", "date", "league_id", "venue_id"]).drop_duplicates("game_pk")
 
 
-def _pitch_row(e: dict, play: dict, game_pk: int) -> dict:
+def _release_point(c: dict, extension: float | None) -> tuple[float | None, float | None]:
+    """The pitch's position at release (y = 60.5 ft minus extension) from its state at y = 50 ft, as Savant's release_pos_x/z."""
+    if extension is None or any(c.get(k) is None for k in ("x0", "y0", "z0", "vX0", "vY0", "vZ0", "aX", "aY", "aZ")):
+        return None, None
+    a, b, k = 0.5 * c["aY"], c["vY0"], c["y0"] - (60.5 - extension)
+    disc = b * b - 4 * a * k
+    if disc < 0 or a == 0:
+        return None, None
+    t = min((-b + disc ** 0.5) / (2 * a), (-b - disc ** 0.5) / (2 * a))  # the root before the pitch reached 50 ft
+    return c["x0"] + c["vX0"] * t + 0.5 * c["aX"] * t * t, c["z0"] + c["vZ0"] * t + 0.5 * c["aZ"] * t * t
+
+
+def _pitch_row(e: dict, play: dict, game_pk: int, count: dict, stuff: bool) -> dict:
     d = e.get("details", {})
     pdata = e.get("pitchData", {})
     breaks = pdata.get("breaks", {})
-    return {
+    row = {
         "game_pk": game_pk, "pitcher": play["matchup"]["pitcher"]["id"], "code": d.get("code"),
         "pitch_type": (d.get("type") or {}).get("code"), "start_speed": pdata.get("startSpeed"),
         "spin_rate": breaks.get("spinRate"), "ivb": breaks.get("breakVerticalInduced"), "hb": breaks.get("breakHorizontal"),
         "extension": pdata.get("extension"),
     }
+    if not stuff:
+        return row
+    m, c, hit = play["matchup"], pdata.get("coordinates", {}), e.get("hitData", {})
+    rel_x, rel_z = _release_point(c, pdata.get("extension"))
+    row.update({
+        "bat_side": m.get("batSide", {}).get("code"), "pitch_hand": m.get("pitchHand", {}).get("code"),
+        "balls": count.get("balls"), "strikes": count.get("strikes"), "spin_axis": breaks.get("spinDirection"),
+        "release_x": rel_x, "release_z": rel_z, "plate_x": c.get("pX"), "plate_z": c.get("pZ"),
+        "sz_top": pdata.get("strikeZoneTop"), "sz_bot": pdata.get("strikeZoneBottom"),
+        "launch_speed": hit.get("launchSpeed"), "launch_angle": hit.get("launchAngle"),
+    })
+    return row
+
+
+def _pitch_events(play: dict) -> list[tuple[dict, dict]]:
+    """The play's pitches in order, each with the count it was thrown in (an event's own count is the count after it)."""
+    out, count = [], {"balls": 0, "strikes": 0}
+    for e in play.get("playEvents", []):
+        if e.get("isPitch"):
+            out.append((e, count))
+        count = e.get("count", count)
+    return out
 
 
 def _play_row(play: dict, game_pk: int) -> dict:
@@ -159,10 +201,11 @@ def parse_feed(feed: dict, sport_id: int, season: int) -> dict[str, list[dict]]:
     plays = ld["plays"]["allPlays"]
     play_rows = [_play_row(p, game_pk) for p in plays]
     n_pitches = sum(r["n_pitches"] for r in play_rows)
-    pitch_events = [(e, p) for p in plays for e in p.get("playEvents", []) if e.get("isPitch")]
-    n_tracked = sum(e.get("pitchData", {}).get("startSpeed") is not None for e, _ in pitch_events)
+    pitch_events = [(e, count, p) for p in plays for e, count in _pitch_events(p)]
+    n_tracked = sum(e.get("pitchData", {}).get("startSpeed") is not None for e, _, _ in pitch_events)
     tracked_share = n_tracked / n_pitches if n_pitches else 0.0
-    pitch_rows = [_pitch_row(e, p, game_pk) for e, p in pitch_events] if tracked_share >= MIN_TRACKED_SHARE else []
+    stuff = sport_id in STUFF_SPORT_IDS
+    pitch_rows = [_pitch_row(e, p, game_pk, count, stuff) for e, count, p in pitch_events] if tracked_share >= MIN_TRACKED_SHARE else []
     box = ld["boxscore"]
     home, away = gd["teams"]["home"], gd["teams"]["away"]
     game = {
@@ -204,10 +247,20 @@ def _next_chunk(sport_id: int, season: int, kind: str = "games") -> int:
     return int(files[-1].stem.split("-")[1]) + 1 if files else 0
 
 
+def _lacks_stuff_columns(sport_id: int, season: int) -> bool:
+    """Whether a cached level-season's pitch rows were parsed before the stuff columns existed (2026-10-30)."""
+    files = sorted(level_dir(sport_id, season).glob("pitches-*.parquet"))
+    return bool(files) and "spin_axis" not in pq.read_schema(files[0]).names
+
+
 def build(sport_id: int, season: int, deadline: float | None = None, workers: int = WORKERS) -> int:
     """Fetch and cache every final regular-season game of a level-season not yet cached; returns games added."""
     kinds = KINDS
     marker = "games"
+    if sport_id in STUFF_SPORT_IDS and _lacks_stuff_columns(sport_id, season):
+        log.info(f"feeds[{sport_id}/{season}]: pitch rows predate the stuff columns; rebuilding the level-season")
+        for f in level_dir(sport_id, season).iterdir():
+            f.unlink()
     complete = level_dir(sport_id, season) / COMPLETE_MARKER
     if complete.exists():
         return 0

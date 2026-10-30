@@ -8,10 +8,11 @@ added beyond the count it was thrown in. Per pitcher, season and pitch type the
 mean prediction per 100 pitches is mapped to 20-80 against the MLB distribution of that pitch type
 (50 average, 10 per standard deviation, lower run value better); command against all MLB pitchers.
 
-Minor-league and spring training readings and grades are shifted to the MLB scale by level offsets
-fitted on pitchers measured at both levels in a season. A pitch family is released for publishing
-only if its grades carry over to the same pitchers' MLB grades (``carry``): Triple-A's check releases
-Triple-A and Florida State League pitches, spring training has its own.
+Minor-league, spring training and fall and winter league readings and grades are shifted to the MLB
+scale by level offsets fitted on pitchers measured at both levels in a season. A pitch family is
+released for publishing only if its grades carry over to the same pitchers' MLB grades (``carry``):
+Triple-A's check releases Triple-A, Florida State League and Arizona Fall League pitches; spring
+training and the Dominican winter league (LIDOM) each have their own (``RELEASED_BY``).
 """
 from __future__ import annotations
 
@@ -121,10 +122,10 @@ def by_pitcher_command(values: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
 
 
 PITCH_CODES = ("FF", "SI", "FC", "SL", "ST", "SV", "CU", "KC", "CS", "CH", "FS", "FO", "SC")  # published code = position + 1
-LEVEL_CODES = {"aaa": 1, "fsl": 2, "mixed": 3, "spring": 4}
+LEVEL_CODES = {"aaa": 1, "fsl": 2, "mixed": 3, "spring": 4, "afl": 5, "lidom": 6}
 TRACKED_FLOOR = 200  # released pitches in a pitcher's window before he counts as tracked
-MINOR_LEVELS = ("aaa", "fsl", "spring")
-RELEASED_BY = {"aaa": "aaa", "fsl": "aaa", "spring": "spring"}  # level -> the carry-over check that releases it
+MINOR_LEVELS = ("aaa", "fsl", "spring", "afl", "lidom")
+RELEASED_BY = {"aaa": "aaa", "fsl": "aaa", "spring": "spring", "afl": "aaa", "lidom": "lidom"}  # level -> the carry-over check that releases it
 
 
 def released(model: StuffModel, level: str) -> set[str]:
@@ -165,10 +166,12 @@ def window_arsenal(model: StuffModel, season: int, weights: dict[int, float]) ->
     types, cmds = [], []
     for back, w in weights.items():
         for level in MINOR_LEVELS:
-            pitches.require_complete(season - back, level)
-            if not pitches.path(season - back, level).exists():
-                continue
             ok = released(model, level)
+            if not ok:  # nothing of this level may be published (LIDOM as of 2026-10-30), so its pitches are not read
+                continue
+            pitches.require_complete(season - back, level)
+            if not pitches.available(season - back, level):
+                continue
             values = pitch_values(model, pitches.load(season - back, level))
             t = by_type(values, ["pitcher"])
             t = t[t["pitch_type"].isin(model.scale)]

@@ -12,7 +12,9 @@ are aggregated with their own denominators so an untracked player reads as missi
 
 Levels are labels derived from sport and league: ``aaa``, ``aa``, ``a+``, ``a``, ``a-`` (short-season,
 through 2020), ``rk+`` (Pioneer and Appalachian, through 2020), ``rk`` (complex leagues), ``dsl``
-(Dominican and Venezuelan Summer Leagues) and ``afl``.
+(Dominican and Venezuelan Summer Leagues) and ``afl``. The Dominican winter league is cached under
+sport 17 beside the Arizona Fall League for the stuff model only; its games get no level and never
+enter the prospect tables.
 """
 from __future__ import annotations
 
@@ -28,8 +30,9 @@ log = logging.getLogger(__name__)
 
 LEVEL_ORDER = ["dsl", "rk", "rk+", "a-", "a", "a+", "aa", "aaa", "afl"]
 LEVEL_RANK = {lvl: i for i, lvl in enumerate(LEVEL_ORDER)}
-SPORT_LEVEL = {11: "aaa", 12: "aa", 13: "a+", 14: "a", 15: "a-", 17: "afl"}
+SPORT_LEVEL = {11: "aaa", 12: "aa", 13: "a+", 14: "a", 15: "a-"}
 ROOKIE_LEAGUE_LEVEL = {121: "rk", 124: "rk", 130: "dsl", 134: "dsl", 128: "rk+", 120: "rk+"}
+SPORT_17_LEVEL = {feeds.AFL_LEAGUE_ID: "afl"}  # the winter leagues under sport 17 are not prospect levels
 PA_EVENTS = {
     "strikeout": "K", "strikeout_double_play": "K", "strikeout_triple_play": "K",
     "walk": "BB", "intent_walk": "BB", "hit_by_pitch": "HBP",
@@ -53,8 +56,9 @@ PITCH_SHAPE_COLUMNS = ("tracked_pitches", "fb_velo", "fb_velo_max", "fb_ivb", "f
 def level_of(games: pd.DataFrame) -> pd.Series:
     """Level label per game row from its sport and league ids."""
     level = games["sport_id"].map(SPORT_LEVEL)
-    rookie = games["sport_id"].eq(16)
-    level = level.where(~rookie, games["league_id"].map(ROOKIE_LEAGUE_LEVEL))
+    by_league = games["sport_id"].map({16: ROOKIE_LEAGUE_LEVEL, 17: SPORT_17_LEVEL})
+    league = by_league.notna()
+    level[league] = [m.get(lg) for m, lg in zip(by_league[league], games.loc[league, "league_id"])]
     return level
 
 
