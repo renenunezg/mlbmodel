@@ -39,17 +39,20 @@ import pandas as pd
 
 from backend.log import setup_logging
 from v2.data.pa_dataset import OUTCOMES
-from v2.players import bio, expected, features, inputs, minors
+from v2.players import bio, cuts, expected, features, inputs, minors
 from v2.players.fit import (
+    FIRST_PAIR_SEASON,
     MIN_FIT_SAMPLE,
     MIN_TARGET_SAMPLE,
     SeasonData,
     build_pair,
     choose_window_and_shrink,
     configure_hitter_shrink,
+    cut_pairs,
     fit_grade_weights,
     fit_trait_weights,
     marcel,
+    required_seasons,
     season_rates,
     spearman,
 )
@@ -60,8 +63,7 @@ from v2.players.runs import FULL_SEASON_PA, RELIEVER_INNINGS, STARTER_INNINGS
 
 log = logging.getLogger(__name__)
 
-FIRST_PAIR_SEASON = 2021
-MONTHS = (4, 5, 6, 7, 8, 9)
+MONTHS = cuts.MONTHS
 POOLS = (features.HITTER_POOL, "SP", "RP")
 PROJECTION_SYSTEMS = ("zips", "the_bat", "steamer")
 # Preseason page types per system: hitters, pitchers (THE BAT X projects hitters, THE BAT pitchers).
@@ -117,10 +119,7 @@ def grade_models(last_dev_season: int, *, tree: bool = False, expected_outcomes:
         return ValueModel.load(path), ValueModel.load(batting_path)
     dev_first = list(range(FIRST_PAIR_SEASON, last_dev_season + 1))
     dev_seasons = list(range(FIRST_PAIR_SEASON, last_dev_season + 2))
-    seasons = [s for s in dev_seasons if _has_statcast(s)]
-    if last_dev_season + 1 not in seasons:
-        raise FileNotFoundError(f"Grade model through {last_dev_season} needs Statcast for {last_dev_season + 1}")
-    data = SeasonData(seasons)
+    data = SeasonData(required_seasons(last_dev_season + 1))
     model = ValueModel.empty(dev_seasons, (last_dev_season + 1, last_dev_season + 2))
     model.window_weights, model.shrink_strength, model.aaa_scale = choose_window_and_shrink(data, dev_first)
     model.aaa_input_offsets = minors.input_offsets(data.inputs, data.aaa_inputs)
@@ -129,13 +128,14 @@ def grade_models(last_dev_season: int, *, tree: bool = False, expected_outcomes:
     model.evaluation = {"hitter_shrink": configure_hitter_shrink(data, dev_first, dev_seasons, model, tree=tree, expected_outcomes=expected_outcomes, expected_blend=expected_blend)}
     model.component_grades, model.direct_batting, model.reliever_inputs = components, direct_batting, reliever_inputs
     pairs = [build_pair(data, t, model) for t in dev_first]
+    in_season = cut_pairs(data, dev_seasons, model)
     model.trait_weights = fit_trait_weights(pairs)
-    model.grade_weights = fit_grade_weights(pairs, model)
+    model.grade_weights = fit_grade_weights(pairs, model, in_season)
     model.model_version = f"forward-grade-{last_dev_season}{suffix}"
     model.save(path)
     batting = ValueModel.from_payload(model.to_payload())
     if not components:
-        batting.grade_weights = fit_grade_weights(batting_only(pairs), model)
+        batting.grade_weights = fit_grade_weights(batting_only(pairs), model, batting_only(in_season))
     batting.model_version = f"forward-grade-{last_dev_season}{suffix}-batting"
     batting.save(batting_path)
     log.info(f"grade model through {last_dev_season}{suffix}: window {model.window_weights}, shrink {model.shrink_strength}, "
@@ -151,7 +151,6 @@ class SeasonMaterial:
 
     def __init__(self, season: int, model: ValueModel, batting_model: ValueModel):
         self.season, self.model, self.batting_model = season, model, batting_model
-        self._pitches: pd.DataFrame | None = None
         self.prior = [s for s in (season - 1, season - 2) if _has_statcast(s)]
         self.prior_inputs = {s: inputs.season_inputs(s) for s in self.prior}
         self.prior_aaa_inputs = {s: minors.season_inputs(s) for s in self.prior}
@@ -164,23 +163,12 @@ class SeasonMaterial:
         self.events = {s: expected.pa_events(s) for s in (*self.prior, season)} if model.expected_model else {}
         self.prior_expected = {s: expected.expected_counts(self.events[s], self.prior_inputs[s], model.expected_model, s) for s in self.prior} if self.events else {}
 
-    @property
-    def pitches(self) -> pd.DataFrame:
-        """The season's regular-season pitches, loaded on first use (a caller with pre-cut frames never needs them)."""
-        if self._pitches is None:
-            self._pitches = inputs.load_pitches(self.season)
-            self._pitches["game_date"] = pd.to_datetime(self._pitches["game_date"]).dt.date
-        return self._pitches
-
     def weights(self) -> dict[int, float]:
         return {self.season - back: w for back, w in self.model.window_weights.items()}
 
     def current_frames(self, as_of: date) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame] | None:
         """(inputs, outcome counts, positions) from the season's pitches before ``as_of``; None before the first pitch."""
-        before = self.pitches[self.pitches["game_date"] < as_of]
-        if before.empty:
-            return None
-        return inputs.statcast_inputs(before, self.season), inputs.count_outcomes(before, self.season), bio.positions([self.season], before=as_of)
+        return cuts.frames_before(self.season, as_of)
 
 
 def run_value(counts: pd.DataFrame, group: pd.Series, model: ValueModel) -> pd.DataFrame:
@@ -246,8 +234,7 @@ def grade_as_of(m: SeasonMaterial, as_of: date, current: tuple[pd.DataFrame, pd.
 
 
 def rest_of_season(m: SeasonMaterial, as_of: date, group: pd.Series) -> pd.DataFrame:
-    after = m.pitches[m.pitches["game_date"] >= as_of]
-    return run_value(inputs.count_outcomes(after, m.season), group, m.model)
+    return run_value(cuts.counts_after(m.season, as_of), group, m.model)
 
 
 # Season-to-date fWAR from cached FanGraphs date-range leaderboards.
