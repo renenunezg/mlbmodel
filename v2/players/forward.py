@@ -51,6 +51,7 @@ from v2.players.fit import (
     cut_pairs,
     fit_grade_weights,
     fit_trait_weights,
+    history_pairs,
     marcel,
     required_seasons,
     season_rates,
@@ -129,13 +130,14 @@ def grade_models(last_dev_season: int, *, tree: bool = False, expected_outcomes:
     model.component_grades, model.direct_batting, model.reliever_inputs = components, direct_batting, reliever_inputs
     pairs = [build_pair(data, t, model) for t in dev_first]
     in_season = cut_pairs(data, dev_seasons, model)
+    history = history_pairs(model)
     model.trait_weights = fit_trait_weights(pairs)
-    model.grade_weights = fit_grade_weights(pairs, model, in_season)
+    model.grade_weights = fit_grade_weights(pairs, model, in_season, history)
     model.model_version = f"forward-grade-{last_dev_season}{suffix}"
     model.save(path)
     batting = ValueModel.from_payload(model.to_payload())
     if not components:
-        batting.grade_weights = fit_grade_weights(batting_only(pairs), model, batting_only(in_season))
+        batting.grade_weights = fit_grade_weights(batting_only(pairs), model, batting_only(in_season), history)
     batting.model_version = f"forward-grade-{last_dev_season}{suffix}-batting"
     batting.save(batting_path)
     log.info(f"grade model through {last_dev_season}{suffix}: window {model.window_weights}, shrink {model.shrink_strength}, "

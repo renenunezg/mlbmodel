@@ -136,9 +136,9 @@ def translated_inputs(aaa: pd.DataFrame, offsets: dict[str, float], strength: fl
 
 def prior_counts(pseudo_by_season: dict[int, pd.DataFrame], weights: dict[int, float], present: set[int], scale: float) -> pd.DataFrame | None:
     """Scaled Triple-A counts over the window, weighted like the MLB window, by player_id; None when off."""
-    frames = {s: f for s, f in pseudo_by_season.items() if s in weights and not f.empty}
+    frames = {s: f for s, f in pseudo_by_season.items() if weights.get(s, 0.0) > 0 and not f.empty}
     if scale <= 0 or not frames:
-        return None
+        return None  # off, or no weighted season has Triple-A counts (a single-season window before its first pitch)
     window = inputs.window_counts(frames, weights, present)
     window = window[window["role"].eq("bat")].set_index("player_id")[list(OUTCOMES)]
     return window * scale

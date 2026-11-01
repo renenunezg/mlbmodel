@@ -47,7 +47,8 @@ GRADE_COMPONENTS = {
     "fielding": (("range", "arm", "reliability"), "fld_runs"),
     "running": (("baserunning", "speed"), "run_runs"),
 }
-FIRST_PAIR_SEASON = 2021  # the first development pair is 2021 -> 2022; the fit reads nothing earlier
+FIRST_PAIR_SEASON = 2021  # the first development pair is 2021 -> 2022; hitters and starters read nothing earlier
+RELIEVER_HISTORY_FIRST = 2015  # the reliever ridge also reads the full-season pairs from 2015 -> 2016 (local Statcast caches)
 MIN_FIT_SAMPLE = 100.0  # weighted PA or batters faced in season t and in t+1
 MIN_TARGET_SAMPLE = 100.0
 RELIABILITY_BINS = 5
@@ -106,13 +107,13 @@ def fit_ridge(pairs: dict[int, tuple[np.ndarray, np.ndarray]], lower: np.ndarray
 # Season data.
 
 
-def required_seasons(last: int) -> list[int]:
+def required_seasons(last: int, first: int = FIRST_PAIR_SEASON) -> list[int]:
     """The seasons the pairs through ``last`` read; a missing Statcast cache stops the fit.
 
-    Nothing before the first pair season enters: the 2019 and 2020 seasons behind the first
-    windows cost the forward grade 0.010 of rank correlation when they were tried (2026-10-31).
+    Nothing before the first pair season enters the hitter and starter fits: the 2019 and 2020 seasons
+    behind the first windows cost the forward grade 0.010 of rank correlation when they were tried (2026-10-31).
     """
-    seasons = list(range(FIRST_PAIR_SEASON, last + 1))
+    seasons = list(range(first, last + 1))
     missing = [s for s in seasons if not (inputs.STATCAST_DIR / f"statcast_{s}.parquet").exists()]
     if missing:
         raise FileNotFoundError(f"Statcast cache missing for {missing}; the grade fit reads every season from {seasons[0]}")
@@ -319,6 +320,21 @@ def build_cut_pair(data: SeasonData, season: int, as_of: date, model: ValueModel
     return {"t": season, "block": f"cut{season}", "values": values, "samples": samples, "z": z, "pool": pool, "group": group, "rates": rates,
             "sample": sample, "traits_next": traits_next, "target_next": target_next, "shrunk": shrunk, "counts": None,
             "age": data.ages(season).reindex(values.index)}
+
+
+def history_pairs(model: ValueModel) -> list[dict]:
+    """The full-season pairs from RELIEVER_HISTORY_FIRST to the one ending in FIRST_PAIR_SEASON, for the reliever ridge.
+
+    Relievers are the one pool whose ridge is starved: five composites and twenty direct inputs on about
+    175 relievers a pair pushed the penalty to 160-320 and every weight under a run per sd. Eleven pairs
+    bring it to 30-50 and gain 0.026 of forward rank correlation (2026-10-31); the same seasons cost
+    starters 0.015 and hitters 0.010, so only the reliever ridge reads them. The pairs are built from
+    their own seasons, so the development pairs' windows never reach before FIRST_PAIR_SEASON.
+    """
+    data = SeasonData(required_seasons(FIRST_PAIR_SEASON, first=RELIEVER_HISTORY_FIRST))
+    pairs = [build_pair(data, t, model) for t in range(RELIEVER_HISTORY_FIRST, FIRST_PAIR_SEASON)]
+    log.info(f"reliever history pairs: {pairs[0]['t']}->{pairs[0]['t'] + 1} .. {pairs[-1]['t']}->{pairs[-1]['t'] + 1}")
+    return pairs
 
 
 def cut_pairs(data: SeasonData, seasons: list[int], model: ValueModel) -> list[dict]:
@@ -609,12 +625,12 @@ def _fit_pool_ridge(pairs: list[dict], model: ValueModel, pool_name: str, cols: 
     return rows
 
 
-def fit_grade_weights(pairs: list[dict], model: ValueModel, in_season: list[dict] = ()) -> list[dict]:
-    """Grade ridge rows per pool; the hitter pool is fitted on the full-season and the in-season pairs together."""
+def fit_grade_weights(pairs: list[dict], model: ValueModel, in_season: list[dict] = (), history: list[dict] = ()) -> list[dict]:
+    """Grade ridge rows per pool: hitters on the development and in-season pairs, relievers on the history and development pairs, starters on the development pairs."""
     rows: list[dict] = []
     feature_cols = [t for t in features.TRAITS] + ["shrunk_runs", *features.AGE_FEATURES]
     for pool_name in (features.HITTER_POOL, "SP", "RP"):
-        pool_pairs = [*pairs, *in_season] if pool_name == features.HITTER_POOL else pairs
+        pool_pairs = {features.HITTER_POOL: [*pairs, *in_season], "RP": [*history, *pairs], "SP": list(pairs)}[pool_name]
         cols = [c for c in feature_cols if c not in features.TRAITS
                 or features.TRAITS[c].pool == (features.PITCHER_POOL if pool_name != features.HITTER_POOL else features.HITTER_POOL)]
         if pool_name == features.HITTER_POOL and model.direct_batting:
@@ -701,10 +717,10 @@ def marcel(rates_by_season: dict[int, pd.DataFrame], linear_weights: dict[int, d
 
 
 def evaluate(pairs: list[dict], data: SeasonData, model: ValueModel, holdout: dict | None, xwoba_boards: dict[int, pd.Series],
-             in_season: list[dict] = ()) -> dict:
+             in_season: list[dict] = (), history: list[dict] = ()) -> dict:
     """Leave-one-pair-out rank correlations of the Grade and baselines with next-season runs.
 
-    The in-season pairs of the held pair's target season leave with it.
+    The in-season pairs of the held pair's target season leave with it; the reliever history pairs stay.
     """
     report: dict = {"dev_pairs": {}, "holdout": {}}
     for pool_name in (features.HITTER_POOL, "SP", "RP"):
@@ -713,7 +729,7 @@ def evaluate(pairs: list[dict], data: SeasonData, model: ValueModel, holdout: di
             others = [p for p in pairs if p is not held]
             sub = ValueModel.from_payload(model.to_payload())
             sub.trait_weights = fit_trait_weights(others)
-            sub.grade_weights = fit_grade_weights(others, sub, [p for p in in_season if p["t"] != held["t"] + 1])
+            sub.grade_weights = fit_grade_weights(others, sub, [p for p in in_season if p["t"] != held["t"] + 1], history)
             rows.append(_score_pair(held, data, sub, pool_name, xwoba_boards))
         frame = pd.DataFrame(rows)
         report["dev_pairs"][pool_name] = {c: float(frame[c].mean()) for c in frame.columns if c != "t"} | {"pairs": len(frame)}
@@ -830,8 +846,9 @@ def fit(last_dev_season: int = 2024, holdout_pair: tuple[int, int] | None = None
 
     pairs = [build_pair(data, t, model) for t in dev_first]
     in_season = cut_pairs(data, dev_seasons, model)
+    history = history_pairs(model)
     model.trait_weights = fit_trait_weights(pairs)
-    model.grade_weights = fit_grade_weights(pairs, model, in_season)
+    model.grade_weights = fit_grade_weights(pairs, model, in_season, history)
     model.reliability_k = reliability_k(pairs, model)
     model.age_curves = aging.fit_curves_from_cache(last_dev_season)
     model.positional_adjustment, model.positional_seasons = fit_positional_adjustment(data, dev_first)
@@ -899,7 +916,7 @@ def fit(last_dev_season: int = 2024, holdout_pair: tuple[int, int] | None = None
         except Exception as exc:
             log.warning(f"xwoba board {s}: {exc}")
     holdout = build_pair(data, holdout_pair[0], model) if holdout_pair[1] in data.inputs else None
-    report = evaluate(pairs, data, model, holdout, xwoba_boards, in_season)
+    report = evaluate(pairs, data, model, holdout, xwoba_boards, in_season, history)
     report.update({
         "window_weights": offsets, "shrink_strength": strength, "aaa_scale": aaa_scale, "runs_per_win": model.runs_per_win,
         "price": model.price, "arb_fractions": model.arb_fractions, "dollar_calibration": calibration,
