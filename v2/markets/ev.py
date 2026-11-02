@@ -1,6 +1,6 @@
 """+EV flagging, Kelly sizing, and confidence for v2.
 
-Reuses backend.kelly + backend.simulation.american_to_prob + backend.strategy.EV_THRESHOLDS.
+Reuses backend.kelly + backend.simulation.american_to_prob + backend.strategy's pick policy.
 Behavior intentionally mirrors v1's text-flag conventions ("No Play", "Over",
 "Under", or team code) so the site renders v2 rows without changes.
 """
@@ -14,6 +14,8 @@ from backend.simulation import american_to_prob, convert_to_odds
 from backend.strategy import (
     EV_THRESHOLDS,
     MONEYLINE_ENABLED,
+    PICK_MIN_EV,
+    PICK_POLICY,
     RUNLINE_ENABLED,
     TOTALS_ENABLED,
 )
@@ -42,22 +44,29 @@ def rl_confidence(p_cover: float, spread_odds) -> float:
     return float(p_cover - american_to_prob(spread_odds))
 
 
-def flag_ml(team: str, win_prob: float, moneyline, threshold: float = EV_THRESHOLDS["ml"]) -> str:
-    if not MONEYLINE_ENABLED:
-        return "No Play"
-    if pd.isna(moneyline):
-        return "No Play"
-    edge = win_prob - american_to_prob(moneyline)
-    return team if edge >= threshold else "No Play"
+def choose_pick(candidates: list[dict]) -> dict | None:
+    """The game's one pick: the candidate with the highest expected value per unit staked.
 
-
-def flag_runline(team: str, p_cover: float, spread_odds, threshold: float = EV_THRESHOLDS["rl"]) -> str:
-    if not RUNLINE_ENABLED:
-        return "No Play"
-    if pd.isna(spread_odds) or pd.isna(p_cover):
-        return "No Play"
-    edge = p_cover - american_to_prob(spread_odds)
-    return team if edge >= threshold else "No Play"
+    Each candidate is {"market": "ml" | "rl", "team", "probability", "price", "book"}
+    with the probability already priced against the paired market. Returns the
+    candidate with expected_value, edge (probability minus the vig-inclusive
+    implied probability), tier and policy added, or None below PICK_MIN_EV.
+    """
+    enabled = {"ml": MONEYLINE_ENABLED, "rl": RUNLINE_ENABLED}
+    scored = []
+    for candidate in candidates:
+        probability, price = candidate["probability"], candidate["price"]
+        if not enabled[candidate["market"]] or probability is None or pd.isna(probability) or pd.isna(price):
+            continue
+        scored.append({**candidate,
+                       "expected_value": round(probability * american_to_decimal(price) - 1, 4),
+                       "edge": round(probability - american_to_prob(price), 4)})
+    if not scored:
+        return None
+    pick = max(scored, key=lambda candidate: candidate["expected_value"])
+    if pick["expected_value"] < PICK_MIN_EV:
+        return None
+    return {**pick, "policy": PICK_POLICY, "tier": "value" if pick["expected_value"] >= 0 else "lean"}
 
 
 def flag_total_play(

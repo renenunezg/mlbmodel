@@ -22,11 +22,10 @@ from sqlalchemy.dialects.postgresql import JSONB
 from backend.data.game_types import INACTIVE_GAME_STATUSES
 from backend.db import engine
 from backend.simulation import american_to_prob
-from backend.strategy import HOME_FIELD_LOGIT, MARKET_ANCHOR_W_MODEL
+from backend.strategy import HOME_FIELD_LOGIT, MARKET_ANCHOR_W_MODEL, PICK_MODEL_WEIGHT
 from v2.bayesian._common import POSTERIORS_DIR
 from v2.markets.ev import (
-    flag_ml,
-    flag_runline,
+    choose_pick,
     flag_total_play,
     high_variance_flag,
     kelly_pair,
@@ -177,6 +176,11 @@ def build_game_rows(
 
     Moneyline recommendations require a paired same-book market anchor.
     Without one, the fallback simulator estimate is display-only for moneyline.
+
+    At most one pick is published per game (backend.strategy.PICK_POLICY): the
+    moneyline or run-line side with the highest expected value at its best
+    price, priced from the paired consensus (plus the PICK_MODEL_WEIGHT sim
+    lean on the moneyline), and recorded in prediction_context["pick"].
     """
     h = np.asarray(home_runs)
     a = np.asarray(away_runs)
@@ -196,6 +200,8 @@ def build_game_rows(
     p_home_win = (round(market_probs(h, a, None, None, weights)["p_home_win"], 4) if weights is not None
                   else anchor_home_prob(p_home_sim, p_market_home))
     p_away_win = round(1.0 - p_home_win, 4)
+    p_pick_home = anchor_home_prob(p_home_sim, p_market_home, PICK_MODEL_WEIGHT)
+    p_pick_away = round(1.0 - p_pick_home, 4)
 
     # Transform the per-draw band endpoints through the same monotonic map so
     # the band brackets the published (anchored) prob; away stays the exact
@@ -309,15 +315,15 @@ def build_game_rows(
         "p_over": p_over,
         "p_under": p_under,
         "total_diff": home_total_diff,
-        "ev_flag": flag_ml(home_team, p_home_win, home_ml),
-        "run_line_ev_flag": flag_runline(home_team, p_home_cover, home_spread_odds),
+        "ev_flag": "No Play",
+        "run_line_ev_flag": "No Play",
         "total_play": flag_total_play(p_over, p_under, home_total_over, home_total_under, home_total_diff),
-        "ml_confidence": ml_confidence(p_home_win, home_ml),
+        "ml_confidence": ml_confidence(p_pick_home, home_ml),
         "run_line_confidence": rl_confidence(p_home_cover, home_spread_odds),
         "high_variance_flag": high_variance_flag(h, weights=weights),
         "runs_hist": h_hist,
     }
-    home_row.update(_kelly_block(home_row, p_home_win, p_home_cover, p_over, p_under,
+    home_row.update(_kelly_block(home_row, p_pick_home, p_home_cover, p_over, p_under,
                                  home_ml, home_spread_odds, home_total_over, home_total_under))
 
     away_row = {
@@ -345,33 +351,49 @@ def build_game_rows(
         "p_over": p_over,
         "p_under": p_under,
         "total_diff": away_total_diff,
-        "ev_flag": flag_ml(away_team, p_away_win, away_ml),
-        "run_line_ev_flag": flag_runline(away_team, p_away_cover, away_spread_odds),
+        "ev_flag": "No Play",
+        "run_line_ev_flag": "No Play",
         "total_play": flag_total_play(p_over, p_under, away_total_over, away_total_under, away_total_diff),
-        "ml_confidence": ml_confidence(p_away_win, away_ml),
+        "ml_confidence": ml_confidence(p_pick_away, away_ml),
         "run_line_confidence": rl_confidence(p_away_cover, away_spread_odds),
         "high_variance_flag": high_variance_flag(a, weights=weights),
         "runs_hist": a_hist,
     }
-    away_row.update(_kelly_block(away_row, p_away_win, p_away_cover, p_over, p_under,
+    away_row.update(_kelly_block(away_row, p_pick_away, p_away_cover, p_over, p_under,
                                  away_ml, away_spread_odds, away_total_over, away_total_under))
 
-    for row, odds, opposite in ((home_row, home_odds, away_odds), (away_row, away_odds, home_odds)):
-        if consensus_cover_prob(odds, opposite, row["spread"]) is None:
-            row["run_line_ev_flag"] = "No Play"
+    candidates = []
+    for row, odds, opposite, p_pick, ml_offer, rl_offer in (
+        (home_row, home_odds, away_odds, p_pick_home, home_ml_offer, home_rl_offer),
+        (away_row, away_odds, home_odds, p_pick_away, away_ml_offer, away_rl_offer),
+    ):
+        market_cover = consensus_cover_prob(odds, opposite, row["spread"])
+        if market_cover is None:
             row["run_line_confidence"] = float("nan")
             row["kelly_full_rl"] = row["kelly_quarter_rl"] = 0.0
+        else:
+            candidates.append({"market": "rl", "team": row["team"], "probability": market_cover,
+                               "price": row["spread_odds"], "book": rl_offer.get("book")})
+        if p_market_home is not None:
+            candidates.append({"market": "ml", "team": row["team"], "probability": p_pick,
+                               "price": row["moneyline"], "book": ml_offer.get("book")})
 
     if p_market_home is None:
         for row in (home_row, away_row):
-            row["ev_flag"] = "No Play"
             row["ml_confidence"] = float("nan")
             row["kelly_full_ml"] = 0.0
             row["kelly_quarter_ml"] = 0.0
 
+    pick = None
     if weights is None or not starters_known or not lineups_live or not pitching_usage_known:
         _suppress_bet(home_row)
         _suppress_bet(away_row)
+    else:
+        pick = choose_pick(candidates)
+    context["pick"] = pick
+    if pick is not None:
+        row = home_row if pick["team"] == home_team else away_row
+        row["ev_flag" if pick["market"] == "ml" else "run_line_ev_flag"] = pick["team"]
 
     return [home_row, away_row]
 

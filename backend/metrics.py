@@ -298,11 +298,12 @@ def equity_curve_from_ledger(ledger, initial=1.0):
     return daily.reset_index()[["date", "equity"]]
 
 
-def hit_rate_by_edge_bucket(ledger, buckets=(0.045, 0.065, 0.10, 0.20)):
+def hit_rate_by_edge_bucket(ledger, buckets=(-0.05, 0.0, 0.045, 0.065, 0.10, 0.20)):
     """Hit rate and ROI per edge bucket.
 
-    Default boundaries align with EV_THRESHOLDS (ml/rl 4.5%, totals 6.5%) so no
-    bucket can contain sub-threshold bets.
+    Boundaries from 4.5% up align with EV_THRESHOLDS (ml/rl 4.5%, totals 6.5%),
+    which graded every pick before PICK_POLICY. Policy picks are graded at any
+    edge from the PICK_MIN_EV floor, so they land in the buckets below 4.5%.
 
     ledger must have columns: edge, won (bool), stake, payout.
     Returns list of dicts: [{bucket_label, n_bets, hit_rate, roi}, ...]

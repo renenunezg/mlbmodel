@@ -51,8 +51,10 @@ def test_fallback_lineup_suppresses_market_flags(monkeypatch):
     live_home, _ = build_game_rows(**{**kwargs, "home_odds": shopping}, lineups_live=True)
     fallback_home, fallback_away = build_game_rows(**kwargs, lineups_live=False)
 
-    assert live_home["ev_flag"] == "LAD"
+    # One pick per game: the +120 run line (fair 0.5, +10% EV) beats the -150 moneyline.
     assert live_home["run_line_ev_flag"] == "LAD"
+    assert live_home["ev_flag"] == "No Play"
+    assert live_home["prediction_context"]["pick"]["tier"] == "value"
     assert all(live_home[key] == value for key, value in odds.items() if key != "book")
     away_odds = {**odds, "moneyline": 130, "spread": 1.5}
     assert all(fallback_away[key] == value for key, value in away_odds.items() if key != "book")

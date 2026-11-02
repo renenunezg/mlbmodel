@@ -151,7 +151,8 @@ def consensus_cover_prob(odds: dict | None, opponent_odds: dict | None, spread: 
     return float(np.mean(probs)) if probs else None
 
 
-def anchor_home_prob(p_home_sim: float, p_market_home: float | None) -> float:
+def anchor_home_prob(p_home_sim: float, p_market_home: float | None,
+                     w_model: float = MARKET_ANCHOR_W_MODEL) -> float:
     """Published home win prob: HFA-shifted sim logit blended toward the market.
 
     The sim carries no home-field advantage, so HOME_FIELD_LOGIT is added to its
@@ -159,11 +160,12 @@ def anchor_home_prob(p_home_sim: float, p_market_home: float | None) -> float:
     nothing. With no market pair the shifted sim prob passes through unblended.
     Monotonic in p_home_sim, so it can also transform the win-prob band
     endpoints without breaking their ordering or pairwise anti-correlation.
+    Pick probabilities use the same blend at PICK_MODEL_WEIGHT.
     """
     logit_sim = _logit(p_home_sim) + HOME_FIELD_LOGIT
     if p_market_home is None:
         return round(_sigmoid(logit_sim), 4)
-    blended = MARKET_ANCHOR_W_MODEL * logit_sim + (1.0 - MARKET_ANCHOR_W_MODEL) * _logit(p_market_home)
+    blended = w_model * logit_sim + (1.0 - w_model) * _logit(p_market_home)
     return round(_sigmoid(blended), 4)
 
 

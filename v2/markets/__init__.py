@@ -1,6 +1,5 @@
 from v2.markets.ev import (
-    flag_ml,
-    flag_runline,
+    choose_pick,
     flag_total_play,
     high_variance_flag,
     kelly_pair,
@@ -19,8 +18,7 @@ from v2.markets.writer import (
 __all__ = [
     "market_probs",
     "runs_percentiles",
-    "flag_ml",
-    "flag_runline",
+    "choose_pick",
     "flag_total_play",
     "high_variance_flag",
     "kelly_pair",
