@@ -21,7 +21,11 @@ load_dotenv()
 
 ODDS_API_BASE = "https://api.the-odds-api.com/v4/sports"
 SPORT = "baseball_mlb"
-DEFAULT_BOOKS = ("draftkings", "fanduel", "betmgm")
+# Pinnacle (EU region) is the sharp reference for CLV and sharp-vs-soft research;
+# otherwise it is an ordinary book under the shopping and consensus rules. Named
+# bookmakers take priority over regions and every 10 bill as one region, so
+# these four cost the same 3 credits a pull as three did.
+DEFAULT_BOOKS = ("draftkings", "fanduel", "betmgm", "pinnacle")
 DEFAULT_STATE_PATH = Path("cache/odds_api_state.json")
 MARKETS = ("h2h", "spreads", "totals")
 # Odds are pulled once per day, so a quote stays usable until first pitch.
@@ -163,7 +167,8 @@ def record_closing_call(day: date) -> None:
 def fetch_odds_events(upcoming_game_pks: tuple[int, ...], books: list[str] | None) -> tuple[list[dict], str]:
     """One paid request: every upcoming MLB event with its bookmakers' h2h, spreads and totals.
 
-    books=None asks for every US bookmaker; the credit cost (markets x regions) is the same.
+    books=None asks for every US bookmaker. Named books take priority over the region
+    and up to 10 bill as one region, so either costs len(MARKETS) credits.
     Returns the raw events and the request time as an ISO string.
     """
     # Re-validate at the only paid-request boundary. This makes an accidental
@@ -178,6 +183,8 @@ def fetch_odds_events(upcoming_game_pks: tuple[int, ...], books: list[str] | Non
         "oddsFormat": "american",
     }
     if books:
+        if len(books) > 10:
+            raise ValueError("More than 10 bookmakers bill as a second region")
         params["bookmakers"] = ",".join(books)
 
     resp = requests.get(f"{ODDS_API_BASE}/{SPORT}/odds", params=params, timeout=15)
