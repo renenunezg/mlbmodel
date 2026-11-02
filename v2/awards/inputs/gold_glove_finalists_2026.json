@@ -1,0 +1,27 @@
+{
+  "announced": "2026-10-14",
+  "AL": {
+    "P": ["Tanner Bibee", "Jacob deGrom", "José Soriano"],
+    "C": ["Dillon Dingler", "Brandon Valenzuela", "Austin Wells"],
+    "1B": ["Vladimir Guerrero Jr.", "Vinnie Pasquantino", "Christian Walker"],
+    "2B": ["Michael Massey", "Chase Meidroth", "Cole Young"],
+    "3B": ["Caleb Durbin", "Brooks Lee", "Nick Loftin"],
+    "SS": ["Andrés Giménez", "Taylor Walls", "Bobby Witt Jr."],
+    "LF": ["Cody Bellinger", "Wyatt Langford", "Chandler Simpson"],
+    "CF": ["Evan Carter", "Steven Kwan", "Ceddanne Rafaela"],
+    "RF": ["Wilyer Abreu", "Nathan Lukes", "Cam Smith"],
+    "UT": ["José Caballero", "Ezequiel Duran", "Zach McKinstry"]
+  },
+  "NL": {
+    "P": ["Michael McGreevy", "Nolan McLean", "Chris Sale"],
+    "C": ["Freddy Fermin", "Gabriel Moreno", "Luis Torrens"],
+    "1B": ["Ty France", "Matt Olson", "TJ Rumfield"],
+    "2B": ["Brandon Lowe", "Brice Turang", "JJ Wetherholt"],
+    "3B": ["Alex Bregman", "Max Muncy", "Javier Sanoja"],
+    "SS": ["Geraldo Perdomo", "Dansby Swanson", "Masyn Winn"],
+    "LF": ["Jackson Chourio", "Ian Happ", "Daylen Lile"],
+    "CF": ["Pete Crow-Armstrong", "Michael Harris II", "Andy Pages"],
+    "RF": ["Carson Benge", "Corbin Carroll", "Seiya Suzuki"],
+    "UT": ["Mauricio Dubón", "Jared Triolo", "Ildemaro Vargas"]
+  }
+}
