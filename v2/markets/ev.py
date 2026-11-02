@@ -44,13 +44,14 @@ def rl_confidence(p_cover: float, spread_odds) -> float:
     return float(p_cover - american_to_prob(spread_odds))
 
 
-def choose_pick(candidates: list[dict]) -> dict | None:
+def choose_pick(candidates: list[dict], daily_minimum: bool = False) -> dict | None:
     """The game's one pick: the candidate with the highest expected value per unit staked.
 
     Each candidate is {"market": "ml" | "rl", "team", "probability", "price", "book"}
     with the probability already priced against the paired market. Returns the
     candidate with expected_value, edge (probability minus the vig-inclusive
-    implied probability), tier and policy added, or None below PICK_MIN_EV.
+    implied probability), tier and policy added, or None below PICK_MIN_EV
+    unless daily_minimum, which publishes it as tier "minimum".
     """
     enabled = {"ml": MONEYLINE_ENABLED, "rl": RUNLINE_ENABLED}
     scored = []
@@ -64,9 +65,15 @@ def choose_pick(candidates: list[dict]) -> dict | None:
     if not scored:
         return None
     pick = max(scored, key=lambda candidate: candidate["expected_value"])
-    if pick["expected_value"] < PICK_MIN_EV:
+    if pick["expected_value"] >= 0:
+        tier = "value"
+    elif pick["expected_value"] >= PICK_MIN_EV:
+        tier = "lean"
+    elif daily_minimum:
+        tier = "minimum"
+    else:
         return None
-    return {**pick, "policy": PICK_POLICY, "tier": "value" if pick["expected_value"] >= 0 else "lean"}
+    return {**pick, "policy": PICK_POLICY, "tier": tier}
 
 
 def flag_total_play(

@@ -157,6 +157,7 @@ def build_game_rows(
     lineups_live: bool = True,
     pitching_usage_known: bool = True,
     prediction_context: dict | None = None,
+    daily_minimum: bool = False,
 ) -> list[dict]:
     """Return two dict rows (home + away) ready to write to model_outputs.
 
@@ -181,6 +182,8 @@ def build_game_rows(
     moneyline or run-line side with the highest expected value at its best
     price, priced from the paired consensus (plus the PICK_MODEL_WEIGHT sim
     lean on the moneyline), and recorded in prediction_context["pick"].
+    daily_minimum marks one of its date's PICK_DAILY_MINIMUM games with the
+    best market value, which publishes its pick even below PICK_MIN_EV.
     """
     h = np.asarray(home_runs)
     a = np.asarray(away_runs)
@@ -362,21 +365,10 @@ def build_game_rows(
     away_row.update(_kelly_block(away_row, p_pick_away, p_away_cover, p_over, p_under,
                                  away_ml, away_spread_odds, away_total_over, away_total_under))
 
-    candidates = []
-    for row, odds, opposite, p_pick, ml_offer, rl_offer in (
-        (home_row, home_odds, away_odds, p_pick_home, home_ml_offer, home_rl_offer),
-        (away_row, away_odds, home_odds, p_pick_away, away_ml_offer, away_rl_offer),
-    ):
-        market_cover = consensus_cover_prob(odds, opposite, row["spread"])
-        if market_cover is None:
+    for row, odds, opposite in ((home_row, home_odds, away_odds), (away_row, away_odds, home_odds)):
+        if consensus_cover_prob(odds, opposite, row["spread"]) is None:
             row["run_line_confidence"] = float("nan")
             row["kelly_full_rl"] = row["kelly_quarter_rl"] = 0.0
-        else:
-            candidates.append({"market": "rl", "team": row["team"], "probability": market_cover,
-                               "price": row["spread_odds"], "book": rl_offer.get("book")})
-        if p_market_home is not None:
-            candidates.append({"market": "ml", "team": row["team"], "probability": p_pick,
-                               "price": row["moneyline"], "book": ml_offer.get("book")})
 
     if p_market_home is None:
         for row in (home_row, away_row):
@@ -389,13 +381,66 @@ def build_game_rows(
         _suppress_bet(home_row)
         _suppress_bet(away_row)
     else:
-        pick = choose_pick(candidates)
+        p_pick = p_pick_home if p_market_home is not None else None
+        pick = choose_pick(_pick_candidates(home_team, away_team, home_odds, away_odds, p_pick),
+                           daily_minimum=daily_minimum)
     context["pick"] = pick
     if pick is not None:
         row = home_row if pick["team"] == home_team else away_row
-        row["ev_flag" if pick["market"] == "ml" else "run_line_ev_flag"] = pick["team"]
+        if pick["market"] == "ml":
+            row["ev_flag"] = pick["team"]
+        else:
+            # The graded row carries the picked offer; it differs from the
+            # displayed best-edge offer only when a team has both run lines.
+            if (row["spread"], row["spread_odds"]) != (pick["spread"], pick["price"]):
+                row.update(spread=pick["spread"], spread_odds=pick["price"], p_cover=pick["probability"],
+                           run_line_confidence=pick["edge"])
+                row["kelly_full_rl"], row["kelly_quarter_rl"] = kelly_pair(pick["probability"], pick["price"])
+            row["run_line_ev_flag"] = pick["team"]
 
     return [home_row, away_row]
+
+
+def _pick_candidates(home_team: str, away_team: str, home_odds: dict | None, away_odds: dict | None,
+                     p_pick_home: float | None) -> list[dict]:
+    """Each side's moneyline at its best price and every paired +-1.5 offer, for choose_pick.
+
+    Run lines are priced at the paired consensus; the moneyline at p_pick_home,
+    and left out when it is None (no paired market).
+    """
+    candidates = []
+    for team, odds, opposite, p_pick in (
+        (home_team, home_odds, away_odds, p_pick_home),
+        (away_team, away_odds, home_odds, None if p_pick_home is None else round(1.0 - p_pick_home, 4)),
+    ):
+        offer = _best_moneyline(odds, 0.5)
+        if p_pick is not None and offer:
+            candidates.append({"market": "ml", "team": team, "probability": p_pick,
+                               "price": float(offer["moneyline"]), "book": offer.get("book")})
+        for offer in _offers(odds):
+            spread, price = _get(offer, "spread"), _get(offer, "spread_odds")
+            if pd.isna(spread) or pd.isna(price) or abs(float(price)) < 100:
+                continue
+            cover = consensus_cover_prob(odds, opposite, float(spread))
+            if cover is not None:
+                candidates.append({"market": "rl", "team": team, "probability": cover, "price": float(price),
+                                   "book": offer.get("book"), "spread": float(spread)})
+    return candidates
+
+
+def market_pick_value(start_time, home_team: str, away_team: str,
+                      home_odds: dict | None, away_odds: dict | None) -> float | None:
+    """Expected value of a game's best pick priced from the paired market alone.
+
+    score_games ranks each date's games by it to fill PICK_DAILY_MINIMUM. It
+    reads only the day's odds pull, so the ranking holds through every rescore.
+    """
+    now = datetime.now(UTC)
+    home_odds = fresh_odds(home_odds, as_of=now, start_time=start_time)
+    away_odds = fresh_odds(away_odds, as_of=now, start_time=start_time)
+    pick = choose_pick(_pick_candidates(home_team, away_team, home_odds, away_odds,
+                                        consensus_home_prob(home_odds, away_odds)), daily_minimum=True)
+    return None if pick is None else pick["expected_value"]
 
 
 def _suppress_bet(row: dict) -> None:

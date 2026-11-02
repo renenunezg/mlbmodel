@@ -56,6 +56,13 @@ PICK_MODEL_WEIGHT = 0.07
 # the price, not the model, decides the expected value.
 PICK_MIN_EV = -0.0125
 
+# Games per date that publish their pick even below PICK_MIN_EV (tier
+# "minimum"), the ones whose best pick has the highest market-only expected
+# value. A product choice so every slate has picks: the floor alone left 41 of
+# 93 three-book dates empty. On 2026 the minimum picks carry an expected
+# -2.5% per pick with three books and -3.8% with one.
+PICK_DAILY_MINIMUM = 3
+
 # Home-field shift on the sim's home logit, applied before market anchoring.
 # The sim itself has none: batting last and walkoff logic net to ~zero.
 HOME_FIELD_LOGIT = 0.09

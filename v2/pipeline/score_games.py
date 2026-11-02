@@ -33,11 +33,12 @@ from backend.data.mlb_api import fetch_lineup
 from backend.data.odds_api import DEFAULT_BOOKS
 from backend.db import engine
 from backend.log import setup_logging
-from backend.strategy import WEATHER_ENABLED
+from backend.strategy import PICK_DAILY_MINIMUM, WEATHER_ENABLED
 from backend.team_mappings import normalize_team
 from v2.bayesian._common import POSTERIORS_DIR
 from v2.markets.writer import (
     build_game_rows,
+    market_pick_value,
     posterior_age_days,
     publish_forecasts,
 )
@@ -393,6 +394,12 @@ def score(
     if not contexts:
         log.info(f"no games on {date}")
         return pd.DataFrame()
+    # Rank the whole date, started games included, so every rescore of the day
+    # sees the same minimum slate.
+    values = {c.game_pk: market_pick_value(c.start_time, c.home_team, c.away_team, c.home_odds, c.away_odds)
+              for c in contexts}
+    ranked = sorted((pk for pk, value in values.items() if value is not None), key=values.get, reverse=True)
+    minimum_slate = set(ranked[:PICK_DAILY_MINIMUM])
     if game_pks is not None:
         wanted = set(int(p) for p in game_pks)
         contexts = [c for c in contexts if int(c.game_pk) in wanted]
@@ -516,6 +523,7 @@ def score(
             lineups_live=lineup_tag == "live",
             pitching_usage_known=inputs.home_queue.usage_known and inputs.away_queue.usage_known,
             prediction_context=snapshot,
+            daily_minimum=ctx.game_pk in minimum_slate,
         )
         for row in rows:
             row["prediction_updated_at"] = snapshot_started_at.to_pydatetime()

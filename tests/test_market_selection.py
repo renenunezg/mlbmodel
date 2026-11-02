@@ -200,6 +200,18 @@ def test_market_anchor_stops_flagging_big_dogs(monkeypatch):
     assert abs(home["win_prob"] + away["win_prob"] - 1.0) < 1e-6
     # raw sim would flag the dog (0.40 - 0.2857 = +0.11 edge); anchored must not
     assert away["ev_flag"] == "No Play"
+    assert home["ev_flag"] == "No Play" and home["prediction_context"]["pick"] is None
+    # Below the floor only the date's minimum slate publishes, priced from the
+    # market and labeled as such, never as value.
+    filled = build_game_rows(
+        **kwargs, daily_minimum=True,
+        home_odds=_fresh({"book": "draftkings", "moneyline": -300}),
+        away_odds=_fresh({"book": "draftkings", "moneyline": 250}),
+    )
+    pick = filled[0]["prediction_context"]["pick"]
+    assert pick["tier"] == "minimum" and pick["expected_value"] < -0.0125
+    assert abs(pick["probability"] - (0.724 if pick["team"] == "LAD" else 0.276)) < 0.01
+    assert sum(row["ev_flag"] != "No Play" for row in filled) == 1
     # bands transform through the same map: still ordered, still anti-correlated
     assert home["win_prob_p10"] <= home["win_prob"] <= home["win_prob_p90"]
     assert abs(away["win_prob_p10"] + home["win_prob_p90"] - 1.0) < 1e-3
