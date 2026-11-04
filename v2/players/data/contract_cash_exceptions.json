@@ -246,6 +246,72 @@
         ]
       },
       "liability_scope": "The 20 million signing payment in 2025 is outside future control costs. Remaining bonus installments and salaries follow the reported payment schedule; the separate 2025 arbitration salary is excluded from this extension."
+    },
+    {
+      "player_id": 663656,
+      "name": "Kyle Tucker",
+      "date": "2026-01-21",
+      "first_season": 2026,
+      "years": 2,
+      "guarantee_musd": 120,
+      "payroll_summary_musd": 114.92,
+      "source": "https://www.mlbtraderumors.com/2026/01/dodgers-to-sign-kyle-tucker.html",
+      "cash_source": "https://www.mlbtraderumors.com/2026/01/dodgers-to-sign-kyle-tucker.html",
+      "earned_cash": {
+        "2026": [
+          [
+            2026,
+            55
+          ]
+        ],
+        "2027": [
+          [
+            2027,
+            55
+          ],
+          [
+            2036,
+            1
+          ],
+          [
+            2037,
+            1
+          ],
+          [
+            2038,
+            1
+          ],
+          [
+            2039,
+            1
+          ],
+          [
+            2040,
+            1
+          ],
+          [
+            2041,
+            1
+          ],
+          [
+            2042,
+            1
+          ],
+          [
+            2043,
+            1
+          ],
+          [
+            2044,
+            1
+          ],
+          [
+            2045,
+            1
+          ]
+        ]
+      },
+      "liability_scope": "Covers the two guaranteed seasons only; the 2028 and 2029 opt-out seasons stay as payroll player options. The 54 million signing bonus paid in 2026 is outside future control costs. 2027 earns the remaining 10 million bonus and a 55 million salary of which 10 million is deferred, assumed repaid in equal installments from 2036 to 2045."
     }
   ]
 }

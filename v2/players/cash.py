@@ -17,16 +17,67 @@ import pandas as pd
 from v2.players.value import ContractYear
 
 DATA = Path(__file__).parent / "data"
+BONUSES = DATA / "prepaid_signing_bonuses.json"
+
+
+def schedule_sources() -> list[Path]:
+    return [*sorted(DATA.glob("free_agent_signings_mixed_*.json")), DATA / "contract_cash_exceptions.json"]
 
 
 def sources() -> list[Path]:
-    return [*sorted(DATA.glob("free_agent_signings_mixed_*.json")), DATA / "contract_cash_exceptions.json"]
+    return [*schedule_sources(), BONUSES]
+
+
+@lru_cache(maxsize=1)
+def bonuses() -> dict[tuple[int, int], dict]:
+    """Signing bonuses the payroll schedule spreads evenly over its guaranteed years."""
+    result = {}
+    for b in json.loads(BONUSES.read_text())["contracts"]:
+        span = range(b["contract_start"], b["contract_start"] + b["contract_years"])
+        for part in ("payments", "payroll_allocation"):
+            flows = b[part]
+            if (b["bonus_musd"] <= 0 or not np.isclose(sum(v for _, v in flows), b["bonus_musd"])
+                    or any(not np.isfinite(v) or v <= 0 for _, v in flows)):
+                raise ValueError(f"Signing bonus {part} do not reconcile")
+        if any(season not in span for season, _ in b["payroll_allocation"]):
+            raise ValueError("Signing bonus allocated outside the payroll contract")
+        key = (b["player_id"], b["contract_start"])
+        if key in result:
+            raise ValueError("Duplicate signing bonus identity")
+        result[key] = b
+    return result
+
+
+def _move_bonus(row: pd.Series, contract: list[ContractYear], as_of: date) -> tuple[list[ContractYear], dict] | None:
+    """Charge each guaranteed season the bonus actually paid in it, not an even share."""
+    b = bonuses().get((int(row.player_id), int(row.contract_start)))
+    if (b is None or b["date"] > as_of.isoformat() or row.contract_years != b["contract_years"]
+            or not np.isclose(row.contract_total_musd, b["payroll_summary_musd"], atol=.01)):
+        return None
+    paid: dict[int, float] = {}
+    for season, amount in b["payments"]:
+        paid[season] = paid.get(season, 0.0) + amount
+    allocated = dict(b["payroll_allocation"])
+    span = range(int(row.contract_start), int(row.contract_start) + int(row.contract_years))
+    result = []
+    for year in contract:
+        if year.season in span:
+            if year.salary_kind != "guaranteed" or year.salary_musd is None:
+                raise ValueError("Signing bonus spread conflicts with current contract rights")
+            salary = year.salary_musd - allocated.get(year.season, 0.0) + paid.get(year.season, 0.0)
+            if salary < 0:
+                raise ValueError("Signing bonus share exceeds the payroll salary")
+            year = replace(year, salary_musd=salary)
+        result.append(year)
+    return result, {"basis": "Payroll schedule with the signing bonus charged when paid", "verified": True,
+                    "source": b["source"],
+                    "liability_scope": "Bonus paid before the valuation season is not charged to future control years"}
 
 
 @lru_cache(maxsize=1)
 def schedules() -> dict[tuple[int, int], dict]:
     result = {}
-    for path in sources():
+    for path in schedule_sources():
         for c in json.loads(path.read_text())["contracts"]:
             if c.get("has_exercisable_option", False):
                 continue
@@ -57,7 +108,7 @@ def apply(rows: pd.DataFrame, contract: list[ContractYear], as_of: date | None) 
         return contract, metadata
     c = schedules().get((int(row.player_id), int(row.contract_start)))
     if c is None or c["date"] > as_of.isoformat():
-        return contract, metadata
+        return _move_bonus(row, contract, as_of) or (contract, metadata)
     expected_total = c.get("payroll_summary_musd", c["guarantee_musd"])
     if row.contract_years != c["years"] or not np.isclose(row.contract_total_musd, expected_total, atol=.01):
         return contract, metadata

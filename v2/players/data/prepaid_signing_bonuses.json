@@ -1,0 +1,537 @@
+{
+  "note": "Baseball-Reference payroll rows spread each signing bonus over the listed seasons (payroll_allocation, checked against reported base salaries). payments are the reported bonus installments by calendar year. date is the end of the month the deal was reported, used only to hide later signings from historical scoring.",
+  "contracts": [
+    {
+      "player_id": 808967,
+      "name": "Yoshinobu Yamamoto",
+      "date": "2023-12-31",
+      "contract_start": 2024,
+      "contract_years": 12,
+      "payroll_summary_musd": 325.0,
+      "bonus_musd": 50,
+      "payments": [
+        [
+          2024,
+          20
+        ],
+        [
+          2024,
+          30
+        ]
+      ],
+      "source": "https://dodgerblue.com/yoshinobu-yamamoto-contract-details-backloaded-base-salary/2024/01/07/",
+      "payroll_allocation": [
+        [
+          2024,
+          4.166667
+        ],
+        [
+          2025,
+          4.166667
+        ],
+        [
+          2026,
+          4.166667
+        ],
+        [
+          2027,
+          4.166667
+        ],
+        [
+          2028,
+          4.166667
+        ],
+        [
+          2029,
+          4.166667
+        ],
+        [
+          2030,
+          4.166667
+        ],
+        [
+          2031,
+          4.166667
+        ],
+        [
+          2032,
+          4.166667
+        ],
+        [
+          2033,
+          4.166667
+        ],
+        [
+          2034,
+          4.166667
+        ],
+        [
+          2035,
+          4.166663
+        ]
+      ]
+    },
+    {
+      "player_id": 605483,
+      "name": "Blake Snell",
+      "date": "2024-11-30",
+      "contract_start": 2025,
+      "contract_years": 5,
+      "payroll_summary_musd": 136.96,
+      "bonus_musd": 52,
+      "payments": [
+        [
+          2025,
+          52
+        ]
+      ],
+      "source": "https://global.espn.com/mlb/story/_/id/42760649",
+      "payroll_allocation": [
+        [
+          2025,
+          10.4
+        ],
+        [
+          2026,
+          10.4
+        ],
+        [
+          2027,
+          10.4
+        ],
+        [
+          2028,
+          10.4
+        ],
+        [
+          2029,
+          10.4
+        ]
+      ]
+    },
+    {
+      "player_id": 669257,
+      "name": "Will Smith",
+      "date": "2024-03-31",
+      "contract_start": 2024,
+      "contract_years": 10,
+      "payroll_summary_musd": 140.0,
+      "bonus_musd": 30,
+      "payments": [
+        [
+          2024,
+          15
+        ],
+        [
+          2025,
+          15
+        ]
+      ],
+      "source": "https://www.truebluela.com/2024/3/28/24114202",
+      "payroll_allocation": [
+        [
+          2024,
+          3.0
+        ],
+        [
+          2025,
+          3.0
+        ],
+        [
+          2026,
+          3.0
+        ],
+        [
+          2027,
+          3.0
+        ],
+        [
+          2028,
+          3.0
+        ],
+        [
+          2029,
+          3.0
+        ],
+        [
+          2030,
+          3.0
+        ],
+        [
+          2031,
+          3.0
+        ],
+        [
+          2032,
+          3.0
+        ],
+        [
+          2033,
+          3.0
+        ]
+      ]
+    },
+    {
+      "player_id": 656302,
+      "name": "Dylan Cease",
+      "date": "2025-12-31",
+      "contract_start": 2026,
+      "contract_years": 7,
+      "payroll_summary_musd": 175.0,
+      "bonus_musd": 23,
+      "payments": [
+        [
+          2026,
+          23
+        ]
+      ],
+      "source": "https://www.mlbtraderumors.com/2025/12/blue-jays-to-sign-dylan-cease-to-seven-year-deal.html",
+      "payroll_allocation": [
+        [
+          2026,
+          3.285714
+        ],
+        [
+          2027,
+          3.285714
+        ],
+        [
+          2028,
+          3.285714
+        ],
+        [
+          2029,
+          3.285714
+        ],
+        [
+          2030,
+          3.285714
+        ],
+        [
+          2031,
+          3.285714
+        ],
+        [
+          2032,
+          3.285716
+        ]
+      ]
+    },
+    {
+      "player_id": 641355,
+      "name": "Cody Bellinger",
+      "date": "2026-01-31",
+      "contract_start": 2026,
+      "contract_years": 5,
+      "payroll_summary_musd": 162.5,
+      "bonus_musd": 20,
+      "payments": [
+        [
+          2026,
+          20
+        ]
+      ],
+      "payroll_allocation": [
+        [
+          2026,
+          10
+        ],
+        [
+          2027,
+          10
+        ]
+      ],
+      "source": "https://www.wbng.com/2026/01/21/cody-bellinger-stays-with-yankees-agrees-1625-million-5-year-contract-ap-source-says"
+    },
+    {
+      "player_id": 646240,
+      "name": "Rafael Devers",
+      "date": "2023-01-31",
+      "contract_start": 2024,
+      "contract_years": 10,
+      "payroll_summary_musd": 313.5,
+      "bonus_musd": 20,
+      "payments": [
+        [
+          2023,
+          5
+        ],
+        [
+          2024,
+          5
+        ],
+        [
+          2025,
+          5
+        ],
+        [
+          2026,
+          5
+        ]
+      ],
+      "source": "https://www.thescore.com/mlb/news/2543121",
+      "payroll_allocation": [
+        [
+          2024,
+          2.0
+        ],
+        [
+          2025,
+          2.0
+        ],
+        [
+          2026,
+          2.0
+        ],
+        [
+          2027,
+          2.0
+        ],
+        [
+          2028,
+          2.0
+        ],
+        [
+          2029,
+          2.0
+        ],
+        [
+          2030,
+          2.0
+        ],
+        [
+          2031,
+          2.0
+        ],
+        [
+          2032,
+          2.0
+        ],
+        [
+          2033,
+          2.0
+        ]
+      ]
+    },
+    {
+      "player_id": 596019,
+      "name": "Francisco Lindor",
+      "date": "2021-04-30",
+      "contract_start": 2022,
+      "contract_years": 10,
+      "payroll_summary_musd": 341.0,
+      "bonus_musd": 21,
+      "payments": [
+        [
+          2021,
+          21
+        ]
+      ],
+      "source": "https://m.washingtontimes.com/news/2021/apr/12/lindors-new-mets-deal-includes-21m-signing-bonus/",
+      "payroll_allocation": [
+        [
+          2022,
+          2.1
+        ],
+        [
+          2023,
+          2.1
+        ],
+        [
+          2024,
+          2.1
+        ],
+        [
+          2025,
+          2.1
+        ],
+        [
+          2026,
+          2.1
+        ],
+        [
+          2027,
+          2.1
+        ],
+        [
+          2028,
+          2.1
+        ],
+        [
+          2029,
+          2.1
+        ],
+        [
+          2030,
+          2.1
+        ],
+        [
+          2031,
+          2.1
+        ]
+      ]
+    },
+    {
+      "player_id": 547180,
+      "name": "Bryce Harper",
+      "date": "2019-03-31",
+      "contract_start": 2019,
+      "contract_years": 13,
+      "payroll_summary_musd": 330.0,
+      "bonus_musd": 20,
+      "payments": [
+        [
+          2019,
+          10
+        ],
+        [
+          2019,
+          10
+        ]
+      ],
+      "source": "https://www.nbcconnecticut.com/news/sports/Bryce-Time-Phillies-Announce-Harper-330-Deal-506596631.html",
+      "payroll_allocation": [
+        [
+          2019,
+          1.538462
+        ],
+        [
+          2020,
+          1.538462
+        ],
+        [
+          2021,
+          1.538462
+        ],
+        [
+          2022,
+          1.538462
+        ],
+        [
+          2023,
+          1.538462
+        ],
+        [
+          2024,
+          1.538462
+        ],
+        [
+          2025,
+          1.538462
+        ],
+        [
+          2026,
+          1.538462
+        ],
+        [
+          2027,
+          1.538462
+        ],
+        [
+          2028,
+          1.538462
+        ],
+        [
+          2029,
+          1.538462
+        ],
+        [
+          2030,
+          1.538462
+        ],
+        [
+          2031,
+          1.538456
+        ]
+      ]
+    },
+    {
+      "player_id": 669203,
+      "name": "Corbin Burnes",
+      "date": "2025-01-31",
+      "contract_start": 2025,
+      "contract_years": 6,
+      "payroll_summary_musd": 210.0,
+      "bonus_musd": 10,
+      "payments": [
+        [
+          2025,
+          10
+        ]
+      ],
+      "source": "https://www.mlbtraderumors.com/2025/01/details-on-corbin-burnes-contract.html",
+      "payroll_allocation": [
+        [
+          2025,
+          1.666667
+        ],
+        [
+          2026,
+          1.666667
+        ],
+        [
+          2027,
+          1.666667
+        ],
+        [
+          2028,
+          1.666667
+        ],
+        [
+          2029,
+          1.666667
+        ],
+        [
+          2030,
+          1.666665
+        ]
+      ]
+    },
+    {
+      "player_id": 621043,
+      "name": "Carlos Correa",
+      "date": "2023-01-31",
+      "contract_start": 2023,
+      "contract_years": 6,
+      "payroll_summary_musd": 200.0,
+      "bonus_musd": 8,
+      "payments": [
+        [
+          2023,
+          4
+        ],
+        [
+          2024,
+          4
+        ]
+      ],
+      "source": "https://www.mlbtraderumors.com/2023/01/twins-reach-agreement-sign-carlos-correa.html",
+      "payroll_allocation": [
+        [
+          2023,
+          1.333333
+        ],
+        [
+          2024,
+          1.333333
+        ],
+        [
+          2025,
+          1.333333
+        ],
+        [
+          2026,
+          1.333333
+        ],
+        [
+          2027,
+          1.333333
+        ],
+        [
+          2028,
+          1.333335
+        ]
+      ]
+    }
+  ]
+}
