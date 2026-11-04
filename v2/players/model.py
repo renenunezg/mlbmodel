@@ -34,6 +34,7 @@ MARKET_VALIDATION_CHECKS = frozenset({
     "original_contract_regression_removed", "later_arbitration_salary_accuracy_improves",
     "all_trade_assets_accounted", "paired_trade_gap_error_improves",
     "identified_trade_regressions_improve", "complete_scoring_population",
+    "offseason_trade_balance_no_worse",
 })
 MODELS_DIR = Path(__file__).resolve().parent / "models"
 DEFAULT_WINDOW = {0: 5.0, 1: 4.0, 2: 3.0}

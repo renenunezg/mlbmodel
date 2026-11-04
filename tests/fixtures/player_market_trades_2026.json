@@ -1,0 +1,1605 @@
+{
+ "first_season": 2026,
+ "selection": "Every two-club MLB trade announced from the day after the previous World Series through the day before North American Opening Day. Excluded when it involves three or more clubs, a player to be named later, cash with no reported amount, international bonus pool space, a draft pick outside Competitive Balance Round B, or a minor leaguer with no FanGraphs FV published on or before the trade date. Rule fixed before any trade was scored.",
+ "windows": [
+  [
+   "2025-11-02",
+   "2025-12-31"
+  ],
+  [
+   "2026-01-01",
+   "2026-03-24"
+  ]
+ ],
+ "searched_sources": [
+  "Baseball-Reference 2026 transactions log (https://www.baseball-reference.com/leagues/majors/2026-transactions.shtml): every January, February and March 2026 entry that mentions 'traded' or 'purchased'.",
+  "Baseball-Reference 2026 transactions page (covers Nov 2025 to Mar 2026), November and December 2025 entries: https://www.baseball-reference.com/leagues/MLB/2026-transactions.shtml",
+  "ESPN MLB transactions API, November 2025 and December 2025: https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/transactions?dates=202511 and dates=202512",
+  "FanGraphs blogs (blogs.fangraphs.com WordPress API): every 'Prospect List' team list from 2024-10 to 2026-03-24, 2025 Top 100 and updates (03-31, 07-29, 10-03), the 2026 Top 100, the 2025 deadline traded-prospect ranking, the 2025 Draft day-one recap, trade write-ups, and a name search for each traded minor leaguer. FanGraphs' The Board could not be read (Cloudflare challenge), so 'no FV' means none was found in published FanGraphs articles.",
+  "FanGraphs grades: blogs.fangraphs.com WordPress search API by player name, limited to posts on or before each trade date (team prospect lists, Top 100 updates, trade write-ups, Rule 5 scouting article)",
+  "MLB Stats API January to mid-February 2026 trades, checked only to confirm that Edward Cabrera, Josh Lowe, Brendan Donovan, Nolan Arenado, Caleb Durbin, Eric Wagaman and similar deals fall outside the window",
+  "MLB Stats API schedule: the first 2026 regular-season game was Yankees at Giants on 2026-03-25 (Oracle Park), so the window ends 2026-03-24.",
+  "MLB Stats API transactions, 2026-01-01 to 2026-03-24, all sports levels (statsapi.mlb.com/api/v1/transactions); every TR record reviewed, plus 2026-03-25 to 04-02 and 2025-12-28 to 12-31 to check the edges. Three TR records (2026-01-10, 2026-01-13, 2026-02-03) have no person or description and match no reported trade.",
+  "MLB Stats API transactions, typeCode TR, 2025-11-02 to 2025-12-31: sportId=1 (108 trade rows), no sport filter (141 rows; the extras are winter-league trades plus three rows with no description dated 2025-11-13, 2025-12-09 and 2025-12-16), minor-league sportIds 11-14, 16 (no extra MLB-club trades). https://statsapi.mlb.com/api/v1/transactions?startDate=2025-11-02&endDate=2025-12-31",
+  "MLB Trade Rumors monthly archives (https://www.mlbtraderumors.com/2026/01, /2026/02, /2026/03; every page): all post titles scanned for acquire/trade/swap/purchase/PTBNL.",
+  "MLB Trade Rumors posts (via web.archive.org) for trade terms, contracts and cash; MLB.com news articles for the Nimmo/Semien cash",
+  "MLB.com 2025-26 offseason transaction tracker (undated team-by-team list, used to confirm deals and three-team structures): https://www.mlb.com/news/mlb-2025-2026-free-agents-trades-offseason-transaction-tracker",
+  "Service time and contract status from Baseball-Reference player pages ('Service Time (01/2026)'); 2026 arbitration agreements from the MLB Trade Rumors 2026 Arbitration Tracker (2026-01-08).",
+  "Service time and contracts: Baseball-Reference player pages (Service Time (01/2026)), MLBTR 2026 arbitration tracker for agreement dates",
+  "Spot checks of MLB.com and AP reports for the Durbin pick, the Teng bonus pool money, the Woodford cash and the Peralta option."
+ ],
+ "trades": [
+  {
+   "name": "Robinson Ortiz for Tyler Gough",
+   "date": "2025-11-16",
+   "teams": [
+    "Los Angeles Dodgers",
+    "Seattle Mariners"
+   ],
+   "source": "https://www.mlbtraderumors.com/2025/11/mariners-acquire-robinson-ortiz-from-dodgers.html",
+   "left": [
+    {
+     "kind": "prospect",
+     "name": "Robinson Ortiz",
+     "player_id": 673662,
+     "fv": "35+",
+     "role": "pit",
+     "grade_source": "https://blogs.fangraphs.com/los-angeles-dodgers-top-51-prospects-2023/",
+     "grade_as_of": "2023-01-05",
+     "notes": "LHP on the Dodgers 40-man roster (selected about 10 days before the trade) with no MLB service time, so listed as a prospect. Latest FanGraphs FV found is from the 2023 Dodgers list; he does not appear in the 2024 or 2025 FanGraphs Dodgers lists, so the grade is stale."
+    }
+   ],
+   "right": [
+    {
+     "kind": "prospect",
+     "name": "Tyler Gough",
+     "player_id": 702640,
+     "fv": "35+",
+     "role": "pit",
+     "grade_source": "https://blogs.fangraphs.com/seattle-mariners-top-29-prospects/",
+     "grade_as_of": "2025-06-13"
+    }
+   ],
+   "notes": "Neither player had MLB experience. Dodgers cleared a 40-man spot ahead of the Rule 5 protection deadline."
+  },
+  {
+   "name": "Steven Wilson and Yoendrys Gomez for Everson Pereira and Tanner Murray",
+   "date": "2025-11-18",
+   "teams": [
+    "Chicago White Sox",
+    "Tampa Bay Rays"
+   ],
+   "source": "https://www.mlb.com/transactions/2025/11/18",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Steven Wilson",
+     "player_id": 621051,
+     "service_time": "3.166",
+     "service_source": "https://www.baseball-reference.com/players/w/wilsost02.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/w/wilsost02.shtml",
+     "notes": "Arbitration eligible for 2026; no 2026 salary agreed before the trade. Agreed $1.52M with Tampa Bay on 2026-01-08, after the trade."
+    },
+    {
+     "kind": "mlb",
+     "name": "Yoendrys Gomez",
+     "player_id": 672782,
+     "service_time": "0.135",
+     "service_source": "https://www.baseball-reference.com/players/g/gomezyo01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/g/gomezyo01.shtml",
+     "notes": "Pre-arbitration (B-R 2026 contract status: Pre-Arb Eligible); no signed contract for 2026 at the trade date."
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Everson Pereira",
+     "player_id": 677592,
+     "service_time": "0.090",
+     "service_source": "https://www.baseball-reference.com/players/p/pereiev01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/p/pereiev01.shtml",
+     "notes": "Pre-arbitration (B-R 2026 contract status: Pre-Arb Eligible); no signed contract for 2026 at the trade date."
+    },
+    {
+     "kind": "prospect",
+     "name": "Tanner Murray",
+     "player_id": 695020,
+     "fv": "40",
+     "role": "bat",
+     "grade_source": "https://blogs.fangraphs.com/tampa-bay-rays-top-56-prospects/",
+     "grade_as_of": "2025-02-28",
+     "notes": "2B/IF with no MLB service time at the trade date (MLB debut came in April 2026)."
+    }
+   ],
+   "notes": "Dated per the MLB Stats API transaction log; ESPN and Baseball-Reference agree on 2025-11-18."
+  },
+  {
+   "name": "Tristan Gray for Luis Guerrero",
+   "date": "2025-11-18",
+   "teams": [
+    "Tampa Bay Rays",
+    "Boston Red Sox"
+   ],
+   "source": "https://www.mlb.com/transactions/2025/11/18",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Tristan Gray",
+     "player_id": 656484,
+     "service_time": "0.123",
+     "service_source": "https://www.baseball-reference.com/players/g/graytr01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/g/graytr01.shtml",
+     "notes": "Pre-arbitration (B-R 2026 contract status: Pre-Arb Eligible); no signed contract for 2026 at the trade date."
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Luis Guerrero",
+     "player_id": 692285,
+     "service_time": "0.155",
+     "service_source": "https://www.baseball-reference.com/players/g/guerrlu01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/g/guerrlu01.shtml",
+     "notes": "Pre-arbitration (B-R 2026 contract status: Pre-Arb Eligible); no signed contract for 2026 at the trade date. ESPN's Rays note calls him a minor league RHP (he was off the 40-man), but he has MLB service time from 2024-25."
+    }
+   ],
+   "notes": ""
+  },
+  {
+   "name": "Taylor Ward for Grayson Rodriguez",
+   "date": "2025-11-19",
+   "teams": [
+    "Los Angeles Angels",
+    "Baltimore Orioles"
+   ],
+   "source": "https://www.mlb.com/transactions/2025/11/19",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Taylor Ward",
+     "player_id": 621493,
+     "service_time": "5.164",
+     "service_source": "https://www.baseball-reference.com/players/w/wardta01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/w/wardta01.shtml",
+     "notes": "Arbitration eligible for 2026; no 2026 salary agreed before the trade. Final arbitration year; free agent after 2026. Agreed $12.175M with Baltimore on 2026-01-08, after the trade."
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Grayson Rodriguez",
+     "player_id": 680570,
+     "service_time": "2.129",
+     "service_source": "https://www.baseball-reference.com/players/r/rodrigr01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/r/rodrigr01.shtml",
+     "notes": "Pre-arbitration for 2026 (2.129 did not reach Super Two per B-R); arbitration eligible from 2027, free agent after 2029. Missed all of 2025 with arm injuries."
+    }
+   ],
+   "notes": "Reported the night of 2025-11-18; MLB Stats API and ESPN log it on 2025-11-19."
+  },
+  {
+   "name": "Mauricio Dubon for Nick Allen",
+   "date": "2025-11-19",
+   "teams": [
+    "Houston Astros",
+    "Atlanta Braves"
+   ],
+   "source": "https://www.mlb.com/transactions/2025/11/19",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Mauricio Dubon",
+     "player_id": 643289,
+     "service_time": "5.162",
+     "service_source": "https://www.baseball-reference.com/players/d/dubonma01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/d/dubonma01.shtml",
+     "notes": "Arbitration eligible for 2026; no 2026 salary agreed before the trade. Final arbitration year. Agreed $6.1M with Atlanta on 2025-11-21, two days after the trade."
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Nick Allen",
+     "player_id": 669397,
+     "service_time": "2.164",
+     "service_source": "https://www.baseball-reference.com/players/a/allenni02.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/a/allenni02.shtml",
+     "notes": "Arbitration eligible for 2026; no 2026 salary agreed before the trade. Arbitration eligible as a Super Two. Agreed $1.4M with Houston on 2026-01-08, after the trade."
+    }
+   ],
+   "notes": ""
+  },
+  {
+   "name": "Alex Jackson for Payton Eeles",
+   "date": "2025-11-21",
+   "teams": [
+    "Baltimore Orioles",
+    "Minnesota Twins"
+   ],
+   "source": "https://www.mlb.com/transactions/2025/11/21",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Alex Jackson",
+     "player_id": 656577,
+     "service_time": "3.036",
+     "service_source": "https://www.baseball-reference.com/players/j/jacksal02.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/j/jacksal02.shtml",
+     "notes": "Arbitration eligible for 2026; no 2026 salary agreed before the trade. Agreed $1.35M with Minnesota on 2026-01-08, after the trade."
+    }
+   ],
+   "right": [
+    {
+     "kind": "prospect",
+     "name": "Payton Eeles",
+     "player_id": 823356,
+     "fv": "40+",
+     "role": "bat",
+     "grade_source": "https://blogs.fangraphs.com/minnesota-twins-top-43-prospects/",
+     "grade_as_of": "2025-06-18",
+     "notes": "2B with no MLB service time at the trade date."
+    }
+   ],
+   "notes": "Made on the non-tender deadline day."
+  },
+  {
+   "name": "Brandon Nimmo and cash for Marcus Semien",
+   "date": "2025-11-24",
+   "teams": [
+    "New York Mets",
+    "Texas Rangers"
+   ],
+   "source": "https://www.mlb.com/press-release/mets-acquire-all-star-inf-marcus-semien",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Brandon Nimmo",
+     "player_id": 607043,
+     "service_time": "9.042",
+     "service_source": "https://www.baseball-reference.com/players/n/nimmobr01.shtml",
+     "contract": {
+      "guaranteed": [
+       {
+        "season": 2026,
+        "salary_musd": 20.5
+       },
+       {
+        "season": 2027,
+        "salary_musd": 20.5
+       },
+       {
+        "season": 2028,
+        "salary_musd": 20.5
+       },
+       {
+        "season": 2029,
+        "salary_musd": 20.5
+       },
+       {
+        "season": 2030,
+        "salary_musd": 20.5
+       }
+      ],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.mlb.com/news/rangers-trade-with-mets-brandon-nimmo-marcus-semien",
+     "notes": "8 years/$162M signed before 2023 ($18.5M in 2023, $20.5M each year 2024-2030 per Baseball-Reference); $102.5M remaining. Waived his full no-trade clause to approve the deal."
+    },
+    {
+     "kind": "cash",
+     "name": "Mets pay $5M to Texas",
+     "cash_musd": [
+      5.0
+     ],
+     "source": "https://www.mlb.com/news/mets-rangers-trade-brandon-nimmo-marcus-semien",
+     "notes": "Total of $5M reported (Jon Heyman; confirmed by MLB.com source). Payment schedule not reported; entered in 2026."
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Marcus Semien",
+     "player_id": 543760,
+     "service_time": "11.118",
+     "service_source": "https://www.baseball-reference.com/players/s/semiema01.shtml",
+     "contract": {
+      "guaranteed": [
+       {
+        "season": 2026,
+        "salary_musd": 26.0
+       },
+       {
+        "season": 2027,
+        "salary_musd": 26.0
+       },
+       {
+        "season": 2028,
+        "salary_musd": 20.0
+       }
+      ],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.mlb.com/news/mets-rangers-trade-brandon-nimmo-marcus-semien",
+     "notes": "7 years/$175M signed December 2021; $72M remaining (2026-2028 split per Baseball-Reference). No no-trade clause per MLB.com."
+    }
+   ],
+   "notes": "Agreed 2025-11-23, finalized and announced 2025-11-24."
+  },
+  {
+   "name": "Isaac Collins and Nick Mears for Angel Zerpa",
+   "date": "2025-12-14",
+   "teams": [
+    "Milwaukee Brewers",
+    "Kansas City Royals"
+   ],
+   "source": "https://www.mlb.com/news/royals-trade-brewers-isaac-collins-nick-mears-angel-zerpa",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Isaac Collins",
+     "player_id": 686555,
+     "service_time": "1.022",
+     "service_source": "https://www.baseball-reference.com/players/c/colliis01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/c/colliis01.shtml",
+     "notes": "Pre-arbitration (B-R 2026 contract status: Pre-Arb Eligible); no signed contract for 2026 at the trade date. Arbitration eligible from 2028, free agent after 2030. Fourth in 2025 NL Rookie of the Year voting."
+    },
+    {
+     "kind": "mlb",
+     "name": "Nick Mears",
+     "player_id": 683232,
+     "service_time": "4.022",
+     "service_source": "https://www.baseball-reference.com/players/m/mearsni01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/m/mearsni01.shtml",
+     "notes": "Arbitration eligible for 2026; no 2026 salary agreed before the trade. Free agent after 2027. Agreed $1.9M with Kansas City on 2026-01-08, after the trade."
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Angel Zerpa",
+     "player_id": 672582,
+     "service_time": "3.082",
+     "service_source": "https://www.baseball-reference.com/players/z/zerpaan01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/z/zerpaan01.shtml",
+     "notes": "Arbitration eligible for 2026; no 2026 salary agreed before the trade. First arbitration year. Agreed $1.095M with Milwaukee on 2026-01-08, after the trade."
+    }
+   ],
+   "notes": "Reported 2025-12-13; logged 2025-12-14 by the MLB Stats API, ESPN and Baseball-Reference."
+  },
+  {
+   "name": "Luis Perales for Jake Bennett",
+   "date": "2025-12-15",
+   "teams": [
+    "Boston Red Sox",
+    "Washington Nationals"
+   ],
+   "source": "https://www.mlbtraderumors.com/2025/12/red-sox-nationals-to-swap-luis-perales-jake-bennett.html",
+   "left": [
+    {
+     "kind": "prospect",
+     "name": "Luis Perales",
+     "player_id": 691384,
+     "fv": "45",
+     "role": "pit",
+     "grade_source": "https://blogs.fangraphs.com/boston-red-sox-top-45-prospects/",
+     "grade_as_of": "2025-06-25",
+     "notes": "RHP on the 40-man roster with no MLB service time; missed nearly all of 2025 after Tommy John surgery (the FanGraphs grade predates his return)."
+    }
+   ],
+   "right": [
+    {
+     "kind": "prospect",
+     "name": "Jake Bennett",
+     "player_id": 687562,
+     "fv": "45",
+     "role": "pit",
+     "grade_source": "https://blogs.fangraphs.com/washington-nationals-top-39-prospects/",
+     "grade_as_of": "2025-07-07",
+     "notes": "LHP on the 40-man roster with no MLB service time."
+    }
+   ],
+   "notes": "Prospect-for-prospect swap; both players on 40-man rosters without MLB experience."
+  },
+  {
+   "name": "Matt Strahm for Jonathan Bowlan",
+   "date": "2025-12-19",
+   "teams": [
+    "Philadelphia Phillies",
+    "Kansas City Royals"
+   ],
+   "source": "https://www.mlbtraderumors.com/2025/12/royals-to-acquire-matt-strahm.html",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Matt Strahm",
+     "player_id": 621381,
+     "service_time": "9.064",
+     "service_source": "https://www.baseball-reference.com/players/s/strahma01.shtml",
+     "contract": {
+      "guaranteed": [
+       {
+        "season": 2026,
+        "salary_musd": 7.5
+       }
+      ],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.mlbtraderumors.com/2025/12/royals-to-acquire-matt-strahm.html",
+     "notes": "2026 is the club option from his 2023 deal ($4.5M base, escalated to $7.5M on 2025 innings), picked up before the trade; MLBTR cites his $7.5M 2026 salary. Free agent after 2026."
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Jonathan Bowlan",
+     "player_id": 680742,
+     "service_time": "0.116",
+     "service_source": "https://www.baseball-reference.com/players/b/bowlajo01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/b/bowlajo01.shtml",
+     "notes": "Pre-arbitration (B-R 2026 contract status: Pre-Arb Eligible); no signed contract for 2026 at the trade date."
+    }
+   ],
+   "notes": ""
+  },
+  {
+   "name": "Willson Contreras and cash for Hunter Dobbins, Yhoiker Fajardo and Blake Aita",
+   "date": "2025-12-22",
+   "teams": [
+    "St. Louis Cardinals",
+    "Boston Red Sox"
+   ],
+   "source": "https://www.mlbtraderumors.com/2025/12/red-sox-acquire-willson-contreras.html",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Willson Contreras",
+     "player_id": 575929,
+     "service_time": "9.108",
+     "service_source": "https://www.baseball-reference.com/players/c/contrwi01.shtml",
+     "contract": {
+      "guaranteed": [
+       {
+        "season": 2026,
+        "salary_musd": 18.0
+       },
+       {
+        "season": 2027,
+        "salary_musd": 17.0
+       }
+      ],
+      "options": [
+       {
+        "season": 2028,
+        "kind": "team",
+        "amount_musd": 20.0,
+        "buyout_musd": 7.5
+       }
+      ],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.mlbtraderumors.com/2025/12/red-sox-acquire-willson-contreras.html",
+     "notes": "Contract reworked as part of the trade (previously $18M 2026, $18.5M 2027, $17.5M 2028 club option with $5M buyout). $42.5M guaranteed remaining including the buyout. He also received an extra $1M bonus for waiving his full no-trade clause (MLBTR; payer and timing not stated)."
+    },
+    {
+     "kind": "cash",
+     "name": "Cardinals pay $8M to Boston",
+     "cash_musd": [
+      8.0
+     ],
+     "source": "https://www.mlbtraderumors.com/2025/12/red-sox-acquire-willson-contreras.html",
+     "notes": "Total of $8M reported; payment schedule not reported, entered in 2026. Boston's net commitment $34.5M."
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Hunter Dobbins",
+     "player_id": 690928,
+     "service_time": "0.152",
+     "service_source": "https://www.baseball-reference.com/players/d/dobbihu01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/d/dobbihu01.shtml",
+     "notes": "Pre-arbitration (B-R 2026 contract status: Pre-Arb Eligible); no signed contract for 2026 at the trade date."
+    },
+    {
+     "kind": "prospect",
+     "name": "Yhoiker Fajardo",
+     "player_id": 823369,
+     "fv": "35+",
+     "role": "pit",
+     "grade_source": "https://blogs.fangraphs.com/boston-red-sox-top-45-prospects/",
+     "grade_as_of": "2025-06-25"
+    },
+    {
+     "kind": "prospect",
+     "name": "Blake Aita",
+     "player_id": 820832,
+     "fv": "35+",
+     "role": "pit",
+     "grade_source": "https://blogs.fangraphs.com/boston-red-sox-top-45-prospects/",
+     "grade_as_of": "2025-06-25",
+     "notes": "The FanGraphs write-up of this trade (2025-12-22) discusses Fajardo and Aita but gives no new FV."
+    }
+   ],
+   "notes": "Reported 2025-12-21; officially logged 2025-12-22."
+  },
+  {
+   "name": "Jake McCarthy to Rockies for Josh Grosz",
+   "date": "2026-01-10",
+   "teams": [
+    "Arizona Diamondbacks",
+    "Colorado Rockies"
+   ],
+   "source": "https://www.mlbtraderumors.com/2026/01/rockies-acquire-jake-mccarthy-from-diamondbacks.html",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Jake McCarthy",
+     "player_id": 664983,
+     "service_time": "3.074",
+     "service_source": "https://www.baseball-reference.com/players/m/mccarja02.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": 1.525,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.mlbtraderumors.com/2026/01/2026-arbitration-tracker.html",
+     "notes": "Arbitration-eligible (first of three arb years in 2026; free agent after 2028 per B-Ref). Agreed $1.525M with Arizona on the Jan 8 filing day, two days before the trade."
+    }
+   ],
+   "right": [
+    {
+     "kind": "prospect",
+     "name": "Josh Grosz",
+     "player_id": 701056,
+     "fv": "35+",
+     "role": "pit",
+     "grade_source": "https://blogs.fangraphs.com/ranking-the-mlb-prospects-traded-at-the-2025-deadline/",
+     "grade_as_of": "2025-08-03",
+     "notes": "Same 35+ also stated by Longenhagen in the 2025-07-25 McMahon trade write-up."
+    }
+   ],
+   "notes": "Official date per MLB Stats API transactions and Baseball-Reference: 2026-01-10."
+  },
+  {
+   "name": "Freddy Peralta and Tobias Myers to Mets for Brandon Sproat and Jett Williams",
+   "date": "2026-01-21",
+   "teams": [
+    "Milwaukee Brewers",
+    "New York Mets"
+   ],
+   "source": "https://www.mlbtraderumors.com/2026/01/mets-trade-for-freddy-peralta.html",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Freddy Peralta",
+     "player_id": 642547,
+     "service_time": "7.090",
+     "service_source": "https://www.baseball-reference.com/players/p/peralfr01.shtml",
+     "contract": {
+      "guaranteed": [
+       {
+        "season": 2026,
+        "salary_musd": 8.0
+       }
+      ],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.nbcsports.com/mlb/news/woodruff-declines-option-with-brewers-who-exercise-option-on-peralta-decline-option-on-jansen",
+     "notes": "Final year of his 2019 extension (7 years/$30M total including options); Brewers exercised the $8M 2026 club option on 2025-11-03. Free agent after 2026."
+    },
+    {
+     "kind": "mlb",
+     "name": "Tobias Myers",
+     "player_id": 668964,
+     "service_time": "1.109",
+     "service_source": "https://www.baseball-reference.com/players/m/myersto01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/m/myersto01.shtml",
+     "notes": "Pre-arbitration (Baseball-Reference 2026 contract status: Pre-Arb Eligible); no signed multi-year contract; 2026 salary not set at trade time."
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Brandon Sproat",
+     "player_id": 687075,
+     "service_time": "0.022",
+     "service_source": "https://www.baseball-reference.com/players/s/sproabr01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/s/sproabr01.shtml",
+     "notes": "Pre-arbitration (Baseball-Reference 2026 contract status: Pre-Arb Eligible); no signed multi-year contract; 2026 salary not set at trade time. Debuted 2025-09-07, so he counts as an MLB player; still prospect-eligible (FanGraphs FV 50 in the 2025-07-29 Pre-Deadline Top 100 update, 55 in the 2025 Top 100)."
+    },
+    {
+     "kind": "prospect",
+     "name": "Jett Williams",
+     "player_id": 702518,
+     "fv": "50",
+     "role": "bat",
+     "grade_source": "https://blogs.fangraphs.com/2025-end-of-season-top-100-prospects-update/",
+     "grade_as_of": "2025-10-03",
+     "notes": "Also 50 in the 2025 Mets list (2025-06-27) and the 2025-07-29 update."
+    }
+   ],
+   "notes": "Official date 2026-01-21 (MLB Stats API, Baseball-Reference)."
+  },
+  {
+   "name": "MacKenzie Gore to Rangers for five prospects",
+   "date": "2026-01-22",
+   "teams": [
+    "Washington Nationals",
+    "Texas Rangers"
+   ],
+   "source": "https://www.mlbtraderumors.com/2026/01/rangers-to-acquire-mackenzie-gore.html",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "MacKenzie Gore",
+     "player_id": 669022,
+     "service_time": "4.000",
+     "service_source": "https://www.baseball-reference.com/players/g/gorema01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": 5.6,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.mlbtraderumors.com/2026/01/2026-arbitration-tracker.html",
+     "notes": "Arbitration-eligible; agreed $5.6M with Washington on the Jan 8 filing day (before the trade). Two years of control remain (free agent after 2027)."
+    }
+   ],
+   "right": [
+    {
+     "kind": "prospect",
+     "name": "Gavin Fien",
+     "player_id": 815818,
+     "fv": "40+",
+     "role": "bat",
+     "grade_source": "https://blogs.fangraphs.com/2025-mlb-draft-day-one-recap/",
+     "grade_as_of": "2025-07-14",
+     "notes": "2025 first-round pick (12th overall). No later FanGraphs list grade before the trade."
+    },
+    {
+     "kind": "prospect",
+     "name": "Devin Fitz-Gerald",
+     "player_id": 803849,
+     "fv": "45",
+     "role": "bat",
+     "grade_source": "https://blogs.fangraphs.com/texas-rangers-top-45-prospects/",
+     "grade_as_of": "2025-06-09"
+    },
+    {
+     "kind": "prospect",
+     "name": "Alejandro Rosario",
+     "player_id": 691730,
+     "fv": "50",
+     "role": "pit",
+     "grade_source": "https://blogs.fangraphs.com/pre-deadline-top-100-prospects-update/",
+     "grade_as_of": "2025-07-29",
+     "notes": "Not graded in the 2025-10-03 End-of-Season Top 100 update; elbow injury, Tommy John surgery planned after the trade (FanGraphs 2026-01-22)."
+    },
+    {
+     "kind": "prospect",
+     "name": "Yeremy Cabrera",
+     "player_id": 800393,
+     "fv": "40",
+     "role": "bat",
+     "grade_source": "https://blogs.fangraphs.com/texas-rangers-top-45-prospects/",
+     "grade_as_of": "2025-06-09"
+    },
+    {
+     "kind": "prospect",
+     "name": "Abimelec Ortiz",
+     "player_id": 694673,
+     "fv": "35+",
+     "role": "bat",
+     "grade_source": "https://blogs.fangraphs.com/texas-rangers-top-45-prospects/",
+     "grade_as_of": "2025-06-09",
+     "notes": "On the 40-man roster but no MLB service at trade time (MLB debut 2026-07-12), so listed as a prospect."
+    }
+   ],
+   "notes": "FanGraphs' trade-day write-up (Ben Clemens, 2026-01-22) described the package as 'a 45+, a 45, a 40+, a 40, and a 35+, give or take' without naming which player got which grade; that may mean the Board grades on trade day differed from the per-player values above (e.g. Fitz-Gerald 45+ and Rosario 45). The per-player values used are the latest explicitly attributed grades."
+  },
+  {
+   "name": "Angel Chivilli to Yankees for T.J. Rumfield",
+   "date": "2026-01-28",
+   "teams": [
+    "Colorado Rockies",
+    "New York Yankees"
+   ],
+   "source": "https://www.mlbtraderumors.com/2026/01/yankees-trade-angel-chivilli-rockies-t-j-rumfield.html",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Angel Chivilli",
+     "player_id": 683409,
+     "service_time": "1.036",
+     "service_source": "https://www.baseball-reference.com/players/c/chivian01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/c/chivian01.shtml",
+     "notes": "Pre-arbitration (Baseball-Reference 2026 contract status: Pre-Arb Eligible); no signed multi-year contract; 2026 salary not set at trade time."
+    }
+   ],
+   "right": [
+    {
+     "kind": "prospect",
+     "name": "T.J. Rumfield",
+     "player_id": 681198,
+     "fv": "40",
+     "role": "bat",
+     "grade_source": "https://blogs.fangraphs.com/new-york-yankees-top-45-prospects/",
+     "grade_as_of": "2025-01-31",
+     "notes": "No MLB service at trade time (MLB debut 2026-03-27). The 2025-01-31 grade is the latest explicit FanGraphs grade found before the trade."
+    }
+   ],
+   "notes": ""
+  },
+  {
+   "name": "Victor Mesa Jr. to Rays for Angel Brachi",
+   "date": "2026-02-06",
+   "teams": [
+    "Miami Marlins",
+    "Tampa Bay Rays"
+   ],
+   "source": "https://www.mlbtraderumors.com/2026/02/rays-claim-victor-mesa-jr-waivers-marlins.html",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Victor Mesa Jr.",
+     "player_id": 683748,
+     "service_time": "0.034",
+     "service_source": "https://www.baseball-reference.com/players/m/mesavi01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/m/mesavi01.shtml",
+     "notes": "Pre-arbitration (Baseball-Reference 2026 contract status: Pre-Arb Eligible); no signed multi-year contract; 2026 salary not set at trade time."
+    }
+   ],
+   "right": [
+    {
+     "kind": "prospect",
+     "name": "Angel Brachi",
+     "player_id": 821791,
+     "fv": "35+",
+     "role": "bat",
+     "grade_source": "https://blogs.fangraphs.com/tampa-bay-rays-top-56-prospects/",
+     "grade_as_of": "2025-02-28"
+    }
+   ],
+   "notes": "MLBTR URL slug says waiver claim, but MLB Stats API and Baseball-Reference record a trade for infielder Angel Brachi."
+  },
+  {
+   "name": "Caleb Durbin six-player trade",
+   "date": "2026-02-09",
+   "teams": [
+    "Boston Red Sox",
+    "Milwaukee Brewers"
+   ],
+   "source": "https://www.mlb.com/news/red-sox-acquire-three-players-from-milwaukee-brewers",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Kyle Harrison",
+     "player_id": 690986,
+     "service_time": "1.102",
+     "service_source": "https://www.baseball-reference.com/players/h/harriky01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/h/harriky01.shtml",
+     "notes": "Pre-arbitration (Baseball-Reference 2026 contract status: Pre-Arb Eligible); no signed multi-year contract; 2026 salary not set at trade time."
+    },
+    {
+     "kind": "prospect",
+     "name": "Shane Drohan",
+     "player_id": 675660,
+     "fv": "35+",
+     "role": "pit",
+     "grade_source": "https://blogs.fangraphs.com/boston-red-sox-top-45-prospects/",
+     "grade_as_of": "2025-06-25",
+     "notes": "No MLB service at trade time (MLB debut 2026-04-08). FanGraphs raised him to 40+ in its 2026-02-10 trade write-up, after the trade."
+    },
+    {
+     "kind": "mlb",
+     "name": "David Hamilton",
+     "player_id": 666152,
+     "service_time": "2.011",
+     "service_source": "https://www.baseball-reference.com/players/h/hamilda03.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/h/hamilda03.shtml",
+     "notes": "Pre-arbitration (Baseball-Reference 2026 contract status: Pre-Arb Eligible); no signed multi-year contract; 2026 salary not set at trade time."
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Caleb Durbin",
+     "player_id": 702332,
+     "service_time": "0.164",
+     "service_source": "https://www.baseball-reference.com/players/d/durbica01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/d/durbica01.shtml",
+     "notes": "Pre-arbitration (Baseball-Reference 2026 contract status: Pre-Arb Eligible); no signed multi-year contract; 2026 salary not set at trade time."
+    },
+    {
+     "kind": "mlb",
+     "name": "Andruw Monasterio",
+     "player_id": 655316,
+     "service_time": "2.099",
+     "service_source": "https://www.baseball-reference.com/players/m/monasan01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/m/monasan01.shtml",
+     "notes": "Pre-arbitration (Baseball-Reference 2026 contract status: Pre-Arb Eligible); no signed multi-year contract; 2026 salary not set at trade time."
+    },
+    {
+     "kind": "mlb",
+     "name": "Anthony Seigler",
+     "player_id": 678011,
+     "service_time": "0.090",
+     "service_source": "https://www.baseball-reference.com/players/s/seiglan01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/s/seiglan01.shtml",
+     "notes": "Pre-arbitration (Baseball-Reference 2026 contract status: Pre-Arb Eligible); no signed multi-year contract; 2026 salary not set at trade time."
+    },
+    {
+     "kind": "draft_pick",
+     "name": "2026 Competitive Balance Round B pick (Brewers' pick to Red Sox)",
+     "pick_range": [
+      67,
+      67
+     ],
+     "source": "https://www.mlb.com/news/red-sox-acquire-three-players-from-milwaukee-brewers"
+    }
+   ],
+   "notes": "MLB Stats API lists the pick as 'Future Considerations'; the clubs' releases identify it as Milwaukee's 2026 Competitive Balance Round B pick. Pick number 67 is from post-draft reporting (Boston Globe 2026 draft guide); pre-draft reports said 67 or 68."
+  },
+  {
+   "name": "George Soriano to Cardinals for Andre Granillo",
+   "date": "2026-02-10",
+   "teams": [
+    "Washington Nationals",
+    "St. Louis Cardinals"
+   ],
+   "source": "https://www.mlbtraderumors.com/2026/02/nationals-to-trade-george-soriano-to-cardinals.html",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "George Soriano",
+     "player_id": 666277,
+     "service_time": "1.095",
+     "service_source": "https://www.baseball-reference.com/players/s/soriage01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/s/soriage01.shtml",
+     "notes": "Pre-arbitration (Baseball-Reference 2026 contract status: Pre-Arb Eligible); no signed multi-year contract; 2026 salary not set at trade time. Washington had claimed him off waivers from Atlanta on 2026-01-30."
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Andre Granillo",
+     "player_id": 701552,
+     "service_time": "0.076",
+     "service_source": "https://www.baseball-reference.com/players/g/granian01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/g/granian01.shtml",
+     "notes": "Pre-arbitration (Baseball-Reference 2026 contract status: Pre-Arb Eligible); no signed multi-year contract; 2026 salary not set at trade time."
+    }
+   ],
+   "notes": ""
+  },
+  {
+   "name": "Mitch Spence to Royals for A.J. Causey",
+   "date": "2026-02-12",
+   "teams": [
+    "Athletics",
+    "Kansas City Royals"
+   ],
+   "source": "https://www.mlbtraderumors.com/2026/02/athletics-trade-mitch-spence-royals.html",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Mitch Spence",
+     "player_id": 687765,
+     "service_time": "1.124",
+     "service_source": "https://www.baseball-reference.com/players/s/spencmi01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/s/spencmi01.shtml",
+     "notes": "Pre-arbitration (Baseball-Reference 2026 contract status: Pre-Arb Eligible); no signed multi-year contract; 2026 salary not set at trade time."
+    }
+   ],
+   "right": [
+    {
+     "kind": "prospect",
+     "name": "A.J. Causey",
+     "player_id": 822067,
+     "fv": "35+",
+     "role": "pit",
+     "grade_source": "https://blogs.fangraphs.com/kansas-city-royals-top-35-prospects/",
+     "grade_as_of": "2025-05-29"
+    }
+   ],
+   "notes": ""
+  },
+  {
+   "name": "Joey Loperfido for Jesus Sanchez",
+   "date": "2026-02-13",
+   "teams": [
+    "Toronto Blue Jays",
+    "Houston Astros"
+   ],
+   "source": "https://www.mlbtraderumors.com/2026/02/astros-trade-jesus-sanchez-blue-jays-joey-loperfido.html",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Joey Loperfido",
+     "player_id": 694388,
+     "service_time": "1.021",
+     "service_source": "https://www.baseball-reference.com/players/l/loperjo01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/l/loperjo01.shtml",
+     "notes": "Pre-arbitration (Baseball-Reference 2026 contract status: Pre-Arb Eligible); no signed multi-year contract; 2026 salary not set at trade time."
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Jes\u00fas S\u00e1nchez",
+     "player_id": 660821,
+     "service_time": "4.118",
+     "service_source": "https://www.baseball-reference.com/players/s/sanchje02.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": 6.8,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.mlbtraderumors.com/2026/01/2026-arbitration-tracker.html",
+     "notes": "Arbitration-eligible; agreed $6.8M with Houston on the Jan 8 filing day (before the trade). Free agent after 2027."
+    }
+   ],
+   "notes": "Loperfido returns to Houston, which had traded him to Toronto in 2024."
+  },
+  {
+   "name": "Tyler Callihan for Kyle Nicolas",
+   "date": "2026-03-04",
+   "teams": [
+    "Cincinnati Reds",
+    "Pittsburgh Pirates"
+   ],
+   "source": "https://www.mlbtraderumors.com/2026/03/pirates-reds-swap-tyler-callihan-for-kyle-nicolas.html",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Tyler Callihan",
+     "player_id": 682997,
+     "service_time": "0.152",
+     "service_source": "https://www.baseball-reference.com/players/c/callity01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/c/callity01.shtml",
+     "notes": "Pre-arbitration (Baseball-Reference 2026 contract status: Pre-Arb Eligible); no signed multi-year contract; 2026 salary not set at trade time."
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Kyle Nicolas",
+     "player_id": 693312,
+     "service_time": "1.090",
+     "service_source": "https://www.baseball-reference.com/players/n/nicolky01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/n/nicolky01.shtml",
+     "notes": "Pre-arbitration (Baseball-Reference 2026 contract status: Pre-Arb Eligible); no signed multi-year contract; 2026 salary not set at trade time."
+    }
+   ],
+   "notes": ""
+  },
+  {
+   "name": "Jorbit Vivas to Nationals for Sean Paul Li\u00f1an",
+   "date": "2026-03-22",
+   "teams": [
+    "New York Yankees",
+    "Washington Nationals"
+   ],
+   "source": "https://www.mlbtraderumors.com/2026/03/nationals-to-acquire-jorbit-vivas.html",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Jorbit Vivas",
+     "player_id": 678391,
+     "service_time": "0.056",
+     "service_source": "https://www.baseball-reference.com/players/v/vivasjo01.shtml",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://www.baseball-reference.com/players/v/vivasjo01.shtml",
+     "notes": "Pre-arbitration (Baseball-Reference 2026 contract status: Pre-Arb Eligible); no signed multi-year contract; 2026 salary not set at trade time."
+    }
+   ],
+   "right": [
+    {
+     "kind": "prospect",
+     "name": "Sean Paul Li\u00f1an",
+     "player_id": 800344,
+     "fv": "40",
+     "role": "pit",
+     "grade_source": "https://blogs.fangraphs.com/ranking-the-mlb-prospects-traded-at-the-2025-deadline/",
+     "grade_as_of": "2025-08-03",
+     "notes": "Also 40 in the 2025 Dodgers list (April 2025)."
+    }
+   ],
+   "notes": ""
+  }
+ ],
+ "excluded": [
+  {
+   "name": "Ryan Vilade to Rays for cash",
+   "date": "2025-11-03",
+   "source": "https://www.mlb.com/transactions/2025/11/3",
+   "reason": "cash considerations with no reported amount"
+  },
+  {
+   "name": "Andrew Kittredge to Orioles for cash",
+   "date": "2025-11-04",
+   "source": "https://www.mlb.com/transactions/2025/11/4",
+   "reason": "cash considerations with no reported amount"
+  },
+  {
+   "name": "Joey Gerber to Mets for cash",
+   "date": "2025-11-04",
+   "source": "https://www.mlb.com/transactions/2025/11/4",
+   "reason": "cash considerations with no reported amount"
+  },
+  {
+   "name": "Cole Wilcox to Mariners for cash",
+   "date": "2025-11-05",
+   "source": "https://www.mlb.com/transactions/2025/11/5",
+   "reason": "cash considerations with no reported amount"
+  },
+  {
+   "name": "Kameron Misner to Royals for PTBNL",
+   "date": "2025-11-10",
+   "source": "https://www.mlb.com/transactions/2025/11/10",
+   "reason": "player to be named later (completed by minor leaguer Matthew Hoskins on 2026-03-13)"
+  },
+  {
+   "name": "Mason Black for Logan Martin",
+   "date": "2025-11-11",
+   "source": "https://www.mlb.com/transactions/2025/11/11",
+   "reason": "minor-league player without FV: no public FanGraphs FV found on or before the trade date for Logan Martin (named without FV in the 2025 Royals list's other prospects section) (searched FanGraphs articles and team lists; FanGraphs The Board could not be checked because it sits behind a Cloudflare challenge)"
+  },
+  {
+   "name": "Eric Orze for Jacob Kisting",
+   "date": "2025-11-18",
+   "source": "https://www.mlb.com/transactions/2025/11/18",
+   "reason": "minor-league player without FV: no public FanGraphs FV found on or before the trade date for Jacob Kisting (searched FanGraphs articles and team lists; FanGraphs The Board could not be checked because it sits behind a Cloudflare challenge)"
+  },
+  {
+   "name": "Brennan Bernardino for Braiden Ward",
+   "date": "2025-11-18",
+   "source": "https://www.mlb.com/transactions/2025/11/18",
+   "reason": "minor-league player without FV: no public FanGraphs FV found on or before the trade date for Braiden Ward (only named without FV in older Rockies lists) (searched FanGraphs articles and team lists; FanGraphs The Board could not be checked because it sits behind a Cloudflare challenge)"
+  },
+  {
+   "name": "Alex Hoppe for Luke Heyman",
+   "date": "2025-11-18",
+   "source": "https://www.mlb.com/transactions/2025/11/18",
+   "reason": "minor-league player without FV: no public FanGraphs FV found on or before the trade date for Luke Heyman (Hoppe had 35+) (searched FanGraphs articles and team lists; FanGraphs The Board could not be checked because it sits behind a Cloudflare challenge)"
+  },
+  {
+   "name": "Chris Murphy for Ronny Hernandez",
+   "date": "2025-11-18",
+   "source": "https://www.mlb.com/transactions/2025/11/18",
+   "reason": "minor-league player without FV: no public FanGraphs FV found on or before the trade date for Ronny Hernandez (named without FV in the 2025 White Sox list's depth section) (searched FanGraphs articles and team lists; FanGraphs The Board could not be checked because it sits behind a Cloudflare challenge)"
+  },
+  {
+   "name": "Ryan Rolison to Braves for cash",
+   "date": "2025-11-19",
+   "source": "https://www.mlb.com/transactions/2025/11/19",
+   "reason": "cash considerations with no reported amount"
+  },
+  {
+   "name": "Joey Wiemer to Giants for cash",
+   "date": "2025-11-21",
+   "source": "https://www.mlb.com/transactions/2025/11/21",
+   "reason": "cash considerations with no reported amount"
+  },
+  {
+   "name": "Sonny Gray and cash for Richard Fitts, Brandon Clarke and PTBNL",
+   "date": "2025-11-25",
+   "source": "https://www.mlb.com/transactions/2025/11/25",
+   "reason": "player to be named later (completed by minor leaguer Patrick Galle on 2026-04-05)"
+  },
+  {
+   "name": "Johan Oviedo, Tyler Samaniego and Adonys Guzman for Jhostynxon Garcia and Jesus Travieso",
+   "date": "2025-12-04",
+   "source": "https://www.mlb.com/transactions/2025/12/4",
+   "reason": "minor-league player without FV: no public FanGraphs FV found on or before the trade date for Adonys Guzman and Jesus Travieso (Travieso named without FV in the 2025 Red Sox list) (searched FanGraphs articles and team lists; FanGraphs The Board could not be checked because it sits behind a Cloudflare challenge)"
+  },
+  {
+   "name": "Nico Zeglin to Astros",
+   "date": "2025-12-04",
+   "source": "https://www.mlb.com/transactions/2025/12/4",
+   "reason": "international bonus pool money (ESPN; the MLB Stats API logs it as cash with no amount)"
+  },
+  {
+   "name": "Jose A. Ferrer for Harry Ford and Isaac Lyon",
+   "date": "2025-12-06",
+   "source": "https://www.mlb.com/transactions/2025/12/6",
+   "reason": "minor-league player without FV: no public FanGraphs FV found on or before the trade date for Isaac Lyon (2025 10th-round pick; the 2025-12-07 FanGraphs trade write-up scouts him but gives no FV; Ford was 50 FV) (searched FanGraphs articles and team lists; FanGraphs The Board could not be checked because it sits behind a Cloudflare challenge)"
+  },
+  {
+   "name": "Vaughn Grissom for Isaiah Jackson",
+   "date": "2025-12-09",
+   "source": "https://www.mlb.com/transactions/2025/12/9",
+   "reason": "minor-league player without FV: no public FanGraphs FV found on or before the trade date for Isaiah Jackson (searched FanGraphs articles and team lists; FanGraphs The Board could not be checked because it sits behind a Cloudflare challenge)"
+  },
+  {
+   "name": "Yoniel Curet for Tommy McCollum",
+   "date": "2025-12-10",
+   "source": "https://www.mlb.com/transactions/2025/12/10",
+   "reason": "minor-league player without FV: no public FanGraphs FV found on or before the trade date for Tommy McCollum (named without FV in older Phillies lists; Curet was 50 FV) (searched FanGraphs articles and team lists; FanGraphs The Board could not be checked because it sits behind a Cloudflare challenge)"
+  },
+  {
+   "name": "Ryan Watson for Justin Riemer and cash",
+   "date": "2025-12-10",
+   "source": "https://www.mlb.com/transactions/2025/12/10",
+   "reason": "cash considerations with no reported amount; also no public FanGraphs FV found on or before the trade date for Ryan Watson (2025 Rule 5 pick by the Athletics, named without FV) (searched FanGraphs articles and team lists; FanGraphs The Board could not be checked because it sits behind a Cloudflare challenge)"
+  },
+  {
+   "name": "Carter Baumler for Jaiker Garcia and cash",
+   "date": "2025-12-10",
+   "source": "https://www.mlb.com/transactions/2025/12/10",
+   "reason": "cash considerations with no reported amount; also no public FanGraphs FV found on or before the trade date for Jaiker Garcia (searched FanGraphs articles and team lists; FanGraphs The Board could not be checked because it sits behind a Cloudflare challenge)"
+  },
+  {
+   "name": "Daniel Susac for Miguel Caraballo and cash",
+   "date": "2025-12-10",
+   "source": "https://www.mlb.com/transactions/2025/12/10",
+   "reason": "cash considerations with no reported amount; also no public FanGraphs FV found on or before the trade date for Miguel Caraballo (scouted without FV in the 2025-12-10 FanGraphs Rule 5 article) (searched FanGraphs articles and team lists; FanGraphs The Board could not be checked because it sits behind a Cloudflare challenge)"
+  },
+  {
+   "name": "Chase Lee for Johan Simon",
+   "date": "2025-12-12",
+   "source": "https://www.mlb.com/transactions/2025/12/12",
+   "reason": "minor-league player without FV: no public FanGraphs FV found on or before the trade date for Johan Simon (searched FanGraphs articles and team lists; FanGraphs The Board could not be checked because it sits behind a Cloudflare challenge)"
+  },
+  {
+   "name": "Justin Bruihl to Guardians for cash",
+   "date": "2025-12-17",
+   "source": "https://www.mlb.com/transactions/2025/12/17",
+   "reason": "cash considerations with no reported amount"
+  },
+  {
+   "name": "Tristan Peters to White Sox for PTBNL or cash",
+   "date": "2025-12-18",
+   "source": "https://www.mlb.com/transactions/2025/12/18",
+   "reason": "player to be named later or cash considerations with no reported amount"
+  },
+  {
+   "name": "Mike Burrows, Brandon Lowe, Jake Mangum, Mason Montgomery, Jacob Melton and Anderson Brito three-team trade",
+   "date": "2025-12-19",
+   "source": "https://www.mlb.com/transactions/2025/12/19",
+   "reason": "involves three clubs (Pirates, Astros, Rays): Pirates get Lowe, Mangum and Montgomery from the Rays, Astros get Burrows from the Pirates, Rays get Melton and Brito from the Astros"
+  },
+  {
+   "name": "Shane Baz for Caden Bodine, Slater de Brun, Michael Forret, Austin Overn and a draft pick",
+   "date": "2025-12-19",
+   "source": "https://www.mlb.com/transactions/2025/12/19",
+   "reason": "draft pick asset is not Competitive Balance Round B: the Rays get the Orioles' 2026 Competitive Balance Round A pick (No. 33)"
+  },
+  {
+   "name": "Kyle Backhus for Avery Owusu-Asiedu",
+   "date": "2025-12-19",
+   "source": "https://www.mlb.com/transactions/2025/12/19",
+   "reason": "minor-league player without FV: no public FanGraphs FV found on or before the trade date for Avery Owusu-Asiedu (searched FanGraphs articles and team lists; FanGraphs The Board could not be checked because it sits behind a Cloudflare challenge)"
+  },
+  {
+   "name": "Jeff McNeil and cash for Yordan Rodriguez",
+   "date": "2025-12-22",
+   "source": "https://www.mlb.com/transactions/2025/12/22",
+   "reason": "minor-league player without FV: no public FanGraphs FV found on or before the trade date for Yordan Rodriguez (17-year-old pitcher; the 2025-12-22 FanGraphs trade write-up gives no FV) (searched FanGraphs articles and team lists; FanGraphs The Board could not be checked because it sits behind a Cloudflare challenge). Cash was reported: Mets pay $5.75M of McNeil's 2026 salary plus the $2M 2027 buyout if declined"
+  },
+  {
+   "name": "Dane Myers for Ethan O'Donnell",
+   "date": "2025-12-27",
+   "source": "https://www.mlb.com/transactions/2025/12/27",
+   "reason": "minor-league player without FV: no public FanGraphs FV found on or before the trade date for Ethan O'Donnell (named without FV in the Reds lists of 2025-05-02 and 2025-12-22) (searched FanGraphs articles and team lists; FanGraphs The Board could not be checked because it sits behind a Cloudflare challenge)"
+  },
+  {
+   "name": "Esteury Ruiz for Adriano Marrero",
+   "date": "2025-12-29",
+   "source": "https://www.mlb.com/transactions/2025/12/29",
+   "reason": "minor-league player without FV: no public FanGraphs FV found on or before the trade date for Adriano Marrero (named without FV in the 2025 Marlins list's DSL section) (searched FanGraphs articles and team lists; FanGraphs The Board could not be checked because it sits behind a Cloudflare challenge). The MLB Stats API and ESPN log the trade on 2025-12-29 and Baseball-Reference on 2025-12-30"
+  },
+  {
+   "name": "Eric Wagaman to Twins for Kade Bragg",
+   "date": "2026-01-02",
+   "source": "https://www.mlbtraderumors.com/2026/01/twins-acquire-eric-wagaman-dfa-ryan-fitzgerald.html",
+   "reason": "Minor leaguer Kade Bragg has no FanGraphs FV in any FanGraphs article published on or before 2026-01-02 (searched team lists, Top 100s and trade write-ups). FanGraphs' The Board could not be checked (Cloudflare challenge)."
+  },
+  {
+   "name": "Justyn-Henry Malloy to Rays for cash",
+   "date": "2026-01-06",
+   "source": "https://www.mlbtraderumors.com/2026/01/tigers-trade-justyn-henry-malloy-to-rays.html",
+   "reason": "Cash considerations with no reported amount."
+  },
+  {
+   "name": "Justin Bruihl to Cardinals for cash",
+   "date": "2026-01-06",
+   "source": "https://www.mlbtraderumors.com/2026/01/cardinals-acquire-justin-bruihl-designate-zak-kent-for-assignment.html",
+   "reason": "Cash considerations with no reported amount."
+  },
+  {
+   "name": "Edward Cabrera to Cubs for Owen Caissie, Cristian Hernandez, Edgardo De Leon",
+   "date": "2026-01-07",
+   "source": "https://www.mlbtraderumors.com/2026/01/marlins-trade-edward-cabrera-cubs.html",
+   "reason": "Minor leaguer Edgardo De Leon has no FanGraphs FV on or before 2026-01-07: FanGraphs' trade-day write-up has a Longenhagen blurb calling him a 'fringe prospect' but gives no FV, and he is in no earlier list. (Cristian Hernandez was 35+ in the Cubs list of 2024-12-20; Caissie has MLB service.) The Board could not be checked."
+  },
+  {
+   "name": "Ken Waldichuk and Brett Wisely to Rays for cash",
+   "date": "2026-01-12",
+   "source": "https://www.mlbtraderumors.com/2026/01/rays-acquire-ken-waldichuk-brett-wisely.html",
+   "reason": "Cash considerations with no reported amount."
+  },
+  {
+   "name": "Nolan Arenado and cash to Diamondbacks for Jack Martinez",
+   "date": "2026-01-13",
+   "source": "https://www.mlbtraderumors.com/2026/01/cardinals-trade-nolan-arenado-diamondbacks.html",
+   "reason": "Minor leaguer Jack Martinez (2025 8th-round pick) had no FanGraphs FV on or before 2026-01-13. FanGraphs' trade-day article says he was not on the D-backs list and gives a Longenhagen blurb without an FV; his first FV (35+) came in the Cardinals list of 2026-02-09. The cash amount was reported (FanGraphs: Arizona pays $5M in 2026 and $6M in 2027 of Arenado's $27M/$15M), so cash is not a reason here."
+  },
+  {
+   "name": "Chase Shugart to Phillies for Francisco Loreto",
+   "date": "2026-01-13",
+   "source": "https://www.mlbtraderumors.com/2026/01/phillies-acquire-chase-shugart.html",
+   "reason": "Minor leaguer Francisco Loreto has no FanGraphs FV in any FanGraphs article on or before 2026-01-13. The Board could not be checked."
+  },
+  {
+   "name": "Ryan Weathers to Yankees for four prospects",
+   "date": "2026-01-13",
+   "source": "https://www.mlbtraderumors.com/2026/01/marlins-to-trade-ryan-weathers-to-yankees.html",
+   "reason": "Minor leaguers Brendan Jones, Dillon Lewis and Dylan Jasso have no FanGraphs FV in any FanGraphs article on or before 2026-01-13 (only Juan Matheus, 40 in the 2025-01-31 Yankees list). FanGraphs' trade write-up came out 2026-01-14 and gives no FVs. The Board could not be checked."
+  },
+  {
+   "name": "Franklin Gomez to Guardians for international bonus pool money",
+   "date": "2026-01-15",
+   "source": "https://www.mlbtraderumors.com/2026/01/guardians-acquire-franklin-gomez-from-mets.html",
+   "reason": "International bonus pool space is an asset (MLB Stats API: future considerations / international bonus pool money)."
+  },
+  {
+   "name": "Yosver Zulueta to Mariners for Dusty Revis",
+   "date": "2026-01-15",
+   "source": "https://www.mlbtraderumors.com/2026/01/mariners-to-acquire-yosver-zulueta.html",
+   "reason": "Minor leaguer Dusty Revis has no FanGraphs FV on or before 2026-01-15: he is not in the table of FanGraphs' Mariners Top 25 (2026-01-02) or any other article. The Board could not be checked."
+  },
+  {
+   "name": "Josh Lowe, Gavin Lux, Brock Burke, Chris Clark three-team trade",
+   "date": "2026-01-16",
+   "source": "https://www.mlbtraderumors.com/2026/01/rays-angels-reds-agree-to-three-team-trade-involving-josh-lowe-gavin-lux.html",
+   "reason": "Three clubs involved (Rays, Angels, Reds)."
+  },
+  {
+   "name": "Bradley Blalock to Marlins for Jake Brooks",
+   "date": "2026-01-20",
+   "source": "https://www.mlbtraderumors.com/2026/01/marlins-to-acquire-bradley-blalock.html",
+   "reason": "Minor leaguer Jake Brooks has no FanGraphs FV in any FanGraphs article on or before 2026-01-20. The Board could not be checked."
+  },
+  {
+   "name": "Luis Robert Jr. to Mets for Luisangel Acuna and Truman Pauley",
+   "date": "2026-01-20",
+   "source": "https://www.mlbtraderumors.com/2026/01/mets-to-acquire-luis-robert.html",
+   "reason": "Minor leaguer Truman Pauley (2025 12th-round pick) had no FanGraphs FV on or before 2026-01-20. His 35+ was first published 2026-01-21 (FanGraphs Robert write-up), and the White Sox list dated 2025-12-23 says he was added after the trade."
+  },
+  {
+   "name": "Nate Baez to Red Sox for Tristan Gray",
+   "date": "2026-01-21",
+   "source": "https://www.mlbtraderumors.com/2026/01/twins-to-acquire-tristan-gray.html",
+   "reason": "Minor leaguer Nate Baez has no FanGraphs FV on or before 2026-01-21: he appears only in the ungraded 'Catching Depth' section of the 2025-06-18 Twins list. The Board could not be checked."
+  },
+  {
+   "name": "Carlos Martinez to Marlins for cash",
+   "date": "2026-01-22",
+   "source": "https://www.mlbtraderumors.com/2026/01/marlins-acquire-prospect-carlos-martinez-from-giants.html",
+   "reason": "Cash considerations with no reported amount (Baseball-Reference records it as a purchase)."
+  },
+  {
+   "name": "Vidal Brujan to Mets for cash",
+   "date": "2026-01-22",
+   "source": "https://www.mlbtraderumors.com/2026/01/twins-trade-vidal-brujan-to-mets.html",
+   "reason": "Cash considerations with no reported amount."
+  },
+  {
+   "name": "Cooper Criswell to Mariners for cash",
+   "date": "2026-01-23",
+   "source": "https://www.mlbtraderumors.com/2026/01/mariners-to-acquire-cooper-criswell.html",
+   "reason": "Cash considerations with no reported amount."
+  },
+  {
+   "name": "Jhonny Pereda to Mariners for cash",
+   "date": "2026-01-27",
+   "source": "https://www.baseball-reference.com/leagues/majors/2026-transactions.shtml",
+   "reason": "Cash considerations with no reported amount (MLB Stats API: Twins traded C Jhonny Pereda to Seattle for cash; Baseball-Reference: purchase)."
+  },
+  {
+   "name": "Edouard Julien and Pierson Ohl to Rockies for Jace Kaminska and cash",
+   "date": "2026-01-28",
+   "source": "https://www.mlbtraderumors.com/2026/01/rockies-acquire-edouard-julien-pierson-ohl.html",
+   "reason": "Minor leaguer Jace Kaminska has no FanGraphs FV in any FanGraphs article on or before 2026-01-28 (The Board could not be checked), and the cash Colorado sent has no reported amount in the sources checked."
+  },
+  {
+   "name": "Jayvien Sandridge to Angels for cash",
+   "date": "2026-01-29",
+   "source": "https://www.mlbtraderumors.com/2026/01/yankees-trade-jayvien-sandridge-angels-dfa-osvaldo-bido.html",
+   "reason": "Cash considerations with no reported amount."
+  },
+  {
+   "name": "Kai-Wei Teng to Astros for Jancel Villarroel and bonus pool money",
+   "date": "2026-01-30",
+   "source": "https://www.mlb.com/news/astros-giants-trade-kai-wei-teng-jancel-villarroel",
+   "reason": "International bonus pool money included (MLB.com; MLB Stats API calls it future considerations). MLB.com reports the deal on Thursday 2026-01-29; the Stats API and Baseball-Reference date it 2026-01-30. Either date is in the window."
+  },
+  {
+   "name": "Jordan Hicks, David Sandlin and PTBNLs to White Sox for Gage Ziehl and PTBNL",
+   "date": "2026-02-01",
+   "source": "https://www.mlbtraderumors.com/2026/02/white-sox-to-acquire-jordan-hicks.html",
+   "reason": "Players to be named later on both sides, plus cash from Boston with no amount in the transaction record."
+  },
+  {
+   "name": "Bryan Ramos to Orioles for cash",
+   "date": "2026-02-01",
+   "source": "https://www.mlbtraderumors.com/2026/02/orioles-acquire-bryan-ramos-designate-weston-wilson.html",
+   "reason": "Cash considerations with no reported amount (Baseball-Reference: purchase)."
+  },
+  {
+   "name": "Brendan Donovan three-team trade",
+   "date": "2026-02-02",
+   "source": "https://www.mlbtraderumors.com/2026/02/mariners-close-to-acquiring-brendan-donovan.html",
+   "reason": "Three clubs involved (Cardinals, Mariners, Rays; Ben Williamson to Tampa Bay). It also included two draft picks to St. Louis."
+  },
+  {
+   "name": "Blaze Alexander to Orioles for Kade Strowd, Wellington Aracena, Jose Mejia",
+   "date": "2026-02-05",
+   "source": "https://www.mlbtraderumors.com/2026/02/orioles-to-acquire-blaze-alexander.html",
+   "reason": "Minor leaguer Jos\u00e9 Mej\u00eda has no FanGraphs FV in any FanGraphs article on or before 2026-02-05 (Aracena was 45 on 2025-08-03). The Board could not be checked."
+  },
+  {
+   "name": "Max Schuemann to Yankees for Luis Burgos",
+   "date": "2026-02-09",
+   "source": "https://www.mlbtraderumors.com/2026/02/athletics-trade-max-schuemann-yankees.html",
+   "reason": "Minor leaguer Luis Burgos has no FanGraphs FV in any FanGraphs article on or before 2026-02-09. The Board could not be checked."
+  },
+  {
+   "name": "Bryan Hudson to Mets for cash",
+   "date": "2026-02-10",
+   "source": "https://www.mlbtraderumors.com/2026/02/white-sox-to-trade-bryan-hudson-to-mets.html",
+   "reason": "Cash considerations with no reported amount."
+  },
+  {
+   "name": "Brett Wisely to Braves for cash",
+   "date": "2026-02-10",
+   "source": "https://www.mlbtraderumors.com/2026/02/rays-trade-brett-wisely-back-to-braves.html",
+   "reason": "Cash considerations with no reported amount."
+  },
+  {
+   "name": "Anthony Banda to Twins for international bonus pool money",
+   "date": "2026-02-12",
+   "source": "https://www.mlbtraderumors.com/2026/02/dodgers-trade-anthony-banda-twins.html",
+   "reason": "International bonus pool space is an asset (MLB Stats API: future considerations / international bonus pool money)."
+  },
+  {
+   "name": "Jackson Kowar to Orioles for cash",
+   "date": "2026-02-14",
+   "source": "https://www.mlbtraderumors.com/2026/02/orioles-acquire-jackson-kowar.html",
+   "reason": "Cash considerations with no reported amount."
+  },
+  {
+   "name": "Josh Simpson to Mariners for cash",
+   "date": "2026-02-16",
+   "source": "https://www.mlbtraderumors.com/2026/02/mariners-acquire-josh-simpson.html",
+   "reason": "Cash considerations with no reported amount."
+  },
+  {
+   "name": "Matthew Hoskins to Rays (PTBNL completing Kameron Misner trade)",
+   "date": "2026-03-13",
+   "source": "https://www.mlbtraderumors.com/2026/03/rays-acquire-matthew-hoskins-as-ptbnl-in-kameron-misner-trade.html",
+   "reason": "Not a new trade: Hoskins is the player to be named later in the earlier Kameron Misner trade (Rays to Royals), which was agreed before this window. Listed for audit only."
+  },
+  {
+   "name": "Gerlin Rosario to Athletics for Cooper Bowman",
+   "date": "2026-03-23",
+   "source": "https://www.mlbtraderumors.com/2026/03/as-trade-cooper-bowman-to-rays.html",
+   "reason": "Minor leaguers lack an FV on or before 2026-03-23. Gerlin Rosario is only in the ungraded 'Depth Arms with Relief Profiles' section of the 2025-02-28 Rays list. Cooper Bowman's original FV in the 2024-11-22 A's list (no. 33) was removed from the published table after his Rule 5 selection and is not readable. The Board could not be checked."
+  },
+  {
+   "name": "Jake Woodford to Brewers for K.C. Hunt and cash",
+   "date": "2026-03-24",
+   "source": "https://www.mlb.com/news/press-release-brewers-acquire-right-handed-pitcher-jake-woodford-from-rays",
+   "reason": "Cash considerations from Milwaukee with no reported amount (Hunt had a FanGraphs FV of 35+)."
+  },
+  {
+   "name": "Zack Short to Nationals for cash",
+   "date": "2026-03-24",
+   "source": "https://www.mlbtraderumors.com/2026/03/yankees-trade-zack-short-nationals.html",
+   "reason": "Cash considerations with no reported amount (Baseball-Reference: purchase)."
+  },
+  {
+   "name": "Carter Kieboom to Phillies for cash",
+   "date": "2026-03-24",
+   "source": "https://www.mlbtraderumors.com/2026/03/phillies-acquire-carter-kieboom-from-guardians.html",
+   "reason": "Cash considerations with no reported amount (Baseball-Reference: purchase)."
+  }
+ ]
+}

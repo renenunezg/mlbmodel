@@ -3,6 +3,10 @@
 Run with a model trained strictly before the market season:
     python -m v2.players.validate --model PATH --cases tests/fixtures/player_market_2025.json --output /tmp/player-validation.json
 
+Add the offseason trade-set comparison to release evidence (models frozen before each winter):
+    python -m v2.players.validate --model PATH --release-evidence EVIDENCE --trade-set \
+        --trade-model 2025=PATH --trade-model 2026=PATH --trade-baseline 2025=PATH --trade-baseline 2026=PATH --output EVIDENCE_OUT
+
 No database or publication path. Market diagnostics report implied prices and
 coverage, never treat incomplete packages or a selected case series as a pass.
 """
@@ -217,6 +221,144 @@ def market_check(model: ValueModel, cases: dict, projections: pd.DataFrame | Non
             "warnings": warnings}
 
 
+TRADE_SET_FIXTURES = sorted(Path("tests/fixtures").glob("player_market_trades_*.json"))
+# A trade after the deadline means the coming arbitration season was already tendered.
+NON_TENDER_DEADLINES = {2025: "2024-11-22", 2026: "2025-11-21"}
+SUPER_TWO_DAYS = 130  # Approximate recent Super Two cutoff within the 2.xxx service class.
+TRADE_SET_MIN_TRADES = 20
+
+
+def _service_years(text: str) -> tuple[float, int, int]:
+    """MLB 'Y.DDD' service time as decimal years (172 days a year), whole years and days."""
+    years, _, days = str(text).strip().partition(".")
+    if not years.isdigit() or not (days or "0").isdigit() or len(days) > 3:
+        raise ValueError(f"Unreadable service time {text!r}")
+    d = int(days.ljust(3, "0")) if days else 0
+    return int(years) + d / 172, int(years), d
+
+
+def _trade_schedule(asset: dict, first: int, trade_date: str) -> tuple[list[dict], float]:
+    """Contract seasons from ``first`` until free agency, from service time and signed terms."""
+    service, years, days = _service_years(asset["service_time"])
+    terms = asset.get("contract") or {}
+    guaranteed = {int(g["season"]): g["salary_musd"] for g in terms.get("guaranteed") or [] if int(g["season"]) >= first}
+    options = {int(o["season"]): o for o in terms.get("options") or [] if int(o["season"]) >= first}
+    last_signed = max([*guaranteed, *options], default=first - 1)
+    super_two = years == 2 and days >= SUPER_TWO_DAYS
+    rows = []
+    for season in range(first, first + 16):
+        before = service + season - first
+        if season in guaranteed:
+            if guaranteed[season] is None:
+                raise ValueError(f"{asset['name']}: unknown guaranteed {season} salary")
+            rows.append({"season": season, "salary_kind": "guaranteed", "salary_musd": float(guaranteed[season]), "option_musd": None})
+        elif season in options:
+            o = options[season]
+            kind = "team" if o.get("kind", "team") == "vesting" else o.get("kind", "team")
+            declined = "free_agent" if before + 1 >= 6 or kind in ("player", "mutual") else "arbitration"
+            rows.append({"season": season, "salary_kind": "buyout", "salary_musd": float(o.get("buyout_musd") or 0.0),
+                         "option_musd": float(o["amount_musd"]), "option_kind": kind, "declined_to": declined})
+        elif season <= last_signed:
+            raise ValueError(f"{asset['name']}: gap in signed seasons at {season}")
+        elif before >= 6 - 1e-9:
+            return rows, service
+        elif before >= 3 - 1e-9 or (super_two and before >= 2):
+            agreed = terms.get("arb_salary_agreed_musd") if season == first else None
+            if first not in NON_TENDER_DEADLINES:
+                raise ValueError(f"No non-tender deadline recorded before {first}")
+            rows.append({"season": season, "salary_kind": "arbitration", "option_musd": None,
+                         "salary_musd": None if agreed is None else float(agreed),
+                         "tendered": season == first and (agreed is not None or trade_date > NON_TENDER_DEADLINES[first])})
+        else:
+            rows.append({"season": season, "salary_kind": "pre_arb", "salary_musd": None, "option_musd": None})
+    raise ValueError(f"{asset['name']}: control does not end within sixteen seasons")
+
+
+def trade_cases(fixture: dict) -> tuple[dict, list[dict]]:
+    """Researched trades in the market_check case layout; unconvertible trades are reported, never dropped."""
+    first = fixture["first_season"]
+    trades, rejected = [], []
+    for t in fixture["trades"]:
+        sides = {}
+        try:
+            for side in ("left", "right"):
+                sides[side] = []
+                for a in t[side]:
+                    if a["kind"] == "mlb":
+                        if a.get("player_id") is None:
+                            raise ValueError(f"MLB player without an identifier: {a['name']}")
+                        contract, service = _trade_schedule(a, first, t["date"])
+                        sides[side].append({"kind": "mlb", "name": a["name"], "player_id": int(a["player_id"]),
+                                            "service_time": service, "service_season": first, "contract": contract})
+                    elif a["kind"] == "prospect":
+                        if a["role"] not in market.PROSPECT_MUSD or (a["fv"] != "35+" and a["fv"] not in market.PROSPECT_MUSD[a["role"]]):
+                            raise ValueError(f"Prospect grade outside the published table: {a['name']} {a['fv']}")
+                        sides[side].append({"kind": "prospect", "name": a["name"], "player_id": a.get("player_id"),
+                                            "fv": a["fv"], "role": a["role"]})
+                    elif a["kind"] == "cash":
+                        sides[side].append({"kind": "cash", "name": a["name"], "cash_musd": [float(x) for x in a["cash_musd"]]})
+                    elif a["kind"] == "draft_pick":
+                        sides[side].append({"kind": "draft_pick", "name": a["name"], "pick_range": [int(x) for x in a["pick_range"]]})
+                    else:
+                        raise ValueError(f"Unknown trade asset kind {a['kind']}")
+        except ValueError as exc:
+            rejected.append({"name": t["name"], "first_season": first, "reason": str(exc)})
+            continue
+        trades.append({"name": t["name"], "date": t["date"], "source": t["source"], **sides})
+    if len({t["name"] for t in trades}) != len(trades):
+        raise ValueError(f"Duplicate trade names in the {first} trade set")
+    return {"first_season": first, "scope": fixture["selection"], "contracts": [], "trades": trades}, rejected
+
+
+def trade_set_check(models: dict[int, ValueModel], baselines: dict[int, ValueModel], fixtures: list[dict]) -> dict:
+    """Paired package-balance errors on every qualifying offseason trade.
+
+    Each winter is priced by models frozen before it. A fair trade balances, so
+    the relative gap |left - right| / (|left| + |right|) cannot be lowered by
+    shrinking every value toward zero. Trades without an MLB player only test
+    the external prospect table and are reported, not scored.
+    """
+    rows, rejected = [], []
+    for fixture in fixtures:
+        first = fixture["first_season"]
+        cases, skipped = trade_cases(fixture)
+        rejected += skipped
+        reports = {label: {t["name"]: t for t in market_check(m[first], cases)["trades"]}
+                   for label, m in (("candidate", models), ("baseline", baselines))}
+        for case in cases["trades"]:
+            priced = {label: reports[label][case["name"]] for label in reports}
+            if not all(p["complete_accounting"] for p in priced.values()):
+                missing = sorted({n for p in priced.values() for s in ("left", "right") for n in p[s]["unpriced_assets"]})
+                rejected.append({"name": case["name"], "first_season": first, "reason": "Unpriced: " + ", ".join(missing)})
+                continue
+            if not any(a["kind"] == "mlb" for s in ("left", "right") for a in case[s]):
+                rejected.append({"name": case["name"], "first_season": first, "reason": "No MLB player; tests only the external prospect table"})
+                continue
+            row = {"name": case["name"], "first_season": first}
+            for label, p in priced.items():
+                left, right = (float(np.mean(p[s]["scenario_bounds_musd"])) for s in ("left", "right"))
+                size = abs(left) + abs(right)
+                row |= {f"{label}_left_musd": left, f"{label}_right_musd": right, f"{label}_gap_musd": left - right,
+                        f"{label}_relative_gap": abs(left - right) / size if size > 0 else 0.0}
+            rows.append(row)
+    if not rows:
+        raise ValueError("No trade in the set could be priced")
+    frame = pd.DataFrame(rows)
+    change = (frame.candidate_relative_gap - frame.baseline_relative_gap).to_numpy()
+    rng = np.random.default_rng(20261104)
+    draws = change[rng.integers(0, len(change), (10000, len(change)))].mean(axis=1)
+    return {"n": len(frame), "rejected": rejected, "trades": rows,
+            "candidate_relative_gap": float(frame.candidate_relative_gap.mean()),
+            "baseline_relative_gap": float(frame.baseline_relative_gap.mean()),
+            "relative_gap_change_95pct": np.quantile(draws, [.025, .975]).tolist(),
+            "candidate_gap_rmse_musd": float(np.sqrt(np.mean(frame.candidate_gap_musd**2))),
+            "baseline_gap_rmse_musd": float(np.sqrt(np.mean(frame.baseline_gap_musd**2))),
+            "by_season": {str(s): {"n": len(g), "candidate_relative_gap": float(g.candidate_relative_gap.mean()),
+                                   "baseline_relative_gap": float(g.baseline_relative_gap.mean())}
+                          for s, g in frame.groupby("first_season")},
+            "selection": [f["selection"] for f in fixtures]}
+
+
 def assess_release(model: ValueModel, evidence: dict) -> dict:
     """Require joint production, cash, salary and trade regression improvements.
 
@@ -233,6 +375,7 @@ def assess_release(model: ValueModel, evidence: dict) -> dict:
     repairs = evidence["required_trade_repairs"]
     arbitration = evidence["arbitration"]
     scoring = evidence["current_scoring"]
+    trade_set = evidence["trade_set"]
     checks = {
         "fwar_improves_on_each_paired_role_and_year": bool(production) and all(
             r["mse_change_95pct"][1] < 0 for r in production),
@@ -248,6 +391,8 @@ def assess_release(model: ValueModel, evidence: dict) -> dict:
             r["candidate_gap_musd"] < r["previous_candidate_gap_musd"] for r in repairs),
         "complete_scoring_population": scoring["players"] >= 500 and scoring["graded_without_war"] == 0
             and scoring["grade_changes"] == 0,
+        "offseason_trade_balance_no_worse": trade_set["n"] >= TRADE_SET_MIN_TRADES
+            and trade_set["candidate_relative_gap"] <= trade_set["baseline_relative_gap"],
     }
     return {"status": "validated" if all(checks.values()) else "not_validated", "checks": checks,
             "model_fingerprint": model.validation_fingerprint(),
@@ -258,7 +403,8 @@ def assess_release(model: ValueModel, evidence: dict) -> dict:
             "metrics": {"contract_rmse_musd": contracts["candidate_rmse_musd"],
                         "original_contract_rmse_musd": original["candidate_rmse_musd"],
                         "arbitration_rmse_musd": arbitration["candidate_rmse"],
-                        "trade_gap_rmse_musd": trades["comparison"]["candidate_rmse"]}}
+                        "trade_gap_rmse_musd": trades["comparison"]["candidate_rmse"],
+                        "trade_set_relative_gap": trade_set["candidate_relative_gap"]}}
 
 
 def main() -> None:
@@ -280,7 +426,33 @@ def main() -> None:
     ap.add_argument("--baseline-holdout-projections", type=Path,
                     help="Trusted local pickle of the serving pipeline replay; requires --baseline-holdout-model for its price")
     ap.add_argument("--baseline-projections", type=Path, help="Trusted local serving replay for the earlier season")
+    ap.add_argument("--trade-set", action="store_true",
+                    help="Add the offseason trade-set comparison to --release-evidence and write the complete evidence to --output")
+    ap.add_argument("--trade-model", action="append", default=[], metavar="SEASON=PATH",
+                    help="Candidate model frozen before that offseason; one per trade-set season")
+    ap.add_argument("--trade-baseline", action="append", default=[], metavar="SEASON=PATH",
+                    help="Serving model frozen before that offseason; one per trade-set season")
     args = ap.parse_args()
+    if args.trade_set:
+        if not args.release_evidence:
+            ap.error("--trade-set extends --release-evidence")
+        fixtures = [json.loads(p.read_text()) for p in TRADE_SET_FIXTURES]
+        seasons = {f["first_season"] for f in fixtures}
+
+        def frozen(specs: list[str]) -> dict[int, ValueModel]:
+            loaded = {int(s): ValueModel.load(Path(p)) for s, _, p in (x.partition("=") for x in specs)}
+            if set(loaded) != seasons:
+                ap.error(f"Trade-set models must cover exactly the seasons {sorted(seasons)}")
+            return loaded
+
+        evidence = json.loads(args.release_evidence.read_text())
+        evidence["trade_set"] = trade_set_check(frozen(args.trade_model), frozen(args.trade_baseline), fixtures)
+        evidence["sha256"] = {**evidence.get("sha256", {}),
+                              **{str(p): hashlib.sha256(p.read_bytes()).hexdigest()
+                                 for p in [*TRADE_SET_FIXTURES, *(Path(x.partition("=")[2]) for x in args.trade_model + args.trade_baseline)]}}
+        args.output.write_text(json.dumps(evidence, indent=2, allow_nan=False))
+        print(json.dumps({k: v for k, v in evidence["trade_set"].items() if k not in ("trades", "rejected", "selection")}, indent=2))
+        return
     model = ValueModel.load(args.model)
     if args.release_evidence:
         evidence = json.loads(args.release_evidence.read_text())

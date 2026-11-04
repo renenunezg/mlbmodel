@@ -1,0 +1,1320 @@
+{
+ "first_season": 2025,
+ "selection": "Every two-club MLB trade announced from the day after the previous World Series through the day before North American Opening Day. Excluded when it involves three or more clubs, a player to be named later, cash with no reported amount, international bonus pool space, a draft pick outside Competitive Balance Round B, or a minor leaguer with no FanGraphs FV published on or before the trade date. Rule fixed before any trade was scored.",
+ "windows": [
+  [
+   "2024-10-31",
+   "2024-12-31"
+  ],
+  [
+   "2025-01-01",
+   "2025-03-26"
+  ]
+ ],
+ "searched_sources": [
+  "2024-10/11/12: Baseball-Reference 2024 transactions log (https://www.baseball-reference.com/leagues/majors/2024-transactions.shtml), every trade/purchase line from Oct 31 to Dec 31",
+  "2024-10/11/12: ESPN 2024-25 offseason tracker (https://africa.espn.com/mlb/story/_/id/42115276/mlb-2024-25-free-agency-tracker-offseason-trades-moves)",
+  "2024-10/11/12: MLB Stats API transactions, typeCode TR, 2024-10-31 to 2024-12-31, sportId=1 and all sports (https://statsapi.mlb.com/api/v1/transactions?startDate=2024-10-31&endDate=2024-12-31)",
+  "Baseball-Reference 2025 transaction pages for all 30 clubs (https://www.baseball-reference.com/teams/{TEAM}/2025-transactions.shtml), filtered to 2025-01-01..2025-03-26 for trades, sales and purchases. Covers January, February and March 2025. Found the Shugart/McShane trade, which the Stats API feed lacks; every other trade matched the Stats API.",
+  "Cot's Baseball Contracts team pages archived on the Wayback Machine (Jan to Mar 2025) for contracts and service time, cross-checked against MLBTR's 2025 arbitration tracker values.",
+  "Cot's Baseball Contracts team pages via Wayback (Dec 2024 to Mar 2025) for service time and contracts; MLBTR 2025 arbitration tracker for cross-checking service time",
+  "FanGraphs The Board via Wayback captures 2024-11-09, 2024-11-26, 2024-12-11, 2024-12-13, 2024-12-20 plus 2023 and 2024 list pages (prospect FV)",
+  "FanGraphs WordPress API (blogs.fangraphs.com/wp-json/wp/v2/posts) searched by name for each traded minor leaguer, restricted to posts on or before the trade date, plus the FanGraphs Board snapshot of 2024-11-09, for FV grades.",
+  "FanGraphs blog posts Oct 30 to Dec 31, 2024 via the WordPress API (trade write-ups)",
+  "February 2025: both sources above plus MLB.com's Faedo trade story.",
+  "January 2025: both sources above plus MLB.com trade stories (Pressly, Rogers) and the FanGraphs trade write-ups (Lux, Cartaya, Pressly, Rogers).",
+  "MLB Stats API transactions feed (the data behind MLB.com's transactions pages), whole window 2025-01-01..2025-03-26, filtered to typeCode TR (80 rows, 42 distinct trades): https://statsapi.mlb.com/api/v1/transactions?startDate=2025-01-01&endDate=2025-03-26. Covers January, February and March 2025.",
+  "MLB Trade Rumors refused direct connections from this environment, so it was consulted only through search-result summaries (no MLBTR month archive pages were read).",
+  "MLB.com press releases and news articles per trade; MLB Stats API 2025 draft results for pick numbers",
+  "March 2025 (through 03-26, including Tokyo Series week): both sources above plus MLB.com stories and press releases (Jones/Freeman, Anderson/Suarez) and web searches for the Horn, Oduber and Schreffler returns."
+ ],
+ "trades": [
+  {
+   "name": "Jorge Soler for Griffin Canning",
+   "date": "2024-10-31",
+   "teams": [
+    "Atlanta Braves",
+    "Los Angeles Angels"
+   ],
+   "source": "https://www.mlb.com/news/press-release-angels-acquire-of-dh-jorge-soler-from-atlanta",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Jorge Soler",
+     "player_id": 624585,
+     "service_time": "9.143",
+     "service_source": "https://web.archive.org/web/20241215192216/https://legacy.baseballprospectus.com/compensation/cots/al-west/los-angeles-angels/",
+     "contract": {
+      "guaranteed": [
+       {
+        "season": 2025,
+        "salary_musd": 13.0
+       },
+       {
+        "season": 2026,
+        "salary_musd": 13.0
+       }
+      ],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20241215192216/https://legacy.baseballprospectus.com/compensation/cots/al-west/los-angeles-angels/",
+     "notes": "Signed 3 years/$42M (2024-26) with San Francisco 2/13/24, including a $9M signing bonus (payment schedule not stated by Cot's); salaries 2024 $7M, 2025 $13M, 2026 $13M. AP reported $26M still owed at the trade, i.e. the 2025-26 salaries."
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Griffin Canning",
+     "player_id": 656288,
+     "service_time": "5.075",
+     "service_source": "https://web.archive.org/web/20250207015109/https://legacy.baseballprospectus.com/compensation/cots/national-league/new-york-mets/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20250207015109/https://legacy.baseballprospectus.com/compensation/cots/national-league/new-york-mets/",
+     "notes": "Final-year arbitration eligible for 2025 (2024 salary $2.6M); no 2025 salary agreed. Atlanta non-tendered him on 11/22/24. Cot's LAA page from October 2024 shows 4.075 (through 2023); the 2025 Mets page shows 5.075 after his full 2024 season."
+    }
+   ],
+   "notes": "Announced the day after the 2024 World Series ended."
+  },
+  {
+   "name": "Nick Allen for Jared Johnson",
+   "date": "2024-11-11",
+   "teams": [
+    "Athletics",
+    "Atlanta Braves"
+   ],
+   "source": "https://www.mlb.com/press-release/press-release-athletics-acquire-rhp-jared-johnson-from-atlanta-for-inf-nick-allen",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Nick Allen",
+     "player_id": 669397,
+     "service_time": "1.164",
+     "service_source": "https://web.archive.org/web/20241204204342/https://legacy.baseballprospectus.com/compensation/cots/national-league/atlanta-braves/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20241204204342/https://legacy.baseballprospectus.com/compensation/cots/national-league/atlanta-braves/",
+     "notes": "Pre-arbitration (under 3.000 service, not Super Two); no signed contract for 2025."
+    }
+   ],
+   "right": [
+    {
+     "kind": "prospect",
+     "name": "Jared Johnson",
+     "player_id": 687991,
+     "fv": "40",
+     "role": "pit",
+     "grade_source": "https://web.archive.org/web/20241109025327/https://www.fangraphs.com/prospects/the-board",
+     "grade_as_of": "2024-11-09"
+    }
+   ],
+   "notes": "Cot's dates the trade 11/10/24; MLB.com press release, Stats API and Baseball-Reference give 11/11/24. Prospect FV grades are from FanGraphs The Board (\"2024 Updated\" lists) as captured by the Wayback Machine on 2024-11-09; grade_as_of is that capture date (the list itself was published earlier in 2024)."
+  },
+  {
+   "name": "Jose Siri for Eric Orze",
+   "date": "2024-11-19",
+   "teams": [
+    "Tampa Bay Rays",
+    "New York Mets"
+   ],
+   "source": "https://mlb.com/news/press-release-rays-acquire-right-handed-pitcher-eric-orze-in-exchange-for-outfielder-jose-siri",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Jose Siri",
+     "player_id": 642350,
+     "service_time": "3.015",
+     "service_source": "https://web.archive.org/web/20241212094328/https://legacy.baseballprospectus.com/compensation/cots/national-league/new-york-mets/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20241212094328/https://legacy.baseballprospectus.com/compensation/cots/national-league/new-york-mets/",
+     "notes": "Arbitration eligible for 2025; no 2025 salary agreed before the trade (later agreed $2.4M with the Mets in January 2025, after the trade). Service time matches MLBTR's 2025 arbitration tracker."
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Eric Orze",
+     "player_id": 679358,
+     "service_time": "0.010",
+     "service_source": "https://web.archive.org/web/20241207040559/https://legacy.baseballprospectus.com/compensation/cots/al-east/tampa-bay-rays/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20241207040559/https://legacy.baseballprospectus.com/compensation/cots/al-east/tampa-bay-rays/",
+     "notes": "Pre-arbitration (under 3.000 service, not Super Two); no signed contract for 2025. Debuted with the Mets in July 2024 (two MLB appearances); FanGraphs graded him 35+ FV as a 40-man add, but he has MLB service so he is listed as an MLB player."
+    }
+   ],
+   "notes": "One-for-one swap of 40-man players."
+  },
+  {
+   "name": "Eli Morgan for Alfonsin Rosario",
+   "date": "2024-11-20",
+   "teams": [
+    "Cleveland Guardians",
+    "Chicago Cubs"
+   ],
+   "source": "https://www.mlb.com/news/eli-morgan-trade-cubs-guardians",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Eli Morgan",
+     "player_id": 669212,
+     "service_time": "3.091",
+     "service_source": "https://web.archive.org/web/20241202095502/https://legacy.baseballprospectus.com/compensation/cots/national-league-central/chicago-cubs/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20241202095502/https://legacy.baseballprospectus.com/compensation/cots/national-league-central/chicago-cubs/",
+     "notes": "Arbitration eligible for 2025; no 2025 salary agreed before the trade (later agreed $950K with the Cubs in January 2025, after the trade)."
+    }
+   ],
+   "right": [
+    {
+     "kind": "prospect",
+     "name": "Alfonsin Rosario",
+     "player_id": 806210,
+     "fv": "40",
+     "role": "bat",
+     "grade_source": "https://web.archive.org/web/20241109025327/https://www.fangraphs.com/prospects/the-board",
+     "grade_as_of": "2024-11-09"
+    }
+   ],
+   "notes": "Prospect FV grades are from FanGraphs The Board (\"2024 Updated\" lists) as captured by the Wayback Machine on 2024-11-09; grade_as_of is that capture date (the list itself was published earlier in 2024)."
+  },
+  {
+   "name": "Brady Singer for Jonathan India and Joey Wiemer",
+   "date": "2024-11-22",
+   "teams": [
+    "Kansas City Royals",
+    "Cincinnati Reds"
+   ],
+   "source": "https://www.mlb.com/press-release/press-release-royals-acquire-infielder-jonathan-india-and-outfielder-joey-wiemer-from-reds-for-pitcher-brady-singer",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Brady Singer",
+     "player_id": 663903,
+     "service_time": "4.156",
+     "service_source": "https://web.archive.org/web/20241205190720/https://legacy.baseballprospectus.com/compensation/cots/national-league-central/cincinnati-reds/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20241205190720/https://legacy.baseballprospectus.com/compensation/cots/national-league-central/cincinnati-reds/",
+     "notes": "Arbitration eligible for 2025; no 2025 salary agreed before the trade (later agreed $8.75M with the Reds in January 2025, after the trade)."
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Jonathan India",
+     "player_id": 663697,
+     "service_time": "4.000",
+     "service_source": "https://web.archive.org/web/20241203000738/https://legacy.baseballprospectus.com/compensation/cots/american-league/kansas-city-royals/",
+     "contract": {
+      "guaranteed": [
+       {
+        "season": 2025,
+        "salary_musd": 7.05
+       }
+      ],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20241203000738/https://legacy.baseballprospectus.com/compensation/cots/american-league/kansas-city-royals/",
+     "notes": "Signed 2 years/$8.8M (2024-25) extension with Cincinnati 2/9/24 (avoided arbitration): 2024 $3.8M, 2025 base $5M plus plate-appearance escalators, all of which he earned in 2024 (+$2.05M), so 2025 salary is $7.05M. Award bonuses only. Arbitration eligible again for 2026 (final year)."
+    },
+    {
+     "kind": "mlb",
+     "name": "Joey Wiemer",
+     "player_id": 686894,
+     "service_time": "1.046",
+     "service_source": "https://web.archive.org/web/20241203000738/https://legacy.baseballprospectus.com/compensation/cots/american-league/kansas-city-royals/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20241203000738/https://legacy.baseballprospectus.com/compensation/cots/american-league/kansas-city-royals/",
+     "notes": "Pre-arbitration (under 3.000 service, not Super Two); no signed contract for 2025."
+    }
+   ],
+   "notes": ""
+  },
+  {
+   "name": "Spencer Horwitz for Luis Ortiz, Michael Kennedy and Josh Hartle",
+   "date": "2024-12-10",
+   "teams": [
+    "Cleveland Guardians",
+    "Pittsburgh Pirates"
+   ],
+   "source": "https://www.mlb.com/press-release/press-release-pirates-acquire-first-baseman-spencer-horwitz-from-cleveland",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Spencer Horwitz",
+     "player_id": 687462,
+     "service_time": "0.152",
+     "service_source": "https://web.archive.org/web/20241205190809/https://legacy.baseballprospectus.com/compensation/cots/al-east/toronto-blue-jays/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20241205190809/https://legacy.baseballprospectus.com/compensation/cots/al-east/toronto-blue-jays/",
+     "notes": "Pre-arbitration (under 3.000 service, not Super Two); no signed contract for 2025. Acquired by Cleveland from Toronto hours earlier the same day (Gimenez trade)."
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Luis Ortiz",
+     "player_id": 682847,
+     "service_time": "1.121",
+     "service_source": "https://web.archive.org/web/20241208110633/https://legacy.baseballprospectus.com/compensation/cots/national-league-central/pittsburgh-pirates/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20241208110633/https://legacy.baseballprospectus.com/compensation/cots/national-league-central/pittsburgh-pirates/",
+     "notes": "Pre-arbitration (under 3.000 service, not Super Two); no signed contract for 2025. Listed by MLB as Luis L. Ortiz."
+    },
+    {
+     "kind": "prospect",
+     "name": "Michael Kennedy",
+     "player_id": 702604,
+     "fv": "40",
+     "role": "pit",
+     "grade_source": "https://web.archive.org/web/20241109025327/https://www.fangraphs.com/prospects/the-board",
+     "grade_as_of": "2024-11-09"
+    },
+    {
+     "kind": "prospect",
+     "name": "Josh Hartle",
+     "player_id": 691776,
+     "fv": "40",
+     "role": "pit",
+     "grade_source": "https://web.archive.org/web/20241109025327/https://www.fangraphs.com/prospects/the-board",
+     "grade_as_of": "2024-11-09"
+    }
+   ],
+   "notes": "Officially a separate two-club trade (MLB Stats API, both clubs' announcements), but made the same day as Cleveland's Gimenez/Horwitz trade with Toronto; Baseball-Reference files the two deals as one three-team trade. Kept here as a two-club trade per the official record. Prospect FV grades are from FanGraphs The Board (\"2024 Updated\" lists) as captured by the Wayback Machine on 2024-11-09; grade_as_of is that capture date (the list itself was published earlier in 2024)."
+  },
+  {
+   "name": "Garrett Crochet for Kyle Teel, Braden Montgomery, Chase Meidroth and Wikelman Gonzalez",
+   "date": "2024-12-11",
+   "teams": [
+    "Chicago White Sox",
+    "Boston Red Sox"
+   ],
+   "source": "https://www.mlb.com/whitesox/news/garrett-crochet-traded-to-red-sox-white-sox",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Garrett Crochet",
+     "player_id": 676979,
+     "service_time": "4.028",
+     "service_source": "https://web.archive.org/web/20241207065104/https://legacy.baseballprospectus.com/compensation/cots/american-league/chicago-white-sox/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20241207065104/https://legacy.baseballprospectus.com/compensation/cots/american-league/chicago-white-sox/",
+     "notes": "Arbitration eligible for 2025; no 2025 salary agreed before the trade (later agreed $3.8M with Boston in January 2025, after the trade). Under club control through 2026."
+    }
+   ],
+   "right": [
+    {
+     "kind": "prospect",
+     "name": "Kyle Teel",
+     "player_id": 691019,
+     "fv": "50",
+     "role": "bat",
+     "grade_source": "https://web.archive.org/web/20241109025327/https://www.fangraphs.com/prospects/the-board",
+     "grade_as_of": "2024-11-09"
+    },
+    {
+     "kind": "prospect",
+     "name": "Braden Montgomery",
+     "player_id": 695731,
+     "fv": "45+",
+     "role": "bat",
+     "grade_source": "https://web.archive.org/web/20241109025327/https://www.fangraphs.com/prospects/the-board",
+     "grade_as_of": "2024-11-09"
+    },
+    {
+     "kind": "prospect",
+     "name": "Chase Meidroth",
+     "player_id": 805367,
+     "fv": "40",
+     "role": "bat",
+     "grade_source": "https://web.archive.org/web/20241109025327/https://www.fangraphs.com/prospects/the-board",
+     "grade_as_of": "2024-11-09"
+    },
+    {
+     "kind": "prospect",
+     "name": "Wikelman Gonzalez",
+     "player_id": 682790,
+     "fv": "40+",
+     "role": "pit",
+     "grade_source": "https://web.archive.org/web/20241109025327/https://www.fangraphs.com/prospects/the-board",
+     "grade_as_of": "2024-11-09"
+    }
+   ],
+   "notes": "Longenhagen's FanGraphs write-up (2024-12-13) gives no FV numbers in its text; FVs are the Board grades in force before the trade. Prospect FV grades are from FanGraphs The Board (\"2024 Updated\" lists) as captured by the Wayback Machine on 2024-11-09; grade_as_of is that capture date (the list itself was published earlier in 2024)."
+  },
+  {
+   "name": "Kyle Tucker for Isaac Paredes, Hayden Wesneski and Cam Smith",
+   "date": "2024-12-13",
+   "teams": [
+    "Houston Astros",
+    "Chicago Cubs"
+   ],
+   "source": "https://www.mlb.com/astros/news/isaac-paredes-hayden-wesneski-cam-smith-traded-to-astros",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Kyle Tucker",
+     "player_id": 663656,
+     "service_time": "5.079",
+     "service_source": "https://web.archive.org/web/20241213074932/https://legacy.baseballprospectus.com/compensation/cots/al-west/houston-astros/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20241213074932/https://legacy.baseballprospectus.com/compensation/cots/al-west/houston-astros/",
+     "notes": "Final-year arbitration eligible for 2025 (2024 salary $12M); no 2025 salary agreed before the trade (did not agree by the January 2025 deadline; later settled with the Cubs). Free agent after 2025."
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Isaac Paredes",
+     "player_id": 670623,
+     "service_time": "3.160",
+     "service_source": "https://web.archive.org/web/20241202095502/https://legacy.baseballprospectus.com/compensation/cots/national-league-central/chicago-cubs/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20241202095502/https://legacy.baseballprospectus.com/compensation/cots/national-league-central/chicago-cubs/",
+     "notes": "Arbitration eligible for 2025; no 2025 salary agreed before the trade (later agreed $6.625M with Houston in January 2025, after the trade)."
+    },
+    {
+     "kind": "mlb",
+     "name": "Hayden Wesneski",
+     "player_id": 669713,
+     "service_time": "1.170",
+     "service_source": "https://web.archive.org/web/20241202095502/https://legacy.baseballprospectus.com/compensation/cots/national-league-central/chicago-cubs/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20241202095502/https://legacy.baseballprospectus.com/compensation/cots/national-league-central/chicago-cubs/",
+     "notes": "Pre-arbitration (under 3.000 service, not Super Two); no signed contract for 2025."
+    },
+    {
+     "kind": "prospect",
+     "name": "Cam Smith",
+     "player_id": 701358,
+     "fv": "45+",
+     "role": "bat",
+     "grade_source": "https://web.archive.org/web/20241109025327/https://www.fangraphs.com/prospects/the-board",
+     "grade_as_of": "2024-11-09"
+    }
+   ],
+   "notes": "Prospect FV grades are from FanGraphs The Board (\"2024 Updated\" lists) as captured by the Wayback Machine on 2024-11-09; grade_as_of is that capture date (the list itself was published earlier in 2024)."
+  },
+  {
+   "name": "Cody Bellinger and cash for Cody Poteet",
+   "date": "2024-12-17",
+   "teams": [
+    "Chicago Cubs",
+    "New York Yankees"
+   ],
+   "source": "https://www.mlb.com/press-release/press-release-yankees-acquire-inf-of-cody-bellinger",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Cody Bellinger",
+     "player_id": 641355,
+     "service_time": "7.160",
+     "service_source": "https://web.archive.org/web/20241202095502/https://legacy.baseballprospectus.com/compensation/cots/national-league-central/chicago-cubs/",
+     "contract": {
+      "guaranteed": [
+       {
+        "season": 2025,
+        "salary_musd": 27.5
+       }
+      ],
+      "options": [
+       {
+        "season": 2026,
+        "kind": "player",
+        "amount_musd": 25.0,
+        "buyout_musd": 5.0
+       }
+      ],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20241202095502/https://legacy.baseballprospectus.com/compensation/cots/national-league-central/chicago-cubs/",
+     "notes": "3 years/$80M (2024-26) signed 2/25/24: 2024 $27.5M; 2025 $27.5M player option, which he exercised 11/2/24, so 2025 is guaranteed; 2026 $25M player option with $5M buyout."
+    },
+    {
+     "kind": "cash",
+     "name": "Cubs pay Yankees $5M ($2.5M in 2025 and $2.5M in 2026)",
+     "cash_musd": [
+      2.5,
+      2.5
+     ],
+     "source": "https://web.archive.org/web/20250311103941/https://legacy.baseballprospectus.com/compensation/cots/al-east/new-york-yankees/"
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Cody Poteet",
+     "player_id": 547001,
+     "service_time": "2.095",
+     "service_source": "https://web.archive.org/web/20241205053744/https://legacy.baseballprospectus.com/compensation/cots/al-east/new-york-yankees/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20241205053744/https://legacy.baseballprospectus.com/compensation/cots/al-east/new-york-yankees/",
+     "notes": "Pre-arbitration (under 3.000 service, not Super Two); no signed contract for 2025."
+    }
+   ],
+   "notes": "Cash reported as $5M total; Cot's records $2.5M each in 2025 and 2026, and press reports say the second half covers his 2026 salary or the buyout if he opts out. Yankees release is timestamped 2024-12-18 00:31 UTC (evening of Dec 17 ET)."
+  },
+  {
+   "name": "Jose Trevino for Fernando Cruz and Alex Jackson",
+   "date": "2024-12-20",
+   "teams": [
+    "New York Yankees",
+    "Cincinnati Reds"
+   ],
+   "source": "https://www.mlb.com/news/press-release-yankees-acquire-rhp-fernando-cruz-and-c-alex-jackson",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Jose Trevino",
+     "player_id": 624431,
+     "service_time": "5.063",
+     "service_source": "https://web.archive.org/web/20241205053744/https://legacy.baseballprospectus.com/compensation/cots/al-east/new-york-yankees/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20241205053744/https://legacy.baseballprospectus.com/compensation/cots/al-east/new-york-yankees/",
+     "notes": "Arbitration eligible for 2025; no 2025 salary agreed before the trade (later agreed $3.425M with the Reds in January 2025, after the trade)."
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Fernando Cruz",
+     "player_id": 518585,
+     "service_time": "2.035",
+     "service_source": "https://web.archive.org/web/20241205190720/https://legacy.baseballprospectus.com/compensation/cots/national-league-central/cincinnati-reds/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20241205190720/https://legacy.baseballprospectus.com/compensation/cots/national-league-central/cincinnati-reds/",
+     "notes": "Pre-arbitration (under 3.000 service, not Super Two); no signed contract for 2025."
+    },
+    {
+     "kind": "mlb",
+     "name": "Alex Jackson",
+     "player_id": 656577,
+     "service_time": "2.123",
+     "service_source": "https://web.archive.org/web/20250311103941/https://legacy.baseballprospectus.com/compensation/cots/al-east/new-york-yankees/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20250311103941/https://legacy.baseballprospectus.com/compensation/cots/al-east/new-york-yankees/",
+     "notes": "Was on a minor-league contract with Cincinnati (signed 11/9/24), not on the 40-man roster; no guaranteed salary. Cot's showed 1.167 through 2023; 2.123 after his 2024 time with Tampa Bay."
+    }
+   ],
+   "notes": ""
+  },
+  {
+   "name": "Davis Daniel for Mitch Farris",
+   "date": "2024-12-20",
+   "teams": [
+    "Los Angeles Angels",
+    "Atlanta Braves"
+   ],
+   "source": "https://mlbtraderumors.com/2024/12/braves-acquire-davis-daniel.html",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Davis Daniel",
+     "player_id": 669721,
+     "service_time": "1.029",
+     "service_source": "https://web.archive.org/web/20241215192216/https://legacy.baseballprospectus.com/compensation/cots/al-west/los-angeles-angels/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20241215192216/https://legacy.baseballprospectus.com/compensation/cots/al-west/los-angeles-angels/",
+     "notes": "Pre-arbitration (under 3.000 service, not Super Two); no signed contract for 2025. Had been designated for assignment by the Angels."
+    }
+   ],
+   "right": [
+    {
+     "kind": "prospect",
+     "name": "Mitch Farris",
+     "player_id": 815083,
+     "fv": "35+",
+     "role": "pit",
+     "grade_source": "https://web.archive.org/web/20241109025327/https://www.fangraphs.com/prospects/the-board",
+     "grade_as_of": "2024-11-09"
+    }
+   ],
+   "notes": "Prospect FV grades are from FanGraphs The Board (\"2024 Updated\" lists) as captured by the Wayback Machine on 2024-11-09; grade_as_of is that capture date (the list itself was published earlier in 2024)."
+  },
+  {
+   "name": "Josh Naylor for Slade Cecconi and a Competitive Balance Round B pick",
+   "date": "2024-12-21",
+   "teams": [
+    "Cleveland Guardians",
+    "Arizona Diamondbacks"
+   ],
+   "source": "https://www.mlb.com/press-release/press-release-d-backs-acquire-josh-naylor-from-guardians",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Josh Naylor",
+     "player_id": 647304,
+     "service_time": "5.127",
+     "service_source": "https://web.archive.org/web/20241205142901/https://legacy.baseballprospectus.com/compensation/cots/american-league/cleveland-guardians/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20241205142901/https://legacy.baseballprospectus.com/compensation/cots/american-league/cleveland-guardians/",
+     "notes": "Final-year arbitration eligible for 2025 (2024 salary $6.5M); no 2025 salary agreed before the trade (later agreed $10.9M with Arizona in January 2025). Free agent after 2025."
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Slade Cecconi",
+     "player_id": 677944,
+     "service_time": "0.155",
+     "service_source": "https://web.archive.org/web/20241203000710/https://legacy.baseballprospectus.com/compensation/cots/nl-west/arizona-diamondbacks/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20241203000710/https://legacy.baseballprospectus.com/compensation/cots/nl-west/arizona-diamondbacks/",
+     "notes": "Pre-arbitration (under 3.000 service, not Super Two); no signed contract for 2025."
+    },
+    {
+     "kind": "draft_pick",
+     "name": "2025 Competitive Balance Round B pick (Arizona's; became No. 70)",
+     "pick_range": [
+      70,
+      70
+     ],
+     "source": "https://statsapi.mlb.com/api/v1/draft/2025"
+    }
+   ],
+   "notes": "Reported Dec 14; officially announced Dec 21. Arizona held the third pick of 2025 Competitive Balance Round B; Cleveland used it at No. 70 (Stats API 2025 draft results)."
+  },
+  {
+   "name": "Nathaniel Lowe for Robert Garcia",
+   "date": "2024-12-22",
+   "teams": [
+    "Texas Rangers",
+    "Washington Nationals"
+   ],
+   "source": "https://www.mlb.com/press-release/press-release-washington-nationals-acquire-nathaniel-lowe",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Nathaniel Lowe",
+     "player_id": 663993,
+     "service_time": "4.145",
+     "service_source": "https://web.archive.org/web/20241213112056/https://legacy.baseballprospectus.com/compensation/cots/al-west/texas-rangers/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20241213112056/https://legacy.baseballprospectus.com/compensation/cots/al-west/texas-rangers/",
+     "notes": "Arbitration eligible for 2025 (2024 salary $7.5M); no 2025 salary agreed before the trade (exchanged figures with Washington in January 2025)."
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Robert Garcia",
+     "player_id": 676395,
+     "service_time": "1.086",
+     "service_source": "https://web.archive.org/web/20241208082146/https://legacy.baseballprospectus.com/compensation/cots/national-league/washington-nationals/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20241208082146/https://legacy.baseballprospectus.com/compensation/cots/national-league/washington-nationals/",
+     "notes": "Pre-arbitration (under 3.000 service, not Super Two); no signed contract for 2025."
+    }
+   ],
+   "notes": "Reported Dec 13; officially announced Dec 22."
+  },
+  {
+   "name": "Mickey Gasper for Jovani Moran",
+   "date": "2024-12-24",
+   "teams": [
+    "Boston Red Sox",
+    "Minnesota Twins"
+   ],
+   "source": "https://www.mlb.com/news/press-release-red-sox-acquire-left-handed-pitcher-jovani-moran-from-minnesota-twins",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Mickey Gasper",
+     "player_id": 681508,
+     "service_time": "0.049",
+     "service_source": "https://web.archive.org/web/20241204014726/https://legacy.baseballprospectus.com/compensation/cots/al-east/boston-red-sox/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20241204014726/https://legacy.baseballprospectus.com/compensation/cots/al-east/boston-red-sox/",
+     "notes": "Pre-arbitration (under 3.000 service, not Super Two); no signed contract for 2025."
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Jovani Moran",
+     "player_id": 663558,
+     "service_time": "1.090",
+     "service_source": "https://web.archive.org/web/20250310211308/https://legacy.baseballprospectus.com/compensation/cots/al-east/boston-red-sox/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20250310211308/https://legacy.baseballprospectus.com/compensation/cots/al-east/boston-red-sox/",
+     "notes": "Pre-arbitration (under 3.000 service, not Super Two); no signed contract for 2025. Cot's lists 1.090 through 2023; he spent 2024 on a minor-league contract recovering from Tommy John surgery and did not pitch, so no 2024 MLB service is expected, but this is inferred rather than stated."
+    }
+   ],
+   "notes": ""
+  },
+  {
+   "name": "Ryan Pressly to Cubs for Juan Bello",
+   "date": "2025-01-28",
+   "teams": [
+    "Houston Astros",
+    "Chicago Cubs"
+   ],
+   "source": "https://www.mlb.com/news/ryan-pressly-astros-cubs-trade",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Ryan Pressly",
+     "player_id": 519151,
+     "service_time": "11.039",
+     "service_source": "https://web.archive.org/web/20250114215128/https://legacy.baseballprospectus.com/compensation/cots/al-west/houston-astros/",
+     "contract": {
+      "guaranteed": [
+       {
+        "season": 2025,
+        "salary_musd": 14.0
+       }
+      ],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20250114215128/https://legacy.baseballprospectus.com/compensation/cots/al-west/houston-astros/",
+     "notes": "Final year of 2-year/$30M extension (2023-24); the $14M 2025 mutual option ($2M buyout) became guaranteed when he met the appearance threshold, so 2025 is a guaranteed $14M. Full no-trade protection, waived for this deal. Jon Heyman (via theScore) reported the Cubs gave him a new full no-trade clause and an assignment bonus to cover the tax difference; the bonus amount was not reported. FanGraphs' write-up mentions a possible 2026 vest, but Cot's lists no 2026 option, so none is recorded. Service time from Cot's Baseball Contracts team page as archived on the Wayback Machine during the 2024-25 offseason (spot-checked: Cot's values on these snapshots match MLBTR's 2025 arbitration tracker for Skubal 4.114, Gomber 5.111, Feltner 2.143, Suarez 4.022)."
+    },
+    {
+     "kind": "cash",
+     "name": "Houston Astros pay $5.5M of Pressly's 2025 salary",
+     "cash_musd": [
+      5.5
+     ],
+     "source": "https://www.mlb.com/news/ryan-pressly-astros-cubs-trade"
+    }
+   ],
+   "right": [
+    {
+     "kind": "prospect",
+     "name": "Juan Bello",
+     "player_id": 805694,
+     "fv": "35+",
+     "role": "pit",
+     "grade_source": "https://blogs.fangraphs.com/chicago-cubs-top-37-prospects/",
+     "grade_as_of": "2024-12-20"
+    }
+   ],
+   "notes": "Pressly waived his no-trade clause on Jan 26; the Cubs announced the trade on Jan 28. MLB.com: Chicago is responsible for $8.5M of the $14M 2025 salary, so Houston sends $5.5M (FanGraphs also reports $5.5M). Bello was No. 31 and 35+ FV on FanGraphs' Cubs list (published 2024-12-20)."
+  },
+  {
+   "name": "Taylor Rogers and cash to Reds for Braxton Roxby",
+   "date": "2025-01-29",
+   "teams": [
+    "San Francisco Giants",
+    "Cincinnati Reds"
+   ],
+   "source": "https://www.mlb.com/news/taylor-rogers-traded-to-reds-from-giants",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Taylor Rogers",
+     "player_id": 573124,
+     "service_time": "8.145",
+     "service_source": "https://web.archive.org/web/20250115000817/https://legacy.baseballprospectus.com/compensation/cots/nl-west/san-francisco-giants/",
+     "contract": {
+      "guaranteed": [
+       {
+        "season": 2025,
+        "salary_musd": 12.0
+       }
+      ],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20250115000817/https://legacy.baseballprospectus.com/compensation/cots/nl-west/san-francisco-giants/",
+     "notes": "Final year of a 3-year/$33M free-agent deal (2023: $9M, 2024: $12M, 2025: $12M). Free agent after 2025. Service time from Cot's Baseball Contracts team page as archived on the Wayback Machine during the 2024-25 offseason (spot-checked: Cot's values on these snapshots match MLBTR's 2025 arbitration tracker for Skubal 4.114, Gomber 5.111, Feltner 2.143, Suarez 4.022)."
+    },
+    {
+     "kind": "cash",
+     "name": "San Francisco Giants pay $6M of Rogers' 2025 salary",
+     "cash_musd": [
+      6.0
+     ],
+     "source": "https://www.mlb.com/news/taylor-rogers-traded-to-reds-from-giants"
+    }
+   ],
+   "right": [
+    {
+     "kind": "prospect",
+     "name": "Braxton Roxby",
+     "player_id": 694820,
+     "fv": "35+",
+     "role": "pit",
+     "grade_source": "https://blogs.fangraphs.com/cincinnati-reds-top-40-prospects-2024/",
+     "grade_as_of": "2024-04-10"
+    }
+   ],
+   "notes": "MLB.com (Mark Sheldon): the Reds receive $6M, half of Rogers' $12M 2025 salary; FanGraphs reports the same. Roxby had no MLB service at the time (debut 2026-08-28 per the MLB Stats API). He was 35+ FV and No. 38 on FanGraphs' 2024 Reds list. The Giants list of 2025-01-17 was updated after this trade to add him at 35+, but that addition is dated after the trade, so the 2024 Reds list grade is the one used."
+  },
+  {
+   "name": "Nolan Jones to Guardians for Tyler Freeman",
+   "date": "2025-03-22",
+   "teams": [
+    "Colorado Rockies",
+    "Cleveland Guardians"
+   ],
+   "source": "https://www.mlb.com/news/guardians-acquire-nolan-jones-from-rockies-for-tyler-freeman",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Nolan Jones",
+     "player_id": 666134,
+     "service_time": "2.007",
+     "service_source": "https://web.archive.org/web/20250217210744/https://legacy.baseballprospectus.com/compensation/cots/nl-west/colorado-rockies/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20250217210744/https://legacy.baseballprospectus.com/compensation/cots/nl-west/colorado-rockies/",
+     "notes": "Pre-arbitration, so no guaranteed seasons. Cot's lists a 2025 one-year pre-arb contract with Colorado but no amount, so arb_salary_agreed_musd is null. Out of minor-league options (MLB.com). A later MLBTR page gives him 3.007 service after 2025, which is consistent with 2.007 at the end of 2024. Service time from Cot's Baseball Contracts team page as archived on the Wayback Machine during the 2024-25 offseason (spot-checked: Cot's values on these snapshots match MLBTR's 2025 arbitration tracker for Skubal 4.114, Gomber 5.111, Feltner 2.143, Suarez 4.022)."
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Tyler Freeman",
+     "player_id": 671289,
+     "service_time": "2.046",
+     "service_source": "https://web.archive.org/web/20250210152111/https://legacy.baseballprospectus.com/compensation/cots/american-league/cleveland-guardians/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20250210152111/https://legacy.baseballprospectus.com/compensation/cots/american-league/cleveland-guardians/",
+     "notes": "Pre-arbitration, so no guaranteed seasons. The Feb 2025 Cot's snapshot shows no 2025 salary yet, and no amount was found before the trade, so arb_salary_agreed_musd is null. Service time from Cot's Baseball Contracts team page as archived on the Wayback Machine during the 2024-25 offseason (spot-checked: Cot's values on these snapshots match MLBTR's 2025 arbitration tracker for Skubal 4.114, Gomber 5.111, Feltner 2.143, Suarez 4.022)."
+    }
+   ],
+   "notes": "Straight swap with no cash, announced by Cleveland on Saturday, March 22 (MLB.com; Guardians/Rockies press releases)."
+  },
+  {
+   "name": "Ian Anderson to Angels for Jose Suarez",
+   "date": "2025-03-23",
+   "teams": [
+    "Atlanta Braves",
+    "Los Angeles Angels"
+   ],
+   "source": "https://www.mlb.com/news/press-release-angels-acquire-rhp-ian-anderson-from-atlanta",
+   "left": [
+    {
+     "kind": "mlb",
+     "name": "Ian Anderson",
+     "player_id": 666120,
+     "service_time": "2.046",
+     "service_source": "https://web.archive.org/web/20250308175036/https://legacy.baseballprospectus.com/compensation/cots/national-league/atlanta-braves/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": null,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20250308175036/https://legacy.baseballprospectus.com/compensation/cots/national-league/atlanta-braves/",
+     "notes": "Pre-arbitration (2.046; he missed 2023 to Tommy John surgery and spent 2024 in the minors). Cot's lists a 2025 one-year contract with Atlanta but no amount, so arb_salary_agreed_musd is null. Service time from Cot's Baseball Contracts team page as archived on the Wayback Machine during the 2024-25 offseason (spot-checked: Cot's values on these snapshots match MLBTR's 2025 arbitration tracker for Skubal 4.114, Gomber 5.111, Feltner 2.143, Suarez 4.022)."
+    }
+   ],
+   "right": [
+    {
+     "kind": "mlb",
+     "name": "Jose Suarez",
+     "player_id": 660761,
+     "service_time": "4.022",
+     "service_source": "https://web.archive.org/web/20250306175519/https://legacy.baseballprospectus.com/compensation/cots/al-west/los-angeles-angels/",
+     "contract": {
+      "guaranteed": [],
+      "options": [],
+      "arb_salary_agreed_musd": 1.1,
+      "deferrals_note": null
+     },
+     "contract_source": "https://web.archive.org/web/20250306175519/https://legacy.baseballprospectus.com/compensation/cots/al-west/los-angeles-angels/",
+     "notes": "Second-year arbitration-eligible. He avoided arbitration with the Angels on 2025-01-09 at $1.1M for 2025 (Cot's; MLBTR 2025 arbitration tracker). Out of options. Service time from Cot's Baseball Contracts team page as archived on the Wayback Machine during the 2024-25 offseason (spot-checked: Cot's values on these snapshots match MLBTR's 2025 arbitration tracker for Skubal 4.114, Gomber 5.111, Feltner 2.143, Suarez 4.022)."
+    }
+   ],
+   "notes": "Straight swap with no cash, made official Sunday, March 23 (Angels press release; MLB.com story dated March 24 UTC)."
+  }
+ ],
+ "excluded": [
+  {
+   "name": "Daz Cameron to Orioles for cash",
+   "date": "2024-10-31",
+   "source": "https://www.mlb.com/transactions/2024/10/31",
+   "reason": "Cash considerations with no reported amount."
+  },
+  {
+   "name": "Scott Kingery to Angels for cash",
+   "date": "2024-11-01",
+   "source": "https://www.mlb.com/transactions/2024/11/01",
+   "reason": "Cash considerations with no reported amount."
+  },
+  {
+   "name": "Owen Miller to Rockies for cash",
+   "date": "2024-11-02",
+   "source": "https://www.mlb.com/transactions/2024/11/02",
+   "reason": "Cash considerations with no reported amount."
+  },
+  {
+   "name": "Devin Sweet to Phillies for cash",
+   "date": "2024-11-04",
+   "source": "https://www.mlb.com/transactions/2024/11/04",
+   "reason": "Cash considerations with no reported amount."
+  },
+  {
+   "name": "Taylor Trammell to Astros for cash",
+   "date": "2024-11-04",
+   "source": "https://www.mlb.com/transactions/2024/11/04",
+   "reason": "Cash considerations with no reported amount."
+  },
+  {
+   "name": "Austin Shenton to Mariners for cash",
+   "date": "2024-11-19",
+   "source": "https://www.mlb.com/transactions/2024/11/19",
+   "reason": "Cash considerations with no reported amount."
+  },
+  {
+   "name": "Matt Thaiss to Cubs for cash",
+   "date": "2024-11-20",
+   "source": "https://www.mlb.com/transactions/2024/11/20",
+   "reason": "Cash considerations with no reported amount."
+  },
+  {
+   "name": "Peter Strzelecki to Pirates for cash",
+   "date": "2024-11-22",
+   "source": "https://www.mlb.com/transactions/2024/11/22",
+   "reason": "Cash considerations with no reported amount."
+  },
+  {
+   "name": "Sean Harney to Mets for international bonus pool money",
+   "date": "2024-12-06",
+   "source": "https://www.mlb.com/transactions/2024/12/06",
+   "reason": "Asset is international bonus pool money (recorded as future considerations)."
+  },
+  {
+   "name": "Andres Gimenez and Nick Sandlin for Spencer Horwitz and Nick Mitchell",
+   "date": "2024-12-10",
+   "source": "https://www.mlb.com/transactions/2024/12/10",
+   "reason": "Minor leaguer Nick Mitchell (TOR) has no FanGraphs FV available on or before 2024-12-10: he is absent from the 2024 Updated board (Wayback 2024-11-09) and first appears (35+, as CLE) in the 2024-12-11 16:18 UTC capture after the trade. Baseball-Reference also treats this deal plus Horwitz's flip to Pittsburgh as one three-team trade."
+  },
+  {
+   "name": "Carlos Narvaez to Red Sox for Elmer Rodriguez-Cruz and future considerations",
+   "date": "2024-12-11",
+   "source": "https://www.mlb.com/transactions/2024/12/11",
+   "reason": "Includes unspecified future considerations (no reported cash amount)."
+  },
+  {
+   "name": "Jake Burger for Max Acosta, Echedry Vargas and Brayan Mendoza",
+   "date": "2024-12-11",
+   "source": "https://www.mlb.com/press-release/press-release-rangers-acquire-inf-jake-burger-from-miami-in-exchange-for-inf-max-acosta-inf-echedry-vargas-and-lhp-brayan-mendoza",
+   "reason": "Minor leaguer Brayan Mendoza has no FanGraphs FV on or before the trade date (absent from every 2023-2024 board list and from the 2024-12-11 16:18 UTC capture; first graded 40 in the 2024-12-13 capture). Echedry Vargas likewise was unlisted in 2024 (last graded 40 FV in 2023, then 35+ in the 2024-12-13 capture). Acosta was 45 FV by Nov 2024."
+  },
+  {
+   "name": "Mike Vasil to Rays for cash",
+   "date": "2024-12-11",
+   "source": "https://www.mlb.com/transactions/2024/12/11",
+   "reason": "Cash considerations with no reported amount. (Vasil had just been taken by Philadelphia in the Rule 5 draft; the transaction was effective 12/13.)"
+  },
+  {
+   "name": "Devin Williams for Nestor Cortes, Caleb Durbin and cash",
+   "date": "2024-12-13",
+   "source": "https://mlbtraderumors.com/2024/12/brewers-trade-devin-williams-yankees.html",
+   "reason": "Minor leaguer Caleb Durbin has no FanGraphs FV on or before 2024-12-13: absent from all 2023-2024 board lists and from the 2024-12-13 22:37 UTC capture; first appears (40, as MIL) in the 2024-12-20 capture. (Cash was reported: Yankees paid Milwaukee $2M per Cot's.)"
+  },
+  {
+   "name": "Jeffrey Springs and Jacob Lopez for Joe Boyle, Will Simpson, Jacob Watters and a draft pick",
+   "date": "2024-12-14",
+   "source": "https://www.mlb.com/transactions/2024/12/14",
+   "reason": "Draft pick asset is a 2025 Competitive Balance Round A pick (not Round B). Also, minor leaguer Jacob Watters has no FanGraphs FV on or before the trade date."
+  },
+  {
+   "name": "Enmanuel Valdez for Joe Vogatsky",
+   "date": "2024-12-15",
+   "source": "https://www.mlb.com/transactions/2024/12/15",
+   "reason": "Minor leaguer Joe Vogatsky has no FanGraphs FV on or before the trade date (not on any 2023-2024 board list or the December 2024 captures)."
+  },
+  {
+   "name": "Matt Thaiss to White Sox for cash",
+   "date": "2024-12-17",
+   "source": "https://www.mlb.com/transactions/2024/12/17",
+   "reason": "Cash considerations with no reported amount."
+  },
+  {
+   "name": "Chuckie Robinson to Angels for cash",
+   "date": "2024-12-18",
+   "source": "https://www.mlb.com/transactions/2024/12/18",
+   "reason": "Cash considerations with no reported amount."
+  },
+  {
+   "name": "Cam Booser for Yhoiker Fajardo",
+   "date": "2024-12-21",
+   "source": "https://www.mlb.com/transactions/2024/12/21",
+   "reason": "Minor leaguer Yhoiker Fajardo has no FanGraphs FV on or before the trade date (not on any 2023-2024 board list or the December 2024 captures)."
+  },
+  {
+   "name": "Jesus Luzardo and Paul McIntosh for Emaarion Boyd and Starlyn Caba",
+   "date": "2024-12-22",
+   "source": "https://www.mlb.com/transactions/2024/12/22",
+   "reason": "Minor leaguer Paul McIntosh has no FanGraphs FV on or before the trade date (not on any 2023-2024 board list or the December 2024 captures). Boyd (40) and Caba (50) were graded."
+  },
+  {
+   "name": "Vidal Brujan for Matt Mervis and cash",
+   "date": "2024-12-29",
+   "source": "https://www.mlb.com/press-release/press-release-miami-marlins-acquire-first-baseman-matt-mervis-from-chicago-cubs",
+   "reason": "Cash considerations with no reported amount. (Cubs sent cash with Mervis.)"
+  },
+  {
+   "name": "Tyler Gilbert to White Sox for Aaron Combs",
+   "date": "2025-01-01",
+   "source": "https://www.mlb.com/transactions/2025/01/01",
+   "reason": "Minor leaguer Aaron Combs (RHP, to Phillies) has no FanGraphs FV published on or before the trade date (no FanGraphs team list or prospect post grades him; he is absent from the FanGraphs Board snapshot of 2024-11-09)."
+  },
+  {
+   "name": "Grant Anderson to Brewers for Mason Molina",
+   "date": "2025-01-02",
+   "source": "https://www.mlb.com/transactions/2025/01/02",
+   "reason": "Minor leaguer Mason Molina (LHP, to Rangers) has no FanGraphs FV published on or before the trade date (no FanGraphs team list or prospect post grades him; he is absent from the FanGraphs Board snapshot of 2024-11-09)."
+  },
+  {
+   "name": "Owen White to Reds for cash",
+   "date": "2025-01-06",
+   "source": "https://www.mlb.com/transactions/2025/01/06",
+   "reason": "Asset is \"cash considerations\" with no reported amount (Baseball-Reference records it as a purchase)."
+  },
+  {
+   "name": "Gavin Lux to Reds for Mike Sirota and draft pick",
+   "date": "2025-01-06",
+   "source": "https://blogs.fangraphs.com/reds-greenlight-gavin-lux-trade-with-dodger-blue/",
+   "reason": "Draft pick is Cincinnati's 2025 Competitive Balance Round A pick (No. 37 overall), not Round B. Announced Monday, Jan 6 (the MLB Stats API logs the Reds' side on Jan 7)."
+  },
+  {
+   "name": "Grae Kessinger to Diamondbacks for Matthew Linskey",
+   "date": "2025-01-08",
+   "source": "https://www.mlb.com/transactions/2025/01/08",
+   "reason": "Minor leaguer Matthew Linskey (RHP, to Astros) has no FanGraphs FV published on or before the trade date (no FanGraphs team list or prospect post grades him; he is absent from the FanGraphs Board snapshot of 2024-11-09)."
+  },
+  {
+   "name": "Diego Cartaya to Twins for Jose Vasquez",
+   "date": "2025-01-09",
+   "source": "https://blogs.fangraphs.com/dodgers-trade-stunted-catching-prospect-diego-cartaya-to-twins-for-hard-throwing-dsl-arm/",
+   "reason": "Minor leaguer Jose Vasquez (DSL RHP, to Dodgers) has no FanGraphs FV on or before the trade date. Longenhagen's same-day write-up describes him but gives no FV, and he is on no FanGraphs list. Cartaya was 45 FV on the Board."
+  },
+  {
+   "name": "Matt Festa to Cubs for cash",
+   "date": "2025-01-09",
+   "source": "https://www.mlb.com/transactions/2025/01/09",
+   "reason": "Asset is \"cash considerations\" with no reported amount."
+  },
+  {
+   "name": "Miles Mastrobuoni to Mariners for cash",
+   "date": "2025-01-14",
+   "source": "https://www.mlb.com/transactions/2025/01/14",
+   "reason": "Asset is \"cash considerations\" with no reported amount."
+  },
+  {
+   "name": "Michael Arias to Yankees for cash",
+   "date": "2025-01-15",
+   "source": "https://www.mlb.com/transactions/2025/01/15",
+   "reason": "Asset is \"cash considerations\" with no reported amount."
+  },
+  {
+   "name": "Brett de Geus to Pirates for cash",
+   "date": "2025-01-15",
+   "source": "https://www.mlb.com/transactions/2025/01/15",
+   "reason": "Asset is \"cash considerations\" with no reported amount."
+  },
+  {
+   "name": "Blake Hunt to Mariners for cash",
+   "date": "2025-01-15",
+   "source": "https://www.mlb.com/transactions/2025/01/15",
+   "reason": "Asset is \"cash considerations\" with no reported amount."
+  },
+  {
+   "name": "William Kempner to Marlins for international bonus pool money",
+   "date": "2025-01-15",
+   "source": "https://www.mlb.com/transactions/2025/01/15",
+   "reason": "An asset is international bonus pool money (plus unspecified future considerations)."
+  },
+  {
+   "name": "Dylan Campbell to Phillies for future considerations",
+   "date": "2025-01-17",
+   "source": "https://www.mlb.com/transactions/2025/01/17",
+   "reason": "Return is unspecified future considerations (cash or a player to be named later) with no reported amount."
+  },
+  {
+   "name": "Arnaldo Lantigua to Reds for future considerations",
+   "date": "2025-01-17",
+   "source": "https://www.mlb.com/transactions/2025/01/17",
+   "reason": "Return is unspecified future considerations (cash or a player to be named later) with no reported amount."
+  },
+  {
+   "name": "Myles Straw and cash to Blue Jays for PTBNL",
+   "date": "2025-01-17",
+   "source": "https://www.mlb.com/transactions/2025/01/17",
+   "reason": "Return is a player to be named later, and the cash and other considerations sent with Straw have no reported amount."
+  },
+  {
+   "name": "Chase Shugart to Pirates for Matt McShane",
+   "date": "2025-01-17",
+   "source": "https://www.mlb.com/press-release/press-release-red-sox-acquire-minor-league-right-handed-pitcher-matt-mcshane-from-pittsburgh-pirates",
+   "reason": "Minor leaguer Matt McShane (RHP, to Red Sox; 2024 13th-round pick) has no FanGraphs FV published on or before the trade date (no FanGraphs team list or prospect post grades him; he is absent from the FanGraphs Board snapshot of 2024-11-09). Not in the MLB Stats API transaction feed; found through Baseball-Reference and confirmed by the Red Sox press release."
+  },
+  {
+   "name": "Will Klein to Mariners for other considerations",
+   "date": "2025-01-21",
+   "source": "https://www.mlb.com/transactions/2025/01/21",
+   "reason": "Return is unspecified 'other considerations' with no reported amount."
+  },
+  {
+   "name": "Brandon Eisert to Rays for cash",
+   "date": "2025-01-23",
+   "source": "https://www.mlb.com/transactions/2025/01/23",
+   "reason": "Asset is \"cash considerations\" with no reported amount."
+  },
+  {
+   "name": "Ron Marinaccio to Padres for cash",
+   "date": "2025-01-24",
+   "source": "https://www.mlb.com/transactions/2025/01/24",
+   "reason": "Asset is \"cash considerations\" with no reported amount."
+  },
+  {
+   "name": "Jhonny Pereda to Athletics for cash",
+   "date": "2025-01-30",
+   "source": "https://www.mlb.com/transactions/2025/01/30",
+   "reason": "Asset is \"cash considerations\" with no reported amount."
+  },
+  {
+   "name": "Luis Vazquez to Orioles for cash",
+   "date": "2025-01-31",
+   "source": "https://www.mlb.com/transactions/2025/01/31",
+   "reason": "Asset is \"cash considerations\" with no reported amount."
+  },
+  {
+   "name": "Alex Faedo to Rays for Enderson Delgado and cash",
+   "date": "2025-02-03",
+   "source": "https://www.mlb.com/news/alex-faedo-rays-tigers-trade",
+   "reason": "The Rays sent Delgado (40 FV, FanGraphs Rays list 2024-07-04) plus \"cash considerations\" with no reported amount (MLB.com trade details: 'Tigers get: Minor League C Enderson Delgado, cash')."
+  },
+  {
+   "name": "Casey Legumina to Mariners for cash",
+   "date": "2025-02-03",
+   "source": "https://www.mlb.com/transactions/2025/02/03",
+   "reason": "Asset is \"cash considerations\" with no reported amount."
+  },
+  {
+   "name": "Ryan Brasier to Cubs for PTBNL",
+   "date": "2025-02-04",
+   "source": "https://www.mlb.com/transactions/2025/02/04",
+   "reason": "Return is a player to be named later or future considerations (the MLB Stats API says PTBNL, Baseball-Reference says future considerations)."
+  },
+  {
+   "name": "Josh Hejka to Phillies",
+   "date": "2025-02-05",
+   "source": "https://www.mlb.com/transactions/2025/02/05",
+   "reason": "Sold for cash with no reported amount (Baseball-Reference: player rights sold; the MLB Stats API lists no return)."
+  },
+  {
+   "name": "Michael Helman to Cardinals for cash",
+   "date": "2025-02-06",
+   "source": "https://www.mlb.com/transactions/2025/02/06",
+   "reason": "Asset is \"cash considerations\" with no reported amount."
+  },
+  {
+   "name": "Osleivis Basabe to Giants for cash",
+   "date": "2025-02-06",
+   "source": "https://www.mlb.com/transactions/2025/02/06",
+   "reason": "Asset is \"cash considerations\" with no reported amount."
+  },
+  {
+   "name": "Mason Englert to Rays for Drew Sommers",
+   "date": "2025-02-12",
+   "source": "https://www.mlb.com/transactions/2025/02/12",
+   "reason": "Minor leaguer Drew Sommers (LHP, to Tigers) has no FanGraphs FV published on or before the trade date (no FanGraphs team list or prospect post grades him; he is absent from the FanGraphs Board snapshot of 2024-11-09)."
+  },
+  {
+   "name": "Alexander Canario to Mets",
+   "date": "2025-02-25",
+   "source": "https://www.mlb.com/transactions/2025/02/25",
+   "reason": "Sold for cash with no reported amount (Baseball-Reference: player rights sold)."
+  },
+  {
+   "name": "Bailey Horn to Tigers",
+   "date": "2025-03-13",
+   "source": "https://www.mlb.com/transactions/2025/03/13",
+   "reason": "Return is cash with no reported amount (the MLB Stats API lists no return; press reports say cash)."
+  },
+  {
+   "name": "Angel Perdomo to Angels",
+   "date": "2025-03-17",
+   "source": "https://www.mlb.com/transactions/2025/03/17",
+   "reason": "Sold for cash with no reported amount (Baseball-Reference: player rights sold)."
+  },
+  {
+   "name": "Nathan Wiles to Braves",
+   "date": "2025-03-21",
+   "source": "https://www.mlb.com/transactions/2025/03/21",
+   "reason": "Sold for cash with no reported amount (Baseball-Reference: player rights sold)."
+  },
+  {
+   "name": "Michael Hobbs to Mariners",
+   "date": "2025-03-22",
+   "source": "https://www.mlb.com/transactions/2025/03/22",
+   "reason": "Sold for cash with no reported amount (Baseball-Reference: player rights sold)."
+  },
+  {
+   "name": "Mark Canha to Royals for PTBNL",
+   "date": "2025-03-22",
+   "source": "https://www.mlb.com/transactions/2025/03/22",
+   "reason": "Return is a player to be named later (minor leaguer Cesar Espinal, sent 2025-04-21)."
+  },
+  {
+   "name": "Troy Schreffler to Mets",
+   "date": "2025-03-23",
+   "source": "https://www.mlb.com/transactions/2025/03/23",
+   "reason": "Return is cash with no reported amount (Spotrac lists cash considerations; the MLB Stats API lists no return)."
+  },
+  {
+   "name": "Shawndrick Oduber to Dodgers",
+   "date": "2025-03-24",
+   "source": "https://www.mlb.com/transactions/2025/03/24",
+   "reason": "Return is cash with no reported amount (SI/Dodgers Nation; reported publicly only in April 2025)."
+  },
+  {
+   "name": "Sean Harney to Cardinals for international bonus pool money",
+   "date": "2025-03-25",
+   "source": "https://www.mlb.com/transactions/2025/03/25",
+   "reason": "Asset is international bonus pool money (Baseball-Reference)."
+  },
+  {
+   "name": "Haden Erbe to Tigers",
+   "date": "2025-03-25",
+   "source": "https://www.mlb.com/transactions/2025/03/25",
+   "reason": "Sold for cash with no reported amount (Baseball-Reference: player rights sold)."
+  },
+  {
+   "name": "Tyler Phillips to Marlins for cash",
+   "date": "2025-03-26",
+   "source": "https://www.mlb.com/transactions/2025/03/26",
+   "reason": "Asset is \"cash considerations\" with no reported amount."
+  }
+ ]
+}
