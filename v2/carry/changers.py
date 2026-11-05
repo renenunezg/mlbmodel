@@ -58,20 +58,24 @@ def pairs(profiles: pd.DataFrame, counts: pd.DataFrame, carry: pd.DataFrame) -> 
 
 def coefficients(p: pd.DataFrame) -> dict:
     """Per outcome: change per degree of tilt, per degree of attack angle at average whiff rate, and the extra per degree
-    of attack angle per standard deviation of whiff rate; bat speed change held as a control. `cov` is the coefficients'
-    covariance in that order, clustered by hitter because a hitter contributes one pair per consecutive-season span."""
+    of attack angle per standard deviation of whiff rate; bat speed change held as a control, and the outcome's first-season
+    level too, so a hitter who changes his swing after an unusual season is not credited with the rebound that would have
+    followed anyway. `cov` is the four swing coefficients' covariance in that order, clustered by hitter because a hitter
+    contributes one pair per consecutive-season span."""
     whiff_mean, whiff_sd = float(p.whiff_0.mean()), float(p.whiff_0.std())
     z = (p.whiff_0 - whiff_mean) / whiff_sd
     names = ["d_tilt", "d_attack", "d_attack_x_whiff", "d_bat_speed"]
-    design = np.column_stack([np.ones(len(p)), p.d_tilt, p.d_attack, p.d_attack * z, p.d_bat_speed])
+    swing = np.column_stack([np.ones(len(p)), p.d_tilt, p.d_attack, p.d_attack * z, p.d_bat_speed])
     out = {"n": int(len(p)), "n_hitters": int(p.batter.nunique()), "whiff_mean": round(whiff_mean, 4),
            "whiff_sd": round(whiff_sd, 4), "outcomes": {}}
     for col in OUTCOMES:
         y = p[f"d_{col}"].to_numpy()
-        ok = np.isfinite(y)
-        X, y = design[ok], y[ok]
+        level = p[f"{col}_0"].to_numpy()
+        ok = np.isfinite(y) & np.isfinite(level)
+        X = np.column_stack([swing[ok], level[ok] - level[ok].mean()])
+        y = y[ok]
         beta, *_ = np.linalg.lstsq(X, y, rcond=None)
-        cov = _clustered_cov(X, y - X @ beta, p.batter.to_numpy()[ok])[1:, 1:]
+        cov = _clustered_cov(X, y - X @ beta, p.batter.to_numpy()[ok])[1:5, 1:5]
         out["outcomes"][col] = {**{name: _sig(b) for name, b in zip(names, beta[1:])}, "cov": [[_sig(c) for c in row] for row in cov]}
     return out
 
