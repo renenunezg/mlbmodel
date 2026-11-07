@@ -9,6 +9,6 @@ requests
 beautifulsoup4
 lxml
 scikit-learn
-xgboost==3.0.0
+xgboost==3.2.0
 pybaseball
 scipy

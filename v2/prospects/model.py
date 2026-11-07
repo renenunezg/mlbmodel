@@ -27,6 +27,38 @@ MODELS_DIR = Path(__file__).resolve().parent / "models"
 POOLS = ("bat", "pit")
 QUANTILES = (0.25, 0.75)
 RISK_LABELS = ("safe", "medium", "high", "extreme")
+UBJSON_LENGTH_BYTES = {b"i": 1, b"U": 1, b"I": 2, b"l": 4, b"L": 8}
+
+
+def _stored_base_score(raw: bytes) -> str:
+    """The base_score string as written in a UBJSON booster, read without xgboost."""
+    i = raw.find(b"base_score") + len(b"base_score")
+    if i < len(b"base_score") or raw[i:i + 1] != b"S":
+        raise ValueError("booster has no string base_score")
+    width = UBJSON_LENGTH_BYTES[raw[i + 1:i + 2]]
+    n = int.from_bytes(raw[i + 2:i + 2 + width], "big")
+    return raw[i + 2 + width:i + 2 + width + n].decode("ascii")
+
+
+def _floats(text: str) -> list[float]:
+    return [float(v) for v in text.strip("[]").split(",")]
+
+
+def decode_booster(encoded: str) -> xgb.Booster:
+    """A booster from its gzipped base64 UBJSON, refusing an xgboost build that misreads its intercept.
+
+    xgboost 3.0 reads the vector base_score written by 3.1+ as the default 0.5, which silently rescaled
+    every log-link prediction (peak WAR about 5x) on the 2026-11-02 board.
+    """
+    raw = gzip.decompress(base64.b64decode(encoded))
+    b = xgb.Booster()
+    b.load_model(bytearray(raw))
+    stored = _stored_base_score(raw)
+    loaded = json.loads(b.save_config())["learner"]["learner_model_param"]["base_score"]
+    if not np.allclose(_floats(stored), _floats(loaded), rtol=1e-6):
+        raise RuntimeError(f"xgboost {xgb.__version__} loaded base_score {loaded} but the booster stores {stored}; "
+                           "install the xgboost version that fitted the model")
+    return b
 
 
 @dataclass
@@ -50,9 +82,7 @@ class ProspectModel:
     evaluation: dict = field(default_factory=dict)
 
     def booster(self, pool: str, target: str) -> xgb.Booster:
-        b = xgb.Booster()
-        b.load_model(bytearray(gzip.decompress(base64.b64decode(self.boosters[pool][target]))))
-        return b
+        return decode_booster(self.boosters[pool][target])
 
     def set_booster(self, pool: str, target: str, booster: xgb.Booster) -> None:
         self.boosters.setdefault(pool, {})[target] = base64.b64encode(gzip.compress(bytes(booster.save_raw("ubj")), 9)).decode("ascii")

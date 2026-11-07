@@ -35,7 +35,7 @@ from sklearn.metrics import roc_auc_score
 
 from backend.log import setup_logging
 from v2.prospects import dataset, features, fit, identity, injuries, lists, recent, stuff
-from v2.prospects.model import ProspectModel, logit
+from v2.prospects.model import ProspectModel, decode_booster, logit
 
 log = logging.getLogger(__name__)
 
@@ -86,12 +86,6 @@ def _encode(b: xgb.Booster) -> str:
     return base64.b64encode(gzip.compress(bytes(b.save_raw("ubj")), 9)).decode("ascii")
 
 
-def _decode(s: str) -> xgb.Booster:
-    b = xgb.Booster()
-    b.load_model(bytearray(gzip.decompress(base64.b64decode(s))))
-    return b
-
-
 def _margins(base: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
     return logit(base["p_mlb"].to_numpy(float)), np.log(base["peak_war"].to_numpy(float) + WAR_EPS)
 
@@ -129,7 +123,7 @@ def apply(base: pd.DataFrame, feats: pd.DataFrame, adjustment: dict) -> pd.DataF
     if not have.any():
         return out
     rows = out[have]
-    r, w = _shifts(_decode(adjustment["reach"]), _decode(adjustment["war"]), feats[have], rows)
+    r, w = _shifts(decode_booster(adjustment["reach"]), decode_booster(adjustment["war"]), feats[have], rows)
     m_reach, m_war = _margins(rows)
     order = {"p_mlb": m_reach + r}
     for col in ("p_regular", "peak_war", "control_war", "control_q25", "control_q75"):

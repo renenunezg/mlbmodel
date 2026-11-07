@@ -27,6 +27,7 @@ import pandas as pd
 import xgboost as xgb
 
 from v2.prospects import pitches
+from v2.prospects.model import decode_booster
 
 READINGS = ("velo", "ivb", "hb", "spin", "ext")
 GRADE_MIN_PITCHES = 100  # a pitcher-season-type in the MLB grade scale
@@ -48,9 +49,7 @@ class StuffModel:
     evaluation: dict = field(default_factory=dict)
 
     def booster(self, key: str) -> xgb.Booster:
-        b = xgb.Booster()
-        b.load_model(bytearray(gzip.decompress(base64.b64decode(self.boosters[key]))))
-        return b
+        return decode_booster(self.boosters[key])
 
     def set_booster(self, key: str, booster: xgb.Booster) -> None:
         self.boosters[key] = base64.b64encode(gzip.compress(bytes(booster.save_raw("ubj")), 9)).decode("ascii")
