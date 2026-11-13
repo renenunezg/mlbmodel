@@ -12,7 +12,8 @@ Usage:
     python -m v2.pitch_value.validate [--confirm]
 
 Reads cache/pitch_value/pitcher_seasons.parquet (run ``python -m v2.pitch_value.run`` first) and the MLB
-Stats API season lines, kept under cache/pitch_value/lines_{season}.parquet once a season is over.
+Stats API season lines, kept under cache/pitch_value/lines_{season}.parquet once a season is over. With every
+season's lines cached, a run needs neither the network nor the database configuration.
 """
 from __future__ import annotations
 
@@ -26,7 +27,6 @@ import pandas as pd
 
 from backend.data.game_types import regular_season_pitches
 from backend.log import setup_logging
-from v2 import season_stats
 from v2.pitch_value.pitches import STATCAST_DIR
 from v2.pitch_value.run import OUT_DIR
 
@@ -44,6 +44,8 @@ CONFIRMATION = (2024, 2025)
 # Statcast batted-ball types FanGraphs counts as fly balls for xFIP (infield flies included).
 FLY_BALLS = ("fly_ball", "popup")
 BOOTSTRAP_DRAWS = 2000
+# Month and day from which a season's regular-season lines no longer change (the regular season ends by early October).
+LINES_FINAL = (11, 1)
 
 
 def fly_balls(season: int) -> pd.Series:
@@ -61,6 +63,9 @@ def official(season: int) -> pd.DataFrame:
     path = OUT_DIR / f"lines_{season}.parquet"
     if path.exists():
         return pd.read_parquet(path)
+    # Imported here: the module loads the database engine, which a run over cached lines does not need.
+    from v2 import season_stats
+
     lines = season_stats.official_lines(season, "pitching", (1,))
     out = season_stats.pitching_production(lines, season_stats.fip_constants(lines))
     runs = lines.assign(runs=lines["runs"].astype(float)).groupby("player_id")["runs"].sum()
@@ -69,7 +74,7 @@ def official(season: int) -> pd.DataFrame:
     xfip = out["fip"] + 39.0 * (expected_hr - out["hr"]) / out["outs"].where(out["outs"] > 0)
     out = pd.DataFrame({"season": season, "innings": out["outs"] / 3.0, "era": out["era"], "fip": out["fip"], "xfip": xfip,
                         "ra9": 27.0 * runs / out["outs"].where(out["outs"] > 0)}).reset_index()
-    if season < date.today().year:
+    if date.today() >= date(season, *LINES_FINAL):
         out.to_parquet(path, index=False)
     return out
 
