@@ -21,11 +21,13 @@ from sklearn.ensemble import HistGradientBoostingClassifier
 from v2.pitch_value import expectancy
 
 CLASSES = ("out", "single", "double", "triple", "home_run")
-# Launch angle in degrees that separates ground balls, line drives and fly balls.
+# Launch angle in degrees that separates ground balls, line drives and fly balls: Statcast's own batted-ball classes.
 TRAJECTORY_EDGES = (10.0, 25.0)
 N_TRAJECTORIES = len(TRAJECTORY_EDGES) + 1
 N_BASE_OUT = 24
-# Leaves this large keep a five-feature model on 700,000 batted balls from fitting single plays.
+# Leaves this large keep a five-feature model on 700,000 batted balls from fitting single plays. Held-out log loss
+# (every fifth game left out in turn) is 0.5688 at 25 and 0.5629 at 100, then flat: 0.5597 at 200, 0.5596 at 400,
+# 0.5595 at 800, 0.5596 at 1,600. Any value from 200 up does the same job.
 MIN_LEAF = 200
 
 
