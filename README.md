@@ -12,7 +12,7 @@ The site's methodology page explains the model in detail.
 1. Hierarchical Bayesian models estimate batter, pitcher, and park effects on plate-appearance outcomes, partially pooled so thin samples shrink toward the league.
 2. A plate-appearance Monte Carlo simulator plays each game many times across posterior draws, with posted lineups, starters, and a rest-aware bullpen.
 3. Simulated probabilities are reconciled with the de-vigged betting consensus before publication.
-   The market is the calibration benchmark: sharp bettors move lines toward true probabilities quickly.
+   The market is the calibration benchmark, because sharp bettors move lines toward true probabilities quickly.
 4. Recommendations follow the versioned pick policy in `backend/strategy.py` and need known starters, posted lineups, and a paired market price.
    Totals recommendations are disabled.
 5. A nightly job grades every frozen forecast and writes running accuracy, calibration, and betting results.
@@ -72,7 +72,7 @@ Each entry point takes `--help`.
 
 ## Production
 
-GitHub Actions runs production, and every production workflow checks out the `release` branch, never `main`.
+GitHub Actions runs production, and every production workflow checks out the `release` branch.
 Promote a verified commit with `git push origin main:release`.
 A release that changes `v2/players/` must first revalidate and republish the player model row, or the scorer refuses the stale row.
 
@@ -97,7 +97,7 @@ The site grades games provisionally as they finish; the nightly evaluation is th
 ## Database
 
 All tables live in the `mlb` schema and key games on `game_pk`, the MLB Stats API game ID.
-Row-level security grants read-only access to the site; this pipeline writes as `postgres`.
+Row-level security gives the site read-only access, and this pipeline writes as `postgres`.
 Migrations live in `backend/sql/`, and production schema changes need separate approval.
 
 To rebuild an empty project, install momentumweb's `sql/001_site_revalidate.sql`, restore the schema snapshot in `backend/sql/baseline/`, then apply the migrations dated after that snapshot.
