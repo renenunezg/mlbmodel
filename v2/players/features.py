@@ -23,6 +23,10 @@ MIN_INPUT_AVAILABILITY = 0.5
 HITTER_POOL, PITCHER_POOL = "hitter", "pitcher"
 PITCHER_GROUPS = {"SP", "RP"}
 CATCHER_INPUTS = {"arm.cs_above_average", "arm.pop_time", "reliability.blocking_runs", "reliability.framing_runs"}
+CATCHER_GROUP = "C"
+# Traits the grade reads for catchers only. Fielders' arm strength never earned grade weight, and
+# under one shared coefficient it held catchers' throwing (caught stealing, pop time) at zero too.
+CATCHER_ONLY_GRADE_TRAITS = frozenset({"arm"})
 # Seasonal age in the projected season enters the grade as (age - 28) and its square; unknown counts as 28.
 AGE_CENTER = 28.0
 AGE_FEATURES = ("age", "age2")
@@ -91,14 +95,23 @@ def input_percentiles(values: pd.DataFrame, group: pd.Series) -> pd.DataFrame:
     return pct
 
 
-def trait_composites(z: pd.DataFrame, pool: pd.Series, model: ValueModel) -> tuple[pd.DataFrame, pd.DataFrame]:
+def applies(name: str, catcher: pd.Series) -> pd.Series:
+    """Whether an input describes each player: a catcher's fielding is read from the catcher boards only, everyone else's from the fielder boards."""
+    if INPUTS[name].role != "fld":
+        return pd.Series(True, index=catcher.index)
+    return catcher if name in CATCHER_INPUTS else ~catcher
+
+
+def trait_composites(z: pd.DataFrame, pool: pd.Series, group: pd.Series, model: ValueModel) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Weighted composites per trait and the share of weight each player's inputs covered.
 
-    An input enters a pool's composite only where at least half the pool has it; a
-    player missing an available input counts as average (z = 0). A composite is NaN
-    when his inputs cover under MIN_WEIGHT_COVERAGE of the trait's weight.
+    An input enters a pool's composite only where at least half the players it describes
+    (``applies``) have it; a player missing an available input counts as average (z = 0).
+    Each player's weights are those of the inputs that describe him, renormalized. A
+    composite is NaN when his inputs cover under MIN_WEIGHT_COVERAGE of that weight.
     """
     weights = model.trait_weight_frame()
+    catcher = group.reindex(z.index).eq(CATCHER_GROUP)
     comps = pd.DataFrame(index=z.index)
     coverage = pd.DataFrame(index=z.index)
     for trait, spec in TRAITS.items():
@@ -112,16 +125,19 @@ def trait_composites(z: pd.DataFrame, pool: pd.Series, model: ValueModel) -> tup
             comps[trait], coverage[trait] = np.nan, np.nan
             continue
         sub = z.loc[members, cols]
-        available = sub.notna().mean() >= MIN_INPUT_AVAILABILITY
+        described = pd.DataFrame({c: applies(c, catcher[members]) for c in cols})
+        available = sub.notna().where(described).mean() >= MIN_INPUT_AVAILABILITY
         cols = [c for c in cols if available[c]]
         if not cols:
             comps[trait], coverage[trait] = np.nan, np.nan
             continue
         w = tw.set_index("input").loc[cols, "weight"].astype(float)
         w = w / w.abs().sum()
-        present = sub[cols].notna().astype(float)
-        cov = present @ w.abs()
-        composite = sub[cols].fillna(0.0) @ w
+        described = described[cols].astype(float)
+        scale = described @ w.abs()
+        present = sub[cols].notna().astype(float) * described
+        cov = (present @ w.abs()) / scale.where(scale > 0)
+        composite = ((sub[cols].fillna(0.0) * described) @ w) / scale.where(scale > 0)
         comps.loc[members, trait] = composite.where(cov >= MIN_WEIGHT_COVERAGE)
         coverage.loc[members, trait] = cov
     return comps, coverage
@@ -168,13 +184,21 @@ def direct_inputs(model: ValueModel) -> tuple[str, ...]:
     return (BATTING_INPUTS if model.direct_batting else ()) + (PITCHER_INPUTS if model.reliever_inputs else ())
 
 
-def grade_features(composites: pd.DataFrame, shrunk: pd.Series, pool: pd.Series, age: pd.Series, z: pd.DataFrame | None = None,
-                   direct: tuple[str, ...] = ()) -> pd.DataFrame:
+def in_grade(trait: str, catcher: bool) -> bool:
+    """Whether the grade can read a trait for a catcher (True) or another player (False)."""
+    return catcher or trait not in CATCHER_ONLY_GRADE_TRAITS
+
+
+def grade_features(composites: pd.DataFrame, shrunk: pd.Series, pool: pd.Series, group: pd.Series, age: pd.Series,
+                   z: pd.DataFrame | None = None, direct: tuple[str, ...] = ()) -> pd.DataFrame:
     """The design matrix for the group grade: trait composites, the shrunk-runs feature, and age.
 
     ``direct`` names oriented inputs from ``z`` added as their own columns (see ``direct_inputs``).
     """
     x = composites.copy()
+    catcher = group.reindex(x.index).eq(CATCHER_GROUP)
+    for trait in CATCHER_ONLY_GRADE_TRAITS & set(x.columns):
+        x.loc[~catcher, trait] = np.nan
     for name in direct:
         x[name] = z[name].reindex(x.index) if z is not None and name in z.columns else np.nan
     x["shrunk_runs"] = shrunk.reindex(x.index)

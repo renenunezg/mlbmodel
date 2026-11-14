@@ -28,7 +28,9 @@ BOARDS: dict[str, str] = {
     "&season_start={season}&split=no&team=&type=Cat&with_team=0&csv=true",
     "catcher_throwing": _SAVANT + "catcher-throwing?game_type=All&n=q&season_end={season}"
     "&season_start={season}&split=no&team=&type=Cat&with_team=0&csv=true",
-    "catcher_framing": _SAVANT + "catcher-framing?year={season}&team=&min=q&csv=true",
+    # The framing board ignores ``year`` and always returns the latest season; it reads seasonStart/seasonEnd.
+    "catcher_framing": _SAVANT + "catcher-framing?type=catcher&seasonStart={season}&seasonEnd={season}"
+    "&team=&min=q&csv=true",
     "baserunning": _SAVANT + "baserunning-run-value?game_type=All&season_start={season}"
     "&season_end={season}&csv=true",
     "sprint_speed": _SAVANT + "sprint_speed?year={season}&position=&team=&min=10&csv=true",
@@ -41,11 +43,15 @@ BOARDS: dict[str, str] = {
 }
 # Boards that name the player id column something other than player_id.
 _ID_COLUMNS = ("player_id", "id", "pitcher", "entity_id")
+# A board whose request changed what a season's file holds gets a new cache name, so every
+# cached copy (local and the CI player-state cache) is fetched again rather than trusted.
+_CACHE_REVISION = {"catcher_framing": "r2"}
 
 
 def _cache_path(board: str, season: int, pos: str) -> Path:
     suffix = f"_{pos.lower()}" if pos else ""
-    return CACHE_DIR / f"savant_{board}_{season}{suffix}.csv"
+    revision = f"_{_CACHE_REVISION[board]}" if board in _CACHE_REVISION else ""
+    return CACHE_DIR / f"savant_{board}_{season}{suffix}{revision}.csv"
 
 
 def _fetch(url: str, attempts: int = 3) -> str:

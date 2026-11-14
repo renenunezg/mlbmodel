@@ -213,8 +213,8 @@ def grade_as_of(m: SeasonMaterial, as_of: date, current: tuple[pd.DataFrame, pd.
     sample = features.role_rows(rates, group).set_index("player_id")["n"].reindex(values.index).fillna(0.0)
     leverage = values["workload.leverage"] if "workload.leverage" in values.columns else None
     shrunk = features.shrunk_runs(rates, m.model, group, leverage).reindex(values.index)
-    comps, _ = features.trait_composites(z, pool, m.model)
-    x = features.grade_features(comps, shrunk, pool, m.ages, z, features.direct_inputs(m.model))
+    comps, _ = features.trait_composites(z, pool, group, m.model)
+    x = features.grade_features(comps, shrunk, pool, group, m.ages, z, features.direct_inputs(m.model))
     batting = (features.project_runs(x, group, m.model, component="batting") if m.model.component_grades
                else features.project_runs(x, group, m.batting_model))
     out = pd.DataFrame({"grade": features.project_runs(x, group, m.model), "grade_batting": batting,

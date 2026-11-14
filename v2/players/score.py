@@ -25,7 +25,7 @@ from v2.players import aging, bio, features, inputs, minors, production, value, 
 from v2.players.contracts import estimated_schedule, load_contracts
 from v2.players.model import ValueModel, load_latest_from_db
 from v2.players.pricing import league_minimum
-from v2.players.runs import FULL_SEASON_PA, RELIEVER_INNINGS, RUNS_PER_OAA, STARTER_INNINGS
+from v2.players.runs import FULL_SEASON_PA, RELIEVER_INNINGS, RUNS_PER_CS_ABOVE_AVERAGE, RUNS_PER_OAA, STARTER_INNINGS
 
 log = logging.getLogger(__name__)
 
@@ -37,7 +37,6 @@ DRAWS = 30
 PLAYING_TIME_NORM = {"hitter": 450.0, "SP": 150.0 * 4.37, "RP": 60.0 * 4.37}  # PA or batters faced
 HEADSHOT = "https://img.mlbstatic.com/mlb-photos/image/upload/w_213,q_auto:best/v1/people/{player_id}/headshot/67/current"
 FADED_FREE_AGENT_SEASONS = 2
-CATCHER_RUN_INPUTS = ("reliability.framing_runs", "reliability.blocking_runs", "arm.cs_above_average")
 
 
 def season_for(as_of: date, starts: dict[int, date]) -> int:
@@ -118,7 +117,7 @@ def assemble_values(
     samples_wide = samples_wide.reindex(pop.index)
     z = features.oriented_z(values_wide, pool) if not values_wide.empty else values_wide
     pct = features.input_percentiles(values_wide, group) if not values_wide.empty else values_wide
-    composites, coverage = features.trait_composites(z, pool, model)
+    composites, coverage = features.trait_composites(z, pool, group, model)
 
     # Shrunk runs and the projection.
     role_series = pd.Series(np.where(group.isin(features.PITCHER_GROUPS), "pit", "bat"), index=pop.index)
@@ -140,7 +139,7 @@ def assemble_values(
         two_way_runs.loc[projected_pit.index] = projected_pit.values
     sample = rates_pop.set_index("player_id")["n"] if not rates_pop.empty else pd.Series(dtype="float64")
     sample = sample.reindex(pop.index).fillna(0.0)
-    design = features.grade_features(composites, shrunk, pool, pop["age"], z, features.direct_inputs(model))
+    design = features.grade_features(composites, shrunk, pool, group, pop["age"], z, features.direct_inputs(model))
     two_way_ids = set(two_way["player_id"]) if not two_way.empty else set()
     projected = features.project_runs(design, group, model)
     has_fit = bool(model.grade_weights)
@@ -196,6 +195,8 @@ def assemble_values(
     curves = model.age_curves
     gwf = model.grade_weight_frame()
     in_grade_traits = set(gwf.loc[gwf["coefficient"] > 0, "feature"]) if not gwf.empty else set(features.TRAITS)
+    catcher = group.eq(features.CATCHER_GROUP)
+    describes = {r["input"]: features.applies(r["input"], catcher) for r in model.trait_weights}
     for pid in pop.index:
         g = str(group[pid])
         status = pop.at[pid, "status"]
@@ -370,7 +371,8 @@ def assemble_values(
             if spec.pool != pool[pid]:
                 continue
             comp = composites.at[pid, trait] if trait in composites.columns else np.nan
-            tw = [(r["input"], float(r["weight"]), r["status"]) for r in model.trait_weights if r["pool"] == spec.pool and r["trait"] == trait]
+            tw = [(r["input"], float(r["weight"]), r["status"]) for r in model.trait_weights
+                  if r["pool"] == spec.pool and r["trait"] == trait and describes[r["input"]][pid]]
             inputs_json = []
             trait_sample = 0.0
             for name, w, _status in tw:
@@ -379,10 +381,11 @@ def assemble_values(
                     continue
                 inputs_json.append([name, round(w, 3), round(float(v), 4), round(float(pct.at[pid, name]), 1) if name in pct.columns and pd.notna(pct.at[pid, name]) else None])
                 trait_sample = max(trait_sample, float(samples_wide.at[pid, name]) if name in samples_wide.columns and pd.notna(samples_wide.at[pid, name]) else 0.0)
-            kind = "physical" if len(tw) == 1 and features.INPUT_KIND.get(tw[0][0]) == "physical" else "measured"
+            trait_inputs = [r["input"] for r in model.trait_weights if r["pool"] == spec.pool and r["trait"] == trait]
+            kind = "physical" if len(trait_inputs) == 1 and features.INPUT_KIND.get(trait_inputs[0]) == "physical" else "measured"
             trait_rows.append({
                 "player_id": int(pid), "trait": trait, "panel": spec.panel, "value": None if pd.isna(comp) else round(float(comp), 4),
-                "in_grade": bool(any(w > 0 for _, w, _ in tw)) and trait in in_grade_traits, "kind": kind, "sample": int(trait_sample), "inputs": inputs_json,
+                "in_grade": bool(any(w > 0 for _, w, _ in tw)) and trait in in_grade_traits and features.in_grade(trait, bool(catcher[pid])), "kind": kind, "sample": int(trait_sample), "inputs": inputs_json,
                 "as_of": as_of, "model_version": model.model_version,
             })
     values_frame = pd.DataFrame(out_rows)
@@ -434,8 +437,9 @@ def _actual_runs(season: int, model: ValueModel, groups: pd.Series, lev: pd.Seri
     def col(name: str) -> np.ndarray:
         return board[name].reindex(counts.index).fillna(0.0).to_numpy(float) if name in board.columns else np.zeros(len(counts))
 
-    catcher = group.eq("C").to_numpy()
-    fld = RUNS_PER_OAA * col("range.oaa_per_600") + np.where(catcher, col("reliability.framing_runs") + col("reliability.blocking_runs") + 0.2 * col("arm.cs_above_average"), 0.0)
+    catcher = group.eq(features.CATCHER_GROUP).to_numpy()
+    catching = col("reliability.framing_runs") + col("reliability.blocking_runs") + RUNS_PER_CS_ABOVE_AVERAGE * col("arm.cs_above_average")
+    fld = RUNS_PER_OAA * col("range.oaa_per_600") + np.where(catcher, catching, 0.0)
     run = col("baserunning.runs")
     pos = group.map(model.positional_adjustment).fillna(0.0).to_numpy(float) * n / FULL_SEASON_PA
     repl = group.map(model.replacement).fillna(0.0).to_numpy(float)

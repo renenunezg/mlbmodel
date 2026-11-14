@@ -219,9 +219,12 @@ class SeasonData:
                 traits[trait] = sign * rates[name]
             else:
                 traits[trait] = sign * board[name].reindex(rates.index) if name in board.columns else np.nan
-        if "reliability.blocking_runs" in board.columns:
-            traits["reliability"] = traits["reliability"].fillna(0) + board["reliability.blocking_runs"].reindex(rates.index).fillna(0)
         group = groups.reindex(rates.index)
+        catcher = group.eq(features.CATCHER_GROUP)
+        # Catcher traits: framing plus blocking runs, and the arm by caught stealing above average (not fielders' arm strength).
+        board_column = lambda name: board[name].reindex(rates.index) if name in board.columns else pd.Series(np.nan, index=rates.index)  # noqa: E731
+        traits["reliability"] = board_column("reliability.framing_runs").add(board_column("reliability.blocking_runs"), fill_value=0.0).where(catcher)
+        traits["arm"] = traits["arm"].where(~catcher, board_column("arm.cs_above_average"))
         role = rates["role"]
         by_role = pd.MultiIndex.from_arrays([season["player_id"], season["role"]])  # two-way players have a row per role
         season_n = pd.Series(season["n"].to_numpy(float), index=by_role).reindex(pd.MultiIndex.from_arrays([rates.index, rates["role"]]))
@@ -238,15 +241,16 @@ class SeasonData:
 
 
 def fielding_running_runs(board: pd.DataFrame, n: pd.Series, group: pd.Series) -> tuple[pd.Series, pd.Series]:
-    """(fielding, baserunning) runs per 600 PA from a season's boards: OAA for everyone, framing and blocking for catchers.
+    """(fielding, baserunning) runs per 600 PA from a season's boards: OAA for everyone, framing, blocking and throwing for catchers.
 
     Boards are season totals, so they are prorated by 600 over the season's ``n`` plate appearances.
     """
     def column(name: str) -> pd.Series:
         return board[name].reindex(n.index).fillna(0.0) if name in board.columns else pd.Series(0.0, index=n.index)
 
-    catcher = group.reindex(n.index).eq("C")
-    fld = runs_mod.RUNS_PER_OAA * column("range.oaa_per_600") + column("reliability.framing_runs").where(catcher, 0.0) + column("reliability.blocking_runs").where(catcher, 0.0)
+    catcher = group.reindex(n.index).eq(features.CATCHER_GROUP)
+    catching = column("reliability.framing_runs") + column("reliability.blocking_runs") + runs_mod.RUNS_PER_CS_ABOVE_AVERAGE * column("arm.cs_above_average")
+    fld = runs_mod.RUNS_PER_OAA * column("range.oaa_per_600") + catching.where(catcher, 0.0)
     per_600 = runs_mod.FULL_SEASON_PA / n.where(n > 0)
     return fld * per_600, column("baserunning.runs") * per_600
 
@@ -552,38 +556,46 @@ def fit_expected_model(data: SeasonData, dev_seasons: list[int]) -> dict:
 
 
 def fit_trait_weights(pairs: list[dict]) -> list[dict]:
+    """Input weights per trait: a ridge of each input's z at t on the trait's target at t+1.
+
+    A trait whose inputs describe different players (``features.applies``: catchers' fielding
+    and fielders') is fitted once per set of players on that set's inputs, each set's weights
+    summing to one, so a catcher's composite never leans on a fielder's weights.
+    """
     rows: list[dict] = []
     for trait, spec in features.TRAITS.items():
-        cols = [name for name, s in INPUTS.items() if s.trait == trait]
-        design = {}
-        for p in pairs:
-            members = p["pool"] == spec.pool
-            present = [c for c in cols if c in p["z"].columns and p["z"].loc[members, c].notna().mean() >= features.MIN_INPUT_AVAILABILITY]
-            if not present:
+        trait_cols = [name for name, s in INPUTS.items() if s.trait == trait]
+        segments = [[c for c in trait_cols if c in features.CATCHER_INPUTS], [c for c in trait_cols if c not in features.CATCHER_INPUTS]]
+        segments = [seg for seg in segments if seg] if any(INPUTS[c].role == "fld" for c in trait_cols) else [trait_cols]
+        for cols in segments:
+            design = {}
+            for p in pairs:
+                catcher = p["group"].eq(features.CATCHER_GROUP)
+                members = (p["pool"] == spec.pool) & features.applies(cols[0], catcher)
+                present = [c for c in cols if c in p["z"].columns and p["z"].loc[members, c].notna().mean() >= features.MIN_INPUT_AVAILABILITY]
+                if not present:
+                    continue
+                tn = _by_role(p["traits_next"], p["group"])
+                y = tn[trait].reindex(p["z"].index[members])
+                ok = members.copy()
+                ok.loc[members] = (p["sample"][members] >= MIN_FIT_SAMPLE) & y.notna().values
+                nxt_sample = _by_role(p["target_next"], p["group"])["n"].reindex(p["z"].index).fillna(0)
+                ok &= nxt_sample >= MIN_TARGET_SAMPLE
+                if ok.sum() < 30:
+                    continue
+                x = p["z"].loc[ok, present].fillna(0.0).reindex(columns=cols).fillna(0.0).to_numpy(float)
+                yz = _z_within(tn[trait].reindex(p["z"].index[ok]), pd.Series("all", index=p["z"].index[ok])).fillna(0.0).to_numpy(float)
+                design[p["t"]] = (x, yz)
+            if not design:
+                for c in cols:
+                    rows.append({"pool": spec.pool, "trait": trait, "input": c, "weight": 0.0, "status": "unmeasured"})
                 continue
-            tn = _by_role(p["traits_next"], p["group"])
-            y = tn[trait].reindex(p["z"].index[members])
-            ok = members.copy()
-            ok.loc[members] = (p["sample"][members] >= MIN_FIT_SAMPLE) & y.notna().values
-            nxt_sample = _by_role(p["target_next"], p["group"])["n"].reindex(p["z"].index).fillna(0)
-            ok &= nxt_sample >= MIN_TARGET_SAMPLE
-            if trait in ("reliability",) :
-                ok &= p["group"].eq("C")
-            if ok.sum() < 30:
-                continue
-            x = p["z"].loc[ok, present].fillna(0.0).reindex(columns=cols).fillna(0.0).to_numpy(float)
-            yz = _z_within(tn[trait].reindex(p["z"].index[ok]), pd.Series("all", index=p["z"].index[ok])).fillna(0.0).to_numpy(float)
-            design[p["t"]] = (x, yz)
-        if not design:
+            beta, penalty = fit_ridge(design, np.zeros(len(cols)))
+            coef = pd.Series(beta[1:], index=cols).where(lambda s: s.abs() > ZERO_COEFFICIENT, 0.0)
+            total = coef.abs().sum()
             for c in cols:
-                rows.append({"pool": spec.pool, "trait": trait, "input": c, "weight": 0.0, "status": "unmeasured"})
-            continue
-        beta, penalty = fit_ridge(design, np.zeros(len(cols)))
-        coef = pd.Series(beta[1:], index=cols).where(lambda s: s.abs() > ZERO_COEFFICIENT, 0.0)
-        total = coef.abs().sum()
-        for c in cols:
-            w = float(coef[c] / total) if total > 0 else 0.0
-            rows.append({"pool": spec.pool, "trait": trait, "input": c, "weight": w, "status": "weighted" if w > 0 else "unweighted", "penalty": penalty})
+                w = float(coef[c] / total) if total > 0 else 0.0
+                rows.append({"pool": spec.pool, "trait": trait, "input": c, "weight": w, "status": "weighted" if w > 0 else "unweighted", "penalty": penalty})
     return rows
 
 
@@ -592,8 +604,8 @@ def _fit_pools(p: dict) -> pd.Series:
 
 
 def grade_design(p: dict, model: ValueModel) -> tuple[pd.DataFrame, pd.Series, pd.Series]:
-    comps, _ = features.trait_composites(p["z"], p["pool"], model)
-    x = features.grade_features(comps, p["shrunk"], p["pool"], p["age"], p["z"], features.direct_inputs(model))
+    comps, _ = features.trait_composites(p["z"], p["pool"], p["group"], model)
+    x = features.grade_features(comps, p["shrunk"], p["pool"], p["group"], p["age"], p["z"], features.direct_inputs(model))
     tn = _by_role(p["target_next"], p["group"])
     y = tn["target"].reindex(x.index)
     ok = (p["sample"] >= MIN_FIT_SAMPLE) & (tn["n"].reindex(x.index).fillna(0) >= MIN_TARGET_SAMPLE) & y.notna() & x["shrunk_runs"].notna()
@@ -663,10 +675,10 @@ def reliability_k(pairs: list[dict], model: ValueModel) -> dict[str, float]:
     for a, b in zip(pairs[:-1], pairs[1:], strict=True):
         if b["t"] != a["t"] + 1:
             continue
-        ca, _ = features.trait_composites(a["z"], a["pool"], model)
-        cb, _ = features.trait_composites(b["z"], b["pool"], model)
-        xa = features.grade_features(ca, a["shrunk"], a["pool"], a["age"], a["z"], features.direct_inputs(model))
-        xb = features.grade_features(cb, b["shrunk"], b["pool"], b["age"], b["z"], features.direct_inputs(model))
+        ca, _ = features.trait_composites(a["z"], a["pool"], a["group"], model)
+        cb, _ = features.trait_composites(b["z"], b["pool"], b["group"], model)
+        xa = features.grade_features(ca, a["shrunk"], a["pool"], a["group"], a["age"], a["z"], features.direct_inputs(model))
+        xb = features.grade_features(cb, b["shrunk"], b["pool"], b["group"], b["age"], b["z"], features.direct_inputs(model))
         ga, gb = features.project_runs(xa, a["group"], model), features.project_runs(xb, b["group"], model)
         pools_a = _fit_pools(a)
         for trait in features.TRAITS:

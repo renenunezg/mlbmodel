@@ -34,6 +34,8 @@ MIN_INNINGS_AT_POSITION = 200.0
 INNINGS_PER_150_GAMES = 1350.0
 # Outs above average to runs, the ratio Savant's own runs-prevented column uses.
 RUNS_PER_OAA = 0.875
+# Caught stealing above average to runs: Savant's catcher stealing runs are 0.65 x CSAA in every season 2016-2026.
+RUNS_PER_CS_ABOVE_AVERAGE = 0.65
 # Replacement level in use: the conventional offsets, minus 20 runs per 600 PA for
 # hitters (on top of the positional scale), minus 18 per 180 IP for starters, minus 5
 # per 65 IP for relievers. The measured fringe is reported beside them; it is biased

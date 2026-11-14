@@ -313,21 +313,29 @@ def statcast_input_names() -> set[str]:
 
 
 def season_inputs(season: int, *, refresh: bool = False) -> pd.DataFrame:
-    """Long input frame for one season, cached at cache/players/inputs_{season}.parquet."""
+    """Long input frame for one season.
+
+    The Statcast inputs are cached at cache/players/inputs_{season}.parquet; the board inputs are
+    derived again from the cached Savant CSVs on every read, so a board fetched again reaches
+    every season without rebuilding the Statcast part.
+    """
     path = CACHE_DIR / f"inputs_{season}.parquet"
+    board_names = {n for n, s in INPUTS.items() if s.source.startswith("board:")}
+    statcast = None
     if path.exists() and not refresh:
         cached = pd.read_parquet(path)
         # A cache written before an input existed is rebuilt, so every season carries the same inputs.
         if statcast_input_names() <= set(cached["input"]):
-            return cached
-        log.info(f"inputs[{season}]: cache lacks newer inputs; rebuilding")
-    pitches = load_pitches(season)
-    frame = pd.concat([statcast_inputs(pitches, season), _board_inputs(season, refresh=refresh)], ignore_index=True)
-    frame = frame.astype({"player_id": "int64", "season": "int64", "value": "float64", "sample": "float64"})
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    frame.to_parquet(path, index=False)
-    log.info(f"inputs[{season}]: {len(frame):,} rows for {frame.player_id.nunique():,} players")
-    return frame
+            statcast = cached[~cached["input"].isin(board_names)]
+        else:
+            log.info(f"inputs[{season}]: cache lacks newer inputs; rebuilding")
+    if statcast is None:
+        statcast = statcast_inputs(load_pitches(season), season)
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        statcast.astype({"player_id": "int64", "season": "int64", "value": "float64", "sample": "float64"}).to_parquet(path, index=False)
+        log.info(f"inputs[{season}]: {len(statcast):,} Statcast rows for {statcast.player_id.nunique():,} players")
+    frame = pd.concat([statcast, _board_inputs(season, refresh=refresh)], ignore_index=True)
+    return frame.astype({"player_id": "int64", "season": "int64", "value": "float64", "sample": "float64"})
 
 
 def outcome_counts(season: int, *, refresh: bool = False) -> pd.DataFrame:

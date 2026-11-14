@@ -53,7 +53,7 @@ SOURCE = ("v2.players.forward grade models rebuilt per season; cached FanGraphs 
 STATISTIC = "Spearman rank correlation; diff is grade minus system; ci95 from the bootstrap; wins are checkpoints the grade ranked better"
 POPULATION = "100 weighted PA or BF of history in the window and 100 PA or BF from the checkpoint to season end; common players per comparison"
 CAVEATS = [
-    "Full hitter target uses the season's Savant fielding, framing, blocking and baserunning boards prorated by 600 / season PA; boards cannot be cut by date.",
+    "Full hitter target uses the season's Savant fielding, framing, blocking, catcher throwing and baserunning boards prorated by 600 / season PA; boards cannot be cut by date.",
     "Raw WAR per PA carries the positional adjustment the target lacks; the position-neutral comparison removes the published positional runs by the grade's position group at 10 runs per win.",
     "The target's fielding is OAA-based, the same metric family the grade reads; the systems' WAR uses FanGraphs' own defensive inputs.",
     "Population: 100 weighted PA or BF of MLB history and 100 PA or BF after the date; rookies without MLB history are not scored; rest-of-season gate conditions on survival.",
