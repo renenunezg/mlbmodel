@@ -188,17 +188,25 @@ jobs:
           restore-keys: |
             players-state-${{ runner.os }}-
 
-      # The batting models and the skip-write fingerprint, which only this job saves.
-      - name: Restore run value state
-        id: values_state
+      # Only this job saves these. The batting models change once a season; the skip-write fingerprint every publish,
+      # so they are kept apart and a publish does not upload another copy of the models.
+      - name: Restore the batting value models
+        id: value_models
         uses: actions/cache/restore@v4
         with:
-          path: |
-            cache/batting_value/league_models.joblib
-            cache/run_values_state.json
-          key: run-values-${{ runner.os }}-${{ github.run_id }}
+          path: cache/batting_value/league_models.joblib
+          key: run-value-models-${{ runner.os }}-${{ github.run_id }}
           restore-keys: |
-            run-values-${{ runner.os }}-
+            run-value-models-${{ runner.os }}-
+
+      - name: Restore the run value fingerprint
+        id: value_state
+        uses: actions/cache/restore@v4
+        with:
+          path: cache/run_values_state.json
+          key: run-values-state-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            run-values-state-${{ runner.os }}-
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -215,11 +223,16 @@ jobs:
           PYTHONPATH: "."
         run: python -m v2.run_values
 
-      - name: Save run value state when it changed
-        if: always() && hashFiles('cache/batting_value/league_models.joblib') != '' && steps.values_state.outputs.cache-matched-key != format('run-values-{0}-{1}', runner.os, hashFiles('cache/batting_value/league_models.joblib', 'cache/run_values_state.json'))
+      - name: Save the batting value models when they were refitted
+        if: always() && hashFiles('cache/batting_value/league_models.joblib') != '' && steps.value_models.outputs.cache-matched-key != format('run-value-models-{0}-{1}', runner.os, hashFiles('cache/batting_value/league_models.joblib'))
         uses: actions/cache/save@v4
         with:
-          path: |
-            cache/batting_value/league_models.joblib
-            cache/run_values_state.json
-          key: run-values-${{ runner.os }}-${{ hashFiles('cache/batting_value/league_models.joblib', 'cache/run_values_state.json') }}
+          path: cache/batting_value/league_models.joblib
+          key: run-value-models-${{ runner.os }}-${{ hashFiles('cache/batting_value/league_models.joblib') }}
+
+      - name: Save the run value fingerprint when it changed
+        if: always() && hashFiles('cache/run_values_state.json') != '' && steps.value_state.outputs.cache-matched-key != format('run-values-state-{0}-{1}', runner.os, hashFiles('cache/run_values_state.json'))
+        uses: actions/cache/save@v4
+        with:
+          path: cache/run_values_state.json
+          key: run-values-state-${{ runner.os }}-${{ hashFiles('cache/run_values_state.json') }}
