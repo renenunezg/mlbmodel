@@ -51,11 +51,14 @@ CREATE TRIGGER site_revalidate AFTER INSERT OR DELETE OR UPDATE OR TRUNCATE ON m
   FOR EACH STATEMENT EXECUTE FUNCTION public.site_revalidate();
 
 -- One row per hitter-season and split, for hitters in batting_values: the same three parts on part of his pitches.
--- split is one code from one of four families, which never mix:
+-- split is one code from one of these families. The first four never mix; the directions were added after the table
+-- was created, and a pitch can be in one side and one height at once (up and in):
 --   count situations: two_strikes, ahead (more balls than strikes, under two strikes), first_pitch;
 --   pitch groups: fastball, breaking, offspeed;
 --   pitch types (Statcast codes, with enough pitches of the type): FF, SI, SL, CH;
---   attack zones: heart, shadow, chase, waste.
+--   attack zones: heart, shadow, chase, waste;
+--   sides (outer thirds of the plate, from the hitter's side of it): inside, away;
+--   heights (outer thirds of his strike zone): up, down.
 CREATE TABLE mlb.batting_split_values (
   player_id bigint NOT NULL,
   season smallint NOT NULL,

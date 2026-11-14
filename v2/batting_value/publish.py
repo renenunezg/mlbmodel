@@ -24,6 +24,7 @@ from v2.batting_value.aggregate import KEYS
 from v2.batting_value.components import COMPONENTS
 from v2.batting_value.contact import DECIDING_CUT, KEPT
 from v2.batting_value.leaderboard import MIN_PA, MIN_TYPE_PITCHES, PITCH_TYPES, SITUATIONS
+from v2.batting_value.pitches import HEIGHTS, SIDES
 from v2.batting_value.run import OUT_DIR
 from v2.batting_value.validate import BASELINES, SPLITS
 
@@ -54,13 +55,15 @@ def hitter_rows(hitters: pd.DataFrame) -> pd.DataFrame:
 
 
 def split_rows(splits: dict[str, pd.DataFrame], hitters: pd.DataFrame) -> pd.DataFrame:
-    """Count situations, pitch groups, pitch types and zones for the hitters that are published."""
+    """Count situations, pitch groups, pitch types, zones and directions for the hitters that are published."""
     types = splits["pitch_types"]
     parts = [
         splits["situations"][splits["situations"]["situation"].isin(SITUATIONS)].rename(columns={"situation": "split"}),
         splits["pitch_groups"].rename(columns={"pitch_group": "split"}),
         types[types["pitch_type"].isin(PITCH_TYPES) & (types["pitches"] >= MIN_TYPE_PITCHES)].rename(columns={"pitch_type": "split"}),
         splits["zones"].rename(columns={"zone": "split"}),
+        splits["sides"].rename(columns={"side": "split"}),
+        splits["heights"].rename(columns={"height": "split"}),
     ]
     out = pd.concat([part[[*KEYS, "split", "pitches", *RUN_COLUMNS]] for part in parts], ignore_index=True)
     published = pd.MultiIndex.from_frame(hitters[["season", "player_id"]])
@@ -119,6 +122,7 @@ def study_payload(hitters: pd.DataFrame, validation: dict, contact_test: dict) -
     if "all" not in validation or "confirmation" not in validation:
         raise ValueError("validation.json lacks the confirmation pairs; run `python -m v2.batting_value.validate --confirm`")
     test = contact_test[str(DECIDING_CUT)]
+    sides, heights = _split_repeats(validation, "sides", SIDES), _split_repeats(validation, "heights", HEIGHTS)
     return {
         "seasons": sorted(int(s) for s in hitters["season"].unique()), "pitches": int(hitters["pitches"].sum()),
         "min_pa": MIN_PA, "min_type_pitches": MIN_TYPE_PITCHES,
@@ -126,6 +130,7 @@ def study_payload(hitters: pd.DataFrame, validation: dict, contact_test: dict) -
         "parts": _parts(validation["all"][PARTS_PA]),
         "counts": _split_repeats(validation, "situations", SITUATIONS),
         "pitch_types": _split_repeats(validation, "pitch_types", PITCH_TYPES),
+        "directions": {"pitches": sides["pitches"], "values": sides["values"] | heights["values"]},
         # The hitter contact model: what was added to exit velocity and launch angle, and what each candidate gained.
         "contact_model": {"kept": list(KEPT), "balls_in_play": DECIDING_CUT, "pairs": test["pairs"],
                           "gain": {name: [round(v, 3) for v in (gain["r"], *gain["interval"])] for name, gain in test["gain_over_plain"].items()}},
@@ -157,7 +162,7 @@ def publish(payload: dict, hitters: pd.DataFrame, splits: pd.DataFrame) -> None:
 def build() -> tuple[dict, pd.DataFrame, pd.DataFrame]:
     seasons = pd.read_parquet(OUT_DIR / "hitter_seasons.parquet")
     hitters = hitter_rows(seasons)
-    splits = split_rows({name: pd.read_parquet(OUT_DIR / f"{name}.parquet") for name in ("situations", "pitch_groups", "pitch_types", "zones")}, hitters)
+    splits = split_rows({name: pd.read_parquet(OUT_DIR / f"{name}.parquet") for name in ("situations", "pitch_groups", "pitch_types", "zones", "sides", "heights")}, hitters)
     payload = study_payload(seasons, json.loads((OUT_DIR / "validation.json").read_text()), json.loads((OUT_DIR / "contact_test.json").read_text()))
     return payload, hitters, splits
 

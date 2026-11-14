@@ -30,6 +30,13 @@ PITCH_GROUPS = {
 ZONE_HALF_WIDTHS = (6.7 / 12, 13.3 / 12, 20.0 / 12)
 ZONE_HEIGHTS = (0.67, 1.33, 2.0)
 ZONES = ("heart", "shadow", "chase", "waste")
+# Directions cut the plate and the hitter's own strike zone in thirds and run on past their edges: inside and away
+# are the outer thirds of the plate's 17 inches, up and down the outer thirds of his zone. A pitch can be in one of
+# each pair (up and in), so the two families cross each other and neither sums with the attack zones.
+PLATE_THIRD = 17.0 / 6.0 / 12.0
+HEIGHT_THIRD = 1.0 / 3.0
+SIDES = ("inside", "away")
+HEIGHTS = ("up", "down")
 # Every count is in exactly one situation, so a hitter's situations sum to his total. A full count is a
 # two-strike count: the strike that ends the at-bat outweighs the ball that would.
 SITUATIONS = ("first_pitch", "ahead", "two_strikes", "behind_even")
@@ -44,6 +51,23 @@ def attack_zone(frame: pd.DataFrame) -> pd.Series:
                        np.digitize(height.to_numpy(), ZONE_HEIGHTS, right=True))
     zone = pd.Series(np.array(ZONES, dtype=object)[index], index=frame.index)
     return zone.where(width.notna() & height.notna())
+
+
+def side(frame: pd.DataFrame) -> pd.Series:
+    """inside or away of the middle third of the plate, from the hitter's side of it; missing in the middle third and
+    where the pitch was not tracked."""
+    toward = frame["plate_x"] * np.where(frame["stand"].eq("L"), 1.0, -1.0)
+    index = np.select([toward > PLATE_THIRD, toward < -PLATE_THIRD], [0, 1], default=2)
+    return pd.Series(np.array([*SIDES, None], dtype=object)[index], index=frame.index)
+
+
+def height(frame: pd.DataFrame) -> pd.Series:
+    """up or down of the middle third of the hitter's strike zone; missing in the middle third and where the pitch
+    was not tracked."""
+    half = (frame["sz_top"] - frame["sz_bot"]) / 2.0
+    above = (frame["plate_z"] - (frame["sz_top"] + frame["sz_bot"]) / 2.0) / half
+    index = np.select([above > HEIGHT_THIRD, above < -HEIGHT_THIRD], [0, 1], default=2)
+    return pd.Series(np.array([*HEIGHTS, None], dtype=object)[index], index=frame.index)
 
 
 def situation(state: pd.Series) -> pd.Series:
@@ -67,5 +91,7 @@ def load(seasons: list[int]) -> pd.DataFrame:
     frame["outcome"] = frame["events"].where(~frame["events"].isin(NON_PA_EVENTS)).map(EVENT_TO_OUTCOME)
     frame["pitch_group"] = frame["pitch_type"].map(PITCH_GROUPS)
     frame["zone"] = attack_zone(frame)
+    frame["side"] = side(frame)
+    frame["height"] = height(frame)
     frame["situation"] = situation(frame["state"])
     return frame

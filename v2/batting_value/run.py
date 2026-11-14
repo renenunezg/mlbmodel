@@ -4,7 +4,7 @@ Usage:
     python -m v2.batting_value.run [--seasons 2021 2022 2023 2024 2025 2026]
 
 Reads the local Statcast caches (and the cached Savant boards for names). Writes under cache/batting_value/:
-hitter_seasons.parquet, pitch_groups.parquet, pitch_types.parquet, zones.parquet, situations.parquet,
+hitter_seasons.parquet, pitch_groups.parquet, pitch_types.parquet, zones.parquet, sides.parquet, heights.parquet, situations.parquet,
 calibration_{zone,count,pitch_group}.csv and checks.json. Stops if the components do not sum.
 """
 from __future__ import annotations
@@ -70,6 +70,8 @@ def build(seasons: list[int]) -> dict:
         "pitch_groups": aggregate.splits(frame, scores, "pitch_group"),
         "pitch_types": aggregate.splits(frame, scores, "pitch_type"),
         "zones": aggregate.splits(frame, scores, "zone"),
+        "sides": aggregate.splits(frame, scores, "side"),
+        "heights": aggregate.splits(frame, scores, "height"),
         "situations": aggregate.splits(frame, scores, "situation"),
         "calibration": calibration,
         "checks": checks(frame, neutral, league, parts, hitters) | {
@@ -107,7 +109,7 @@ def checks(frame: pd.DataFrame, neutral: pd.Series, league: pd.DataFrame, parts:
 
 def write(outputs: dict, out_dir: Path = OUT_DIR) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
-    for name in ("hitter_seasons", "pitch_groups", "pitch_types", "zones", "situations"):
+    for name in ("hitter_seasons", "pitch_groups", "pitch_types", "zones", "sides", "heights", "situations"):
         outputs[name].to_parquet(out_dir / f"{name}.parquet", index=False)
     for by, table in outputs["calibration"].items():
         table.to_csv(out_dir / f"calibration_{by}.csv", index=False)

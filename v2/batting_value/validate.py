@@ -11,9 +11,9 @@ preseason grade of the second season (2024 to 2026), from a model fitted on noth
 The leave-one-pair-out grade covers all five pairs: the live grade's weights refitted without the pair being
 graded. The partial correlations ask what a measure adds once the grade is known.
 
-The count situations (first pitch, hitter ahead, two strikes, behind or even) and the pitch types are checked
-for one thing: does a hitter's value per 100 pitches in a situation or against a pitch type, and its gap to
-his value on all his other pitches, repeat the next season?
+The count situations (first pitch, hitter ahead, two strikes, behind or even), the pitch types and the directions
+(inside, away, up, down) are checked for one thing: does a hitter's value per 100 pitches in a situation, against
+a pitch type or on one side of the zone, and its gap to his value on all his other pitches, repeat the next season?
 
 The pairs are split by first season: design choices are made on the development pairs and the confirmation
 pairs are read once the design is fixed.
@@ -21,7 +21,7 @@ pairs are read once the design is fixed.
 Usage:
     python -m v2.batting_value.validate [--confirm]
 
-Reads cache/batting_value/hitter_seasons.parquet, situations.parquet and pitch_types.parquet (run
+Reads cache/batting_value/hitter_seasons.parquet, situations.parquet, pitch_types.parquet, sides.parquet and heights.parquet (run
 ``python -m v2.batting_value.run`` first) and writes validation.json beside them.
 """
 from __future__ import annotations
@@ -57,7 +57,8 @@ LIVE_MODEL = ("relief_history_release", "validated.json")
 BOOTSTRAP_DRAWS = 2000
 # Splits checked for repeating: file -> (column, pitches a hitter needs in one value of it in both seasons of a pair).
 # A pitch type is a smaller share of a hitter's pitches than a count situation, so it gets the lower bar.
-SPLITS = {"situations": ("situation", 300), "pitch_types": ("pitch_type", 200)}
+# A direction is a third or more of his pitches, like a count situation, and gets the same bar.
+SPLITS = {"situations": ("situation", 300), "pitch_types": ("pitch_type", 200), "sides": ("side", 300), "heights": ("height", 300)}
 # Pairs a value of a split needs before its repeat is reported.
 SPLIT_MIN_PAIRS = 100
 SPLIT_MEASURES = {"total": "runs", "decision": "decision_runs", "contact": "contact_runs", "quality": "quality_runs"}

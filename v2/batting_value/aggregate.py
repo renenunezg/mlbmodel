@@ -1,4 +1,4 @@
-"""Season totals per hitter, and the same totals split by pitch group, pitch type, attack zone and count situation.
+"""Season totals per hitter, and the same totals split by pitch group, pitch type, attack zone, direction and count situation.
 
 ``scores`` holds one column per valuation of the same pitches: ``raw`` (what happened), ``expected`` (expected
 contact), ``context`` (expected contact with park and season removed), ``neutral`` (context-neutral, park and
@@ -28,8 +28,8 @@ def _totals(frame: pd.DataFrame, by: list[str]) -> pd.DataFrame:
 
 
 def _frame(pitches: pd.DataFrame, scores: pd.DataFrame) -> pd.DataFrame:
-    frame = pitches[[*KEYS, "bat_team", "swing", "pitch_group", "pitch_type", "zone", "situation", "outcome", "woba_value",
-                     "woba_denom"]].join(scores)
+    frame = pitches[[*KEYS, "bat_team", "swing", "pitch_group", "pitch_type", "zone", "side", "height", "situation", "outcome",
+                     "woba_value", "woba_denom"]].join(scores)
     return frame.assign(in_play=pitches["result"].eq("in_play"))[pitches["seen"]]
 
 
@@ -57,7 +57,7 @@ def hitter_seasons(pitches: pd.DataFrame, scores: pd.DataFrame) -> pd.DataFrame:
 
 
 def splits(pitches: pd.DataFrame, scores: pd.DataFrame, by: str) -> pd.DataFrame:
-    """One row per hitter, season and value of ``by`` (pitch_group, pitch_type, zone or situation); pitches with no value of
-    ``by`` (untracked, or a pitch type outside the groups) are left out."""
+    """One row per hitter, season and value of ``by`` (pitch_group, pitch_type, zone, side, height or situation); pitches
+    with no value of ``by`` (untracked, a pitch type outside the groups, or the middle third of a direction) are left out."""
     out = _totals(_frame(pitches, scores).dropna(subset=[by]), [*KEYS, by])
     return out.sort_values(["season", "runs"], ascending=[True, False]).reset_index(drop=True)
