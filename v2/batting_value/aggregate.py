@@ -10,6 +10,7 @@ from __future__ import annotations
 import pandas as pd
 
 from v2.batting_value.components import COMPONENTS
+from v2.pitch_value.aggregate import final_team
 from v2.data.pa_dataset import OUTCOMES
 from v2.players import savant
 from v2.players.runs import FULL_SEASON_PA
@@ -28,7 +29,7 @@ def _totals(frame: pd.DataFrame, by: list[str]) -> pd.DataFrame:
 
 
 def _frame(pitches: pd.DataFrame, scores: pd.DataFrame) -> pd.DataFrame:
-    frame = pitches[[*KEYS, "bat_team", "swing", "pitch_group", "pitch_type", "zone", "side", "height", "situation", "outcome",
+    frame = pitches[[*KEYS, "game_date", "game_pk", "bat_team", "swing", "pitch_group", "pitch_type", "zone", "side", "height", "situation", "outcome",
                      "woba_value", "woba_denom"]].join(scores)
     return frame.assign(in_play=pitches["result"].eq("in_play"))[pitches["seen"]]
 
@@ -45,8 +46,8 @@ def hitter_seasons(pitches: pd.DataFrame, scores: pd.DataFrame) -> pd.DataFrame:
     """One row per hitter and season, best total first, with the plate-appearance outcomes the validation needs."""
     frame = _frame(pitches, scores)
     out = _totals(frame, KEYS)
-    who = frame.groupby(KEYS).agg(team=("bat_team", lambda t: t.value_counts().index[0]), pa=("outcome", "count"),
-                                  woba_value=("woba_value", "sum"), woba_denom=("woba_denom", "sum")).reset_index()
+    who = frame.groupby(KEYS).agg(pa=("outcome", "count"), woba_value=("woba_value", "sum"),
+                                  woba_denom=("woba_denom", "sum")).join(final_team(frame, KEYS, "bat_team")).reset_index()
     outcomes = pd.crosstab([frame["season"], frame["batter"]], frame["outcome"]).reindex(columns=list(OUTCOMES), fill_value=0)
     out = who.merge(out, on=KEYS).join(outcomes, on=KEYS)
     out[list(OUTCOMES)] = out[list(OUTCOMES)].fillna(0).astype(int)

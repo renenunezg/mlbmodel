@@ -22,9 +22,14 @@ def _totals(frame: pd.DataFrame, by: list[str]) -> pd.DataFrame:
     return out
 
 
+def final_team(frame: pd.DataFrame, keys: list[str], team: str) -> pd.Series:
+    """The team of each player's last game that season, so a player traded mid-season shows the team he finished with."""
+    return frame.sort_values(["game_date", "game_pk"], kind="stable").groupby(keys)[team].last().rename("team")
+
+
 def _frame(pitches: pd.DataFrame, values: pd.DataFrame) -> pd.DataFrame:
     in_play = tracked(pitches)
-    frame = pitches[["season", "pitcher", "pitcher_name", "team", "pitch_type"]].join(values).assign(
+    frame = pitches[["season", "game_date", "game_pk", "pitcher", "pitcher_name", "team", "pitch_type"]].join(values).assign(
         in_play=in_play, neutral_contact=values["neutral"].where(in_play, 0.0))
     return frame[thrown(pitches)]
 
@@ -33,8 +38,8 @@ def pitcher_seasons(pitches: pd.DataFrame, values: pd.DataFrame) -> pd.DataFrame
     """One row per pitcher and season, best context-neutral total first."""
     frame = _frame(pitches, values)
     out = _totals(frame, ["season", "pitcher"])
-    who = frame.groupby(["season", "pitcher"]).agg(
-        name=("pitcher_name", "first"), team=("team", lambda t: t.value_counts().index[0])).reset_index()
+    who = frame.groupby(["season", "pitcher"]).agg(name=("pitcher_name", "first")).join(
+        final_team(frame, ["season", "pitcher"], "team")).reset_index()
     return who.merge(out, on=["season", "pitcher"]).sort_values(["season", "neutral_runs"]).reset_index(drop=True)
 
 
