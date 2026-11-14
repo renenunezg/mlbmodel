@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Batting run value</title>
+<style>
+  :root { --bg: #fff; --fg: #111418; --muted: #667085; --line: #e4e7ec; --good: #0b7a4b; --bad: #b42318; --accent: #1d4ed8; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0e1116; --fg: #e6e8eb; --muted: #98a2b3; --line: #262b33; --good: #4ade80; --bad: #f87171; --accent: #7aa2ff; }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p.note { color: var(--muted); margin: 0 0 12px; font-size: 13px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  .controls label { display: grid; gap: 2px; font-size: 11px; color: var(--muted); }
+  select, .tabs button { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+  .tabs { display: flex; align-self: end; }
+  .tabs button { border-radius: 0; cursor: pointer; border-left-width: 0; }
+  .tabs button:first-child { border-radius: 6px 0 0 6px; border-left-width: 1px; }
+  .tabs button:last-child { border-radius: 0 6px 6px 0; }
+  .tabs button[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  #columns { display: none; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; font-variant-numeric: tabular-nums; }
+  th, td { padding: 7px 4px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  th { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+  th button { all: unset; cursor: pointer; }
+  th[aria-sort] button { color: var(--accent); }
+  col.rank { width: 30px; } col.num { width: 76px; }
+  td.rank, th.rank { text-align: left; color: var(--muted); }
+  td.who, th.who { text-align: left; }
+  td.who small { color: var(--muted); margin-left: 4px; }
+  .good { color: var(--good); } .bad { color: var(--bad); }
+  .foot { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; color: var(--muted); font-size: 12px; }
+  .foot button { font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; cursor: pointer; }
+  .foot button:disabled { opacity: .4; cursor: default; }
+  @media (max-width: 640px) {
+    #columns { display: flex; }
+    .wide, table[data-columns="totals"] .parts, table[data-columns="parts"] .totals { display: none; }
+    col.num { width: 64px; }
+    th { letter-spacing: 0; font-size: 10px; white-space: normal; }
+    td.who { white-space: normal; overflow-wrap: anywhere; }
+    td.who small { display: block; margin-left: 0; font-size: 11px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Batting run value</h1>
+  <p class="note">Runs a hitter added against the league average, pitch by pitch, with the difficulty of every pitch he saw taken out. Decision is choosing to swing or take, Contact is what a swing made of the pitch, Quality is how the ball in play was hit. Positive is better for the hitter. Counts, Pitches and Zones show the same runs on part of his pitches.</p>
+  <div class="controls">
+    <div class="tabs" id="views" role="group" aria-label="View">
+      <button type="button" data-view="hitters" aria-pressed="true">Hitters</button>
+      <button type="button" data-view="counts" aria-pressed="false">Counts</button>
+      <button type="button" data-view="groups" aria-pressed="false">Pitches</button>
+      <button type="button" data-view="zones" aria-pressed="false">Zones</button>
+    </div>
+    <label>Season<select id="season"></select></label>
+    <label>Minimum PA<select id="min"></select></label>
+    <label id="splitLabel" hidden><span id="splitName"></span><select id="split"></select></label>
+    <div class="tabs" id="columns" role="group" aria-label="Columns">
+      <button type="button" data-columns="totals" aria-pressed="true">Totals</button>
+      <button type="button" data-columns="parts" aria-pressed="false">Parts</button>
+    </div>
+  </div>
+  <table id="table" data-columns="totals">
+    <colgroup id="cols"></colgroup>
+    <thead><tr id="head"></tr></thead>
+    <tbody id="body"></tbody>
+  </table>
+  <div class="foot">
+    <button type="button" id="prev">Previous</button>
+    <span id="count"></span>
+    <button type="button" id="next">Next</button>
+  </div>
+</main>
+<script>
+const DATA = /*DATA*/null;
+const PAGE = 25;
+const MINIMUMS = [200, 350, 500];
+const PITCH = { FF: "Four-seam", SI: "Sinker", FC: "Cutter", SL: "Slider", ST: "Sweeper", CU: "Curveball", KC: "Knuckle curve", CH: "Changeup", FS: "Splitter" };
+const SPLITS = {
+  counts: { label: "Count", options: [["two_strikes", "Two strikes"], ["ahead", "Hitter ahead"], ["first_pitch", "First pitch"]] },
+  groups: { label: "Pitch", options: [
+    { group: "Groups", options: [["fastball", "Fastballs"], ["breaking", "Breaking balls"], ["offspeed", "Offspeed"]] },
+    { group: "Pitch types", options: DATA.pitch_types.map((type) => [type, PITCH[type] || type]) },
+  ] },
+  zones: { label: "Zone", options: [["heart", "Heart"], ["shadow", "Shadow"], ["chase", "Chase"], ["waste", "Waste"]] },
+};
+const signed = (v, d) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(d);
+const tone = (v) => (v > 0 ? "good" : v < 0 ? "bad" : "");
+const whole = (v) => v.toLocaleString("en-US");
+const PARTS = [
+  { key: "decision", label: "Decision", set: "parts", tone: true, title: "Swing or take: the value of his choice against the league's choice at the same pitch", text: (r) => signed(r.decision, 1) },
+  { key: "contact", label: "Contact", set: "parts", tone: true, title: "On swings: a whiff, a foul or a ball in play against an average swing at the same pitch", text: (r) => signed(r.contact, 1) },
+  { key: "quality", label: "Quality", set: "parts", tone: true, title: "On balls in play: expected value from exit velocity and launch angle against the league's ball in play from the same pitch", text: (r) => signed(r.quality, 1) },
+];
+const WHO = new Map(DATA.hitters.map(([season, id, name, team, pa, pitches, runs]) => [season + ":" + id, { name, team, pa, allPitches: pitches, allRuns: runs }]));
+// rest: his runs per 100 on this split's pitches minus his runs per 100 on all his other pitches.
+const splitRows = (rows) => rows.map(([season, id, split, pitches, runs, decision, contact, quality]) => {
+  const who = WHO.get(season + ":" + id), rate = 100 * runs / pitches;
+  return { season, id, name: who.name, team: who.team, pa: who.pa, split, pitches, runs, decision, contact, quality, rate,
+    rest: rate - 100 * (who.allRuns - runs) / (who.allPitches - pitches) };
+});
+const RUNS = { key: "runs", label: "Runs", set: "totals", tone: true, title: "Decision + Contact + Quality", text: (r) => signed(r.runs, 1) };
+const RATE = { key: "rate", label: "Per 100", set: "totals", tone: true, title: "Runs per 100 pitches", text: (r) => signed(r.rate, 2) };
+const SPLIT_COLUMNS = [{ key: "pitches", label: "Pitches", set: "totals", text: (r) => whole(r.pitches) }, RUNS, RATE, ...PARTS];
+const COUNT_COLUMNS = [
+  { key: "pitches", label: "Pitches", set: "wide", text: (r) => whole(r.pitches) }, RUNS, RATE,
+  { key: "rest", label: "Vs rest", set: "totals", tone: true, title: "Runs per 100 pitches in this count minus his runs per 100 on all his other pitches", text: (r) => signed(r.rest, 2) },
+  ...PARTS,
+];
+const VIEWS = {
+  hitters: {
+    rows: () => DATA.hitters.map(([season, id, name, team, pa, pitches, runs, decision, contact, quality, call, neutral]) =>
+      ({ season, id, name, team, pa, pitches, runs, decision, contact, quality, call, neutral, rate: 600 * runs / pa })),
+    columns: [
+      { key: "pa", label: "PA", set: "totals", text: (r) => whole(r.pa) },
+      { key: "runs", label: "Runs", set: "totals", tone: true, title: "Decision + Contact + Quality", text: (r) => signed(r.runs, 1) },
+      { key: "rate", label: "Per 600", set: "totals", tone: true, title: "Runs per 600 plate appearances", text: (r) => signed(r.rate, 1) },
+      ...PARTS,
+      { key: "call", label: "Calls", set: "wide", title: "Not credited: called strikes and hit batters on his takes against what the league model expected", text: (r) => signed(r.call, 1) },
+    ],
+  },
+  counts: { rows: () => splitRows(DATA.counts), columns: COUNT_COLUMNS },
+  groups: { rows: () => splitRows(DATA.groups.concat(DATA.types)), columns: SPLIT_COLUMNS },
+  zones: { rows: () => splitRows(DATA.zones), columns: SPLIT_COLUMNS },
+};
+const state = { view: "hitters", season: DATA.seasons[DATA.seasons.length - 1], min: MINIMUMS[1], split: null, sort: "runs", asc: false, page: 0 };
+const cache = {};
+const $ = (id) => document.getElementById(id);
+const el = (tag, props = {}, text) => { const n = Object.assign(document.createElement(tag), props); if (text != null) n.textContent = text; return n; };
+
+function render() {
+  const view = VIEWS[state.view];
+  const all = cache[state.view] || (cache[state.view] = view.rows());
+  const rows = all.filter((r) => r.season === state.season && r.pa >= state.min && (state.split === null || r.split === state.split))
+    .sort((a, b) => (state.asc ? a[state.sort] - b[state.sort] : b[state.sort] - a[state.sort]));
+  const pages = Math.max(1, Math.ceil(rows.length / PAGE));
+  state.page = Math.min(state.page, pages - 1);
+
+  $("cols").replaceChildren(el("col", { className: "rank" }), el("col"), ...view.columns.map((c) => el("col", { className: "num " + c.set })));
+  const head = [el("th", { className: "rank" }, "#"), el("th", { className: "who" }, "Hitter")];
+  for (const c of view.columns) {
+    const th = el("th", { className: c.set });
+    if (c.title) th.title = c.title;
+    if (c.key === state.sort) th.setAttribute("aria-sort", state.asc ? "ascending" : "descending");
+    const button = el("button", { type: "button" }, c.label + (c.key === state.sort ? (state.asc ? " ▲" : " ▼") : ""));
+    button.onclick = () => { if (state.sort === c.key) state.asc = !state.asc; else { state.sort = c.key; state.asc = false; } state.page = 0; render(); };
+    th.append(button);
+    head.push(th);
+  }
+  $("head").replaceChildren(...head);
+
+  const start = state.page * PAGE;
+  $("body").replaceChildren(...rows.slice(start, start + PAGE).map((r, i) => {
+    const tr = el("tr");
+    const who = el("td", { className: "who", title: r.name + ", " + r.team }, r.name);
+    who.append(el("small", {}, r.team));
+    tr.append(el("td", { className: "rank" }, String(start + i + 1)), who);
+    for (const c of view.columns) tr.append(el("td", { className: (c.set + " " + (c.tone ? tone(r[c.key]) : "")).trim() }, c.text(r)));
+    return tr;
+  }));
+  $("count").textContent = rows.length ? `${start + 1} to ${Math.min(start + PAGE, rows.length)} of ${rows.length}` : "No hitters";
+  $("prev").disabled = state.page === 0;
+  $("next").disabled = state.page >= pages - 1;
+}
+
+function fillSplit() {
+  const split = SPLITS[state.view];
+  $("splitLabel").hidden = !split;
+  if (!split) { state.split = null; return; }
+  const option = ([value, label]) => el("option", { value }, label);
+  $("splitName").textContent = split.label;
+  $("split").replaceChildren(...split.options.map((o) => {
+    if (!o.group) return option(o);
+    const group = el("optgroup", { label: o.group });
+    group.append(...o.options.map(option));
+    return group;
+  }));
+  state.split = $("split").value;
+}
+const press = (group, button) => group.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+$("season").replaceChildren(...DATA.seasons.slice().reverse().map((s) => el("option", { value: s }, String(s))));
+$("min").replaceChildren(...MINIMUMS.map((n) => el("option", { value: n }, String(n))));
+$("min").value = state.min;
+$("season").onchange = (e) => { state.season = Number(e.target.value); state.page = 0; render(); };
+$("min").onchange = (e) => { state.min = Number(e.target.value); state.page = 0; render(); };
+$("split").onchange = (e) => { state.split = e.target.value; state.page = 0; render(); };
+$("prev").onclick = () => { state.page -= 1; render(); };
+$("next").onclick = () => { state.page += 1; render(); };
+for (const button of $("views").querySelectorAll("button")) {
+  button.onclick = () => { state.view = button.dataset.view; state.sort = "runs"; state.asc = false; state.page = 0; press($("views"), button); fillSplit(); render(); };
+}
+for (const button of $("columns").querySelectorAll("button")) {
+  button.onclick = () => { $("table").dataset.columns = button.dataset.columns; press($("columns"), button); };
+}
+fillSplit();
+render();
+</script>
+</body>
+</html>
