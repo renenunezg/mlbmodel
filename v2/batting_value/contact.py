@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -26,7 +27,7 @@ from sklearn.ensemble import HistGradientBoostingClassifier
 from backend.log import setup_logging
 from v2.batting_value import pitches as batting_pitches
 from v2.batting_value import values
-from v2.batting_value.difficulty import N_FOLDS, folds
+from v2.batting_value.difficulty import N_FOLDS, fold_map, fold_of, folds
 from v2.players import savant
 from v2.pitch_value import batted, expectancy
 from v2.pitch_value.batted import CLASSES, MIN_LEAF, N_BASE_OUT, _outcome, _row, _trajectory
@@ -69,30 +70,57 @@ def sprint(pitches: pd.DataFrame) -> np.ndarray:
 EXTRAS = {"spray": spray, "sprint": sprint}
 
 
-def neutral_in_play(pitches: pd.DataFrame, table: pd.DataFrame, contact: batted.Contact, extras: tuple[str, ...]) -> pd.Series:
-    """Context-neutral expected value of every tracked ball in play, from a contact model that also reads
-    ``extras`` and never saw the hitter. Built as ``v2.pitch_value.neutral`` builds it: the expected value in
+@dataclass(frozen=True)
+class HitterContact:
+    """The hitter contact models, one per fold of hitters."""
+    extras: tuple[str, ...]
+    seasons: tuple[int, ...]   # seasons fitted on; a later season is read as the last of them
+    folds: pd.Series           # hitter -> fold, for every hitter with a tracked ball in play in the fitting frame
+    models: list
+
+
+def _features(balls: pd.DataFrame, at: np.ndarray, seasons: tuple[int, ...], more: list[np.ndarray]) -> np.ndarray:
+    season = np.minimum(np.searchsorted(seasons, balls["season"].to_numpy()), len(seasons) - 1)
+    return np.column_stack([balls["launch_speed"].to_numpy(), balls["launch_angle"].to_numpy(), season,
+                            at % 8, at // 8 % 3, *more])
+
+
+def fit(pitches: pd.DataFrame, extras: tuple[str, ...], through: int) -> HitterContact:
+    """Contact models that also read ``extras``, fitted on the tracked balls in play up to season ``through``,
+    each without one fold of hitters."""
+    balls = pitches[batted.tracked(pitches)]
+    sample = balls["season"].le(through).to_numpy()
+    seasons = tuple(sorted(int(s) for s in balls.loc[sample, "season"].unique()))
+    x = _features(balls, balls["state"].to_numpy(), seasons, [EXTRAS[name](balls) for name in extras])
+    outcome, fold = _outcome(balls["events"]), folds(balls["batter"])
+    models = []
+    for k in range(N_FOLDS):
+        train = sample & (fold != k)
+        model = HistGradientBoostingClassifier(min_samples_leaf=MIN_LEAF, categorical_features=[2, 3, 4], random_state=0)
+        model.fit(x[train], outcome[train])
+        if model.n_iter_ < MIN_TREES:
+            raise ValueError(f"contact model with {extras or 'no additions'} stopped after {model.n_iter_} rounds of boosting")
+        models.append(model)
+    return HitterContact(extras=extras, seasons=seasons, folds=fold_map(balls["batter"]), models=models)
+
+
+def neutral_in_play(pitches: pd.DataFrame, table: pd.DataFrame, contact: batted.Contact, hitter: HitterContact) -> pd.Series:
+    """Context-neutral expected value of every tracked ball in play, from a contact model that also reads the
+    hitter's extras and never saw him. Built as ``v2.pitch_value.neutral`` builds it: the expected value in
     each of the 24 base-out states, weighted by how often the league's balls in play come in each."""
     balls = pitches[batted.tracked(pitches)]
     state = balls["state"].to_numpy()
-    season = balls["season"].map({s: i for i, s in enumerate(contact.seasons)}).to_numpy()
-    more = [EXTRAS[name](balls) for name in extras]
-    x = lambda at: np.column_stack([balls["launch_speed"].to_numpy(), balls["launch_angle"].to_numpy(), season,
-                                    at % 8, at // 8 % 3, *more])
-    outcome, trajectory, fold = _outcome(balls["events"]), _trajectory(balls["launch_angle"]), folds(balls["batter"])
+    more = [EXTRAS[name](balls) for name in hitter.extras]
+    trajectory, fold = _trajectory(balls["launch_angle"]), fold_of(balls["batter"], hitter.folds)
     share = np.bincount(state % N_BASE_OUT, minlength=N_BASE_OUT) / len(balls)
     worth, lookup = contact.runs + contact.after, expectancy.lookup(table)
     count = state // N_BASE_OUT
     value = np.zeros(len(balls))
-    for k in range(N_FOLDS):
+    for k, model in enumerate(hitter.models):
         held = fold == k
-        model = HistGradientBoostingClassifier(min_samples_leaf=MIN_LEAF, categorical_features=[2, 3, 4], random_state=0)
-        model.fit(x(state)[~held], outcome[~held])
-        if model.n_iter_ < MIN_TREES:
-            raise ValueError(f"contact model with {extras or 'no additions'} stopped after {model.n_iter_} rounds of boosting")
         for base_out in np.flatnonzero(share):
             swapped = count[held] * N_BASE_OUT + base_out
-            probs = model.predict_proba(x(count * N_BASE_OUT + base_out)[held])
+            probs = model.predict_proba(_features(balls[held], swapped, hitter.seasons, [m[held] for m in more]))
             expected = sum(probs[:, o] * worth[_row(np.full(held.sum(), o), trajectory[held]), base_out] for o in range(len(CLASSES)))
             value[held] += share[base_out] * (expected - lookup[swapped])
     return pd.Series(value, index=balls.index, name="value")
@@ -135,7 +163,9 @@ def main() -> None:
     setup_logging()
     frame = batting_pitches.load(list(SEASONS))
     built = values.build(frame)
-    in_play = {name: neutral_in_play(frame, built.table, built.contact, extras) for name, extras in VARIANTS.items()}
+    through = max(SEASONS)
+    in_play = {name: neutral_in_play(frame, built.table, built.contact, fit(frame, extras, through))
+               for name, extras in VARIANTS.items()}
     for name, value in in_play.items():
         log.info(f"{name}: {value.mean():+.4f} runs per tracked ball in play")
     table = pairs(hitter_seasons(frame, in_play))

@@ -73,12 +73,16 @@ def _cuts(blocks: dict) -> list[dict]:
     } for innings, block in blocks.items()]
 
 
+def coverage(pitchers: pd.DataFrame) -> dict:
+    """The seasons the tables were fitted on and the pitches they hold."""
+    return {"seasons": sorted(int(s) for s in pitchers["season"].unique()), "pitches": int(pitchers["pitches"].sum())}
+
+
 def study_payload(pitchers: pd.DataFrame, validation: dict) -> dict:
     """What the page quotes: coverage, the next-season validation over every pair, and over the pairs the design never saw."""
     if "all" not in validation or "confirmation" not in validation:
         raise ValueError("validation.json lacks the confirmation pairs; run `python -m v2.pitch_value.validate --confirm`")
-    return {"seasons": sorted(int(s) for s in pitchers["season"].unique()), "pitches": int(pitchers["pitches"].sum()),
-            "min_pitches": MIN_PITCHES, "min_type_pitches": MIN_TYPE_PITCHES,
+    return {**coverage(pitchers), "min_pitches": MIN_PITCHES, "min_type_pitches": MIN_TYPE_PITCHES,
             "validation": _cuts(validation["all"]), "held_back": _cuts(validation["confirmation"])}
 
 
@@ -87,15 +91,23 @@ def _records(frame: pd.DataFrame, columns: list[str], now: str) -> str:
     return frame[columns].assign(updated_at=now).to_json(orient="records")
 
 
-def publish(payload: dict, pitchers: pd.DataFrame, types: pd.DataFrame) -> None:
+def publish(payload: dict, pitchers: pd.DataFrame, types: pd.DataFrame, keep_study: bool = False) -> None:
+    """Replace the tables. With ``keep_study`` the payload is only ``coverage``, merged into the study row so its
+    validation (written by a full run with ``validate --confirm``) stays."""
     if len(pitchers) < MIN_PITCHER_ROWS:
         raise ValueError(f"refusing to publish {len(pitchers)} pitch_values rows (under {MIN_PITCHER_ROWS})")
     now = datetime.now(UTC).isoformat()
     season = payload["seasons"][-1]
     with engine.begin() as conn:
-        conn.execute(text("DELETE FROM pitch_value_study"))
-        conn.execute(text("INSERT INTO pitch_value_study (season, model_version, payload) VALUES (:s, :v, CAST(:p AS jsonb))"),
-                     {"s": season, "v": MODEL_VERSION, "p": json.dumps(payload)})
+        if keep_study:
+            updated = conn.execute(text("UPDATE pitch_value_study SET season = :s, payload = payload || CAST(:p AS jsonb) "
+                                        "WHERE model_version = :v"), {"s": season, "v": MODEL_VERSION, "p": json.dumps(payload)})
+            if updated.rowcount != 1:
+                raise ValueError(f"expected one {MODEL_VERSION} study row to update, found {updated.rowcount}")
+        else:
+            conn.execute(text("DELETE FROM pitch_value_study"))
+            conn.execute(text("INSERT INTO pitch_value_study (season, model_version, payload) VALUES (:s, :v, CAST(:p AS jsonb))"),
+                         {"s": season, "v": MODEL_VERSION, "p": json.dumps(payload)})
         conn.execute(text("TRUNCATE pitch_type_values, pitch_values"))
         conn.execute(text("INSERT INTO pitch_values SELECT * FROM jsonb_populate_recordset(NULL::pitch_values, CAST(:rows AS jsonb)) "
                           "ORDER BY season, player_id"), {"rows": _records(pitchers, PITCHER_COLUMNS, now)})

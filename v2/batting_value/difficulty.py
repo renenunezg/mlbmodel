@@ -11,9 +11,12 @@ Each result is worth its context-neutral value in that count, so the value of ta
 league's mix of the two follow, and bases and outs never enter.
 
 Every prediction for a hitter comes from models fitted without any of his pitches (five folds of hitters), so
-a hitter is never part of his own league average and the calibration tables are out of sample.
+a hitter is never part of his own league average and the calibration tables are out of sample. The fitted
+models can be kept and applied to a later season, which the season feature then reads as the last one fitted.
 """
 from __future__ import annotations
+
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -35,12 +38,22 @@ MODEL = {"max_iter": 1000, "min_samples_leaf": 200, "l2_regularization": 10.0, "
          "random_state": 0}
 
 
-def features(pitches: pd.DataFrame) -> np.ndarray:
+@dataclass(frozen=True)
+class League:
+    """The fitted league models, one per result and fold of hitters, and what predicting with them needs."""
+    seasons: tuple[int, ...]       # seasons the models were fitted on
+    pitch_types: tuple[str, ...]   # the pitch-type codes, in the order the models read them
+    folds: pd.Series               # hitter -> fold, for every hitter in the frame the models were fitted from
+    models: dict[str, list]        # result -> one model per fold
+
+
+def features(pitches: pd.DataFrame, pitch_types: tuple[str, ...]) -> np.ndarray:
     """One row per pitch. Horizontal location and break are mirrored for left-handed hitters, so positive is
-    toward the hitter; height is also given on the hitter's own strike zone (0 bottom, 1 top)."""
+    toward the hitter; height is also given on the hitter's own strike zone (0 bottom, 1 top). A pitch type the
+    models never saw is read as missing."""
     left = pitches["stand"].eq("L").to_numpy()
     mirror = np.where(left, 1.0, -1.0)
-    types = {name: i for i, name in enumerate(sorted(pitches["pitch_type"].dropna().unique()))}
+    types = {name: i for i, name in enumerate(pitch_types)}
     count = pitches["state"].to_numpy() // N_BASE_OUT
     return np.column_stack([
         pitches["plate_x"].to_numpy(float) * mirror,
@@ -64,12 +77,29 @@ def folds(batter: pd.Series) -> np.ndarray:
     return pd.Series(order % N_FOLDS, index=ids).reindex(batter).to_numpy()
 
 
-def cross_fit(make_model, x: np.ndarray, y: np.ndarray, train: np.ndarray, fold: np.ndarray, width: int) -> np.ndarray:
-    """Predictions for every row from a model fitted on the ``train`` rows of the other folds."""
+def fold_map(batter: pd.Series) -> pd.Series:
+    """hitter -> fold, as ``folds`` assigns them."""
+    return pd.Series(folds(batter), index=batter.to_numpy()).groupby(level=0).first()
+
+
+def fold_of(batter: pd.Series, assigned: pd.Series) -> np.ndarray:
+    """Fold of each pitch from a stored assignment. A hitter the models never saw is out of sample in every fold,
+    so any fold serves him."""
+    ids = batter.to_numpy()
+    known = assigned.reindex(ids).to_numpy(dtype=float)
+    return np.where(np.isnan(known), ids % N_FOLDS, known).astype(int)
+
+
+def fit_folds(make_model, x: np.ndarray, y: np.ndarray, train: np.ndarray, fold: np.ndarray) -> list:
+    """One model per fold, fitted on the ``train`` rows of the other folds."""
+    return [make_model().fit(x[train & (fold != k)], y[train & (fold != k)]) for k in range(N_FOLDS)]
+
+
+def predict_folds(models: list, x: np.ndarray, fold: np.ndarray, width: int) -> np.ndarray:
+    """Predictions for every row from the model of its own fold, which never saw it."""
     out = np.empty((len(x), width))
-    for k in range(N_FOLDS):
+    for k, model in enumerate(models):
         held = fold == k
-        model = make_model().fit(x[train & ~held], y[train & ~held])
         out[held] = model.predict_proba(x[held]) if width > 1 else model.predict(x[held])[:, None]
     return out
 
@@ -78,32 +108,50 @@ def _class_index(result: pd.Series, classes: tuple[str, ...]) -> np.ndarray:
     return result.map({name: i for i, name in enumerate(classes)}).fillna(-1).to_numpy(dtype=int)
 
 
-def fit(pitches: pd.DataFrame, neutral: pd.Series) -> pd.DataFrame:
+def fit(pitches: pd.DataFrame, neutral: pd.Series, through: int) -> League:
+    """The league models, fitted on the seasons up to ``through``, five folds of hitters."""
+    sample = pitches["seen"].to_numpy() & pitches["season"].le(through).to_numpy()
+    swing = pitches["swing"].to_numpy()
+    in_play = pitches["result"].eq("in_play").to_numpy()
+    hit = pitches["result"].eq("hit_by_pitch").to_numpy()
+    pitch_types = tuple(sorted(pitches["pitch_type"].dropna().unique()))
+    x, fold = features(pitches, pitch_types), folds(pitches["batter"])
+    classifier = lambda: HistGradientBoostingClassifier(**MODEL)
+    regressor = lambda: HistGradientBoostingRegressor(**MODEL)
+    called = pitches["result"].eq("called_strike").to_numpy()
+    return League(
+        seasons=tuple(sorted(int(s) for s in pitches.loc[sample, "season"].unique())), pitch_types=pitch_types,
+        folds=fold_map(pitches["batter"]),
+        models={
+            "swing": fit_folds(classifier, x, swing.astype(int), sample, fold),
+            # A take is a hit batter or not, then a called strike or a ball.
+            "hit_by_pitch": fit_folds(classifier, x, hit.astype(int), sample & ~swing, fold),
+            "called_strike": fit_folds(classifier, x, called.astype(int), sample & ~swing & ~hit, fold),
+            "swing_result": fit_folds(classifier, x, _class_index(pitches["result"], SWING_CLASSES), sample & swing, fold),
+            "in_play": fit_folds(regressor, x, neutral.to_numpy(), sample & in_play, fold),
+        })
+
+
+def values(pitches: pd.DataFrame, neutral: pd.Series, league: League) -> pd.DataFrame:
     """League chances and values for every pitch a hitter saw (other rows are left missing).
 
     Columns: p_swing; p_ball, p_called_strike, p_hit_by_pitch (if taken); p_whiff, p_foul, p_in_play (if swung
     at); in_play (expected value of the ball in play); take, swing, league (runs).
     """
     seen = pitches["seen"].to_numpy()
-    swing = pitches["swing"].to_numpy()
-    in_play = pitches["result"].eq("in_play").to_numpy()
-    x, fold = features(pitches), folds(pitches["batter"])
-    classifier = lambda: HistGradientBoostingClassifier(**MODEL)
-    regressor = lambda: HistGradientBoostingRegressor(**MODEL)
+    x, fold = features(pitches, league.pitch_types), fold_of(pitches["batter"], league.folds)
+    models = league.models
 
     out = pd.DataFrame(index=pitches.index)
-    out["p_swing"] = cross_fit(classifier, x, swing.astype(int), seen, fold, 2)[:, 1]
-    # A take is a hit batter or not, then a called strike or a ball.
-    hit = pitches["result"].eq("hit_by_pitch").to_numpy()
-    called = pitches["result"].eq("called_strike").to_numpy()
-    out["p_hit_by_pitch"] = cross_fit(classifier, x, hit.astype(int), seen & ~swing, fold, 2)[:, 1]
-    strike = cross_fit(classifier, x, called.astype(int), seen & ~swing & ~hit, fold, 2)[:, 1]
+    out["p_swing"] = predict_folds(models["swing"], x, fold, 2)[:, 1]
+    out["p_hit_by_pitch"] = predict_folds(models["hit_by_pitch"], x, fold, 2)[:, 1]
+    strike = predict_folds(models["called_strike"], x, fold, 2)[:, 1]
     out["p_called_strike"] = (1.0 - out["p_hit_by_pitch"]) * strike
     out["p_ball"] = (1.0 - out["p_hit_by_pitch"]) * (1.0 - strike)
-    swung = cross_fit(classifier, x, _class_index(pitches["result"], SWING_CLASSES), seen & swing, fold, len(SWING_CLASSES))
+    swung = predict_folds(models["swing_result"], x, fold, len(SWING_CLASSES))
     for i, name in enumerate(SWING_CLASSES):
         out[f"p_{name}"] = swung[:, i]
-    out["in_play"] = cross_fit(regressor, x, neutral.to_numpy(), seen & in_play, fold, 1)[:, 0]
+    out["in_play"] = predict_folds(models["in_play"], x, fold, 1)[:, 0]
 
     # What each result other than a ball in play is worth in each count: the league mean of its neutral value.
     count = pitches["state"].to_numpy() // N_BASE_OUT

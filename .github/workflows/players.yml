@@ -152,3 +152,74 @@ jobs:
         run: |
           echo "::error::Score player values failed; the grades were not refreshed"
           exit 1
+
+  # Pitch and batting run value for the current season, after the grades. Most runs reuse the batting models
+  # fitted through the last completed season and take minutes; the first run after a season ends refits them,
+  # which is what the long timeout is for. Unchanged inputs (the offseason) publish nothing.
+  values:
+    needs: score
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release
+
+      - name: Restore Statcast cache
+        # Restore only, as in the score job: train-v2 owns this cache.
+        uses: actions/cache/restore@v4
+        with:
+          path: cache
+          key: statcast-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            statcast-${{ runner.os }}-
+
+      - name: Restore player state (the cached Savant boards)
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            cache/players
+            cache/prospects
+          key: players-state-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            players-state-${{ runner.os }}-
+
+      # The batting models and the skip-write fingerprint, which only this job saves.
+      - name: Restore run value state
+        id: values_state
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            cache/batting_value/league_models.joblib
+            cache/run_values_state.json
+          key: run-values-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            run-values-${{ runner.os }}-
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -c constraints.txt -r requirements.txt -r v2/requirements.txt && pip install --no-deps -e .
+
+      - name: Refresh pitch and batting run value
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PYTHONPATH: "."
+        run: python -m v2.run_values
+
+      - name: Save run value state when it changed
+        if: always() && hashFiles('cache/batting_value/league_models.joblib') != '' && steps.values_state.outputs.cache-matched-key != format('run-values-{0}-{1}', runner.os, hashFiles('cache/batting_value/league_models.joblib', 'cache/run_values_state.json'))
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            cache/batting_value/league_models.joblib
+            cache/run_values_state.json
+          key: run-values-${{ runner.os }}-${{ hashFiles('cache/batting_value/league_models.joblib', 'cache/run_values_state.json') }}

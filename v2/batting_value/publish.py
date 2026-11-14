@@ -116,6 +116,11 @@ def _split_repeats(validation: dict, split: str, listed: tuple[str, ...]) -> dic
         for value in listed}}
 
 
+def coverage(hitters: pd.DataFrame) -> dict:
+    """The seasons the tables were fitted on and the pitches they hold."""
+    return {"seasons": sorted(int(s) for s in hitters["season"].unique()), "pitches": int(hitters["pitches"].sum())}
+
+
 def study_payload(hitters: pd.DataFrame, validation: dict, contact_test: dict) -> dict:
     """What the page quotes: coverage, the next-season validation over every pair and over the pairs the design
     never saw, the parts, and how well the listed splits repeat."""
@@ -124,8 +129,7 @@ def study_payload(hitters: pd.DataFrame, validation: dict, contact_test: dict) -
     test = contact_test[str(DECIDING_CUT)]
     sides, heights = _split_repeats(validation, "sides", SIDES), _split_repeats(validation, "heights", HEIGHTS)
     return {
-        "seasons": sorted(int(s) for s in hitters["season"].unique()), "pitches": int(hitters["pitches"].sum()),
-        "min_pa": MIN_PA, "min_type_pitches": MIN_TYPE_PITCHES,
+        **coverage(hitters), "min_pa": MIN_PA, "min_type_pitches": MIN_TYPE_PITCHES,
         "validation": _cuts(validation["all"]), "held_back": _cuts(validation["confirmation"]),
         "parts": _parts(validation["all"][PARTS_PA]),
         "counts": _split_repeats(validation, "situations", SITUATIONS),
@@ -144,15 +148,23 @@ def _insert(conn, table: str, frame: pd.DataFrame, now: str) -> None:
         conn.execute(text(f"INSERT INTO {table} SELECT * FROM jsonb_populate_recordset(NULL::{table}, CAST(:rows AS jsonb))"), {"rows": rows})
 
 
-def publish(payload: dict, hitters: pd.DataFrame, splits: pd.DataFrame) -> None:
+def publish(payload: dict, hitters: pd.DataFrame, splits: pd.DataFrame, keep_study: bool = False) -> None:
+    """Replace the tables. With ``keep_study`` the payload is only ``coverage``, merged into the study row so its
+    validation (written by a full run with ``validate --confirm``) stays."""
     if len(hitters) < MIN_HITTER_ROWS:
         raise ValueError(f"refusing to publish {len(hitters)} batting_values rows (under {MIN_HITTER_ROWS})")
     now = datetime.now(UTC).isoformat()
     season = payload["seasons"][-1]
     with engine.begin() as conn:
-        conn.execute(text("DELETE FROM batting_value_study"))
-        conn.execute(text("INSERT INTO batting_value_study (season, model_version, payload) VALUES (:s, :v, CAST(:p AS jsonb))"),
-                     {"s": season, "v": MODEL_VERSION, "p": json.dumps(payload)})
+        if keep_study:
+            updated = conn.execute(text("UPDATE batting_value_study SET season = :s, payload = payload || CAST(:p AS jsonb) "
+                                        "WHERE model_version = :v"), {"s": season, "v": MODEL_VERSION, "p": json.dumps(payload)})
+            if updated.rowcount != 1:
+                raise ValueError(f"expected one {MODEL_VERSION} study row to update, found {updated.rowcount}")
+        else:
+            conn.execute(text("DELETE FROM batting_value_study"))
+            conn.execute(text("INSERT INTO batting_value_study (season, model_version, payload) VALUES (:s, :v, CAST(:p AS jsonb))"),
+                         {"s": season, "v": MODEL_VERSION, "p": json.dumps(payload)})
         conn.execute(text("TRUNCATE batting_split_values, batting_values"))
         _insert(conn, "batting_values", hitters.sort_values(["season", "player_id"]), now)
         _insert(conn, "batting_split_values", splits.sort_values(["season", "player_id", "split"]), now)

@@ -1,11 +1,15 @@
 """Value every pitch from the hitter's side, split it into components, and write the season aggregates.
 
 Usage:
-    python -m v2.batting_value.run [--seasons 2021 2022 2023 2024 2025 2026]
+    python -m v2.batting_value.run [--seasons 2021 2022 2023 2024 2025 2026] [--fit-through 2025 | --frozen]
 
 Reads the local Statcast caches (and the cached Savant boards for names). Writes under cache/batting_value/:
 hitter_seasons.parquet, pitch_groups.parquet, pitch_types.parquet, zones.parquet, sides.parquet, heights.parquet, situations.parquet,
 calibration_{zone,count,pitch_group}.csv and checks.json. Stops if the components do not sum.
+
+Fitting the hitter contact and pitch difficulty models is nearly all of the run, so a fit also writes them to
+league_models.joblib, and --frozen applies those models to the seasons given (a season after the last fitted one
+is read as that last one) instead of fitting them again.
 """
 from __future__ import annotations
 
@@ -14,6 +18,7 @@ import json
 import logging
 from pathlib import Path
 
+import joblib
 import numpy as np
 import pandas as pd
 
@@ -27,20 +32,31 @@ log = logging.getLogger(__name__)
 OUT_DIR = contact.OUT_DIR
 DEFAULT_SEASONS = contact.SEASONS
 CALIBRATION_BY = ("zone", "count", "pitch_group")
+# The hitter contact and pitch difficulty models of the last fit, which --frozen reuses.
+MODELS_FILE = "league_models.joblib"
 # Plate appearances a hitter-season needs to enter the same-season wOBA check.
 WOBA_CHECK_PA = 300
 # The largest gap allowed between a predicted and an actual rate in any zone, count or pitch group.
 CALIBRATION_TOLERANCE = 0.02
 
 
-def build(seasons: list[int]) -> dict:
+def build(seasons: list[int], models: dict | None = None, through: int | None = None) -> dict:
+    """Every output for ``seasons``. ``models`` are the hitter contact and pitch difficulty models kept from an
+    earlier fit; without them both are fitted, on the seasons up to ``through`` (all of them by default)."""
     frame = pitches.load(seasons)
     built = values.build(frame)
+    fitted = models is None
+    if fitted:
+        through = max(seasons) if through is None else through
+        models = {"through": through, "contact": contact.fit(frame, contact.KEPT, through) if contact.KEPT else None}
     neutral = built.frame["neutral"].rename("neutral")
-    if contact.KEPT:
-        hitter_model = contact.neutral_in_play(frame, built.table, built.contact, contact.KEPT)
+    if models["contact"] is not None:
+        hitter_model = contact.neutral_in_play(frame, built.table, built.contact, models["contact"])
         neutral[hitter_model.index] = hitter_model
-    league = difficulty.fit(frame, neutral)
+    if fitted:
+        models["difficulty"] = difficulty.fit(frame, neutral, through)
+        log.info(f"fitted the hitter contact and pitch difficulty models through {through}")
+    league = difficulty.values(frame, neutral, models["difficulty"])
     parts = components.split(frame, neutral, league)
 
     seen = frame["seen"]
@@ -66,6 +82,7 @@ def build(seasons: list[int]) -> dict:
     hitters = aggregate.hitter_seasons(frame, scores)
     log.info(f"{int(seen.sum()):,} pitches seen over {len(seasons)} seasons, {len(hitters):,} hitter-seasons")
     return {
+        "models": models if fitted else None,
         "hitter_seasons": hitters,
         "pitch_groups": aggregate.splits(frame, scores, "pitch_group"),
         "pitch_types": aggregate.splits(frame, scores, "pitch_type"),
@@ -114,15 +131,27 @@ def write(outputs: dict, out_dir: Path = OUT_DIR) -> None:
     for by, table in outputs["calibration"].items():
         table.to_csv(out_dir / f"calibration_{by}.csv", index=False)
     (out_dir / "checks.json").write_text(json.dumps(outputs["checks"], indent=1))
+    if outputs["models"] is not None:
+        joblib.dump(outputs["models"], out_dir / MODELS_FILE)
     log.info(f"wrote {out_dir}")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seasons", type=int, nargs="+", default=list(DEFAULT_SEASONS))
+    parser.add_argument("--fit-through", type=int, help="fit the hitter contact and pitch difficulty models on the "
+                        "seasons up to this one only (default: every season)")
+    parser.add_argument("--frozen", action="store_true", help=f"reuse the models in {MODELS_FILE} instead of fitting them")
     args = parser.parse_args()
     setup_logging()
-    write(build(sorted(args.seasons)))
+    write(build(sorted(args.seasons), load_models() if args.frozen else None, args.fit_through))
+
+
+def load_models(out_dir: Path = OUT_DIR) -> dict:
+    path = out_dir / MODELS_FILE
+    if not path.exists():
+        raise FileNotFoundError(f"{path} is missing; run `python -m v2.batting_value.run` to fit the models")
+    return joblib.load(path)
 
 
 if __name__ == "__main__":
