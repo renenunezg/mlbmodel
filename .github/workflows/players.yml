@@ -188,6 +188,20 @@ jobs:
           restore-keys: |
             players-state-${{ runner.os }}-
 
+      # Pitch and batting value read every season from 2021, and train-v2's Statcast cache starts in 2024,
+      # so this job keeps the earlier seasons in a cache of its own and builds any that are missing.
+      - name: Restore the 2021-2023 Statcast seasons
+        id: statcast_history
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            cache/statcast_2021.parquet
+            cache/statcast_2022.parquet
+            cache/statcast_2023.parquet
+          key: statcast-history-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            statcast-history-${{ runner.os }}-
+
       # Only this job saves these. The batting models change once a season; the skip-write fingerprint every publish,
       # so they are kept apart and a publish does not upload another copy of the models.
       - name: Restore the batting value models
@@ -216,6 +230,24 @@ jobs:
 
       - name: Install dependencies
         run: pip install -c constraints.txt -r requirements.txt -r v2/requirements.txt && pip install --no-deps -e .
+
+      - name: Build the missing 2021-2023 Statcast seasons
+        env:
+          PYTHONPATH: "."
+        run: |
+          missing=""
+          for year in 2021 2022 2023; do [ -f "cache/statcast_${year}.parquet" ] || missing="$missing $year"; done
+          if [ -n "$missing" ]; then python -m v2.data.build_cache --years $missing; fi
+
+      - name: Save the 2021-2023 Statcast seasons when they changed
+        if: always() && hashFiles('cache/statcast_2021.parquet', 'cache/statcast_2022.parquet', 'cache/statcast_2023.parquet') != '' && steps.statcast_history.outputs.cache-matched-key != format('statcast-history-{0}-{1}', runner.os, hashFiles('cache/statcast_2021.parquet', 'cache/statcast_2022.parquet', 'cache/statcast_2023.parquet'))
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            cache/statcast_2021.parquet
+            cache/statcast_2022.parquet
+            cache/statcast_2023.parquet
+          key: statcast-history-${{ runner.os }}-${{ hashFiles('cache/statcast_2021.parquet', 'cache/statcast_2022.parquet', 'cache/statcast_2023.parquet') }}
 
       - name: Refresh pitch and batting run value
         env:
