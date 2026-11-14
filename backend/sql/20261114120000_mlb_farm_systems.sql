@@ -3,8 +3,10 @@ BEGIN;
 -- One row per organization, ranked by the trade value of its 30 most valuable prospects. Past thirty, prospects rarely
 -- reach the majors, their small values lean on the least certain probabilities, and an org cannot roster them all, so
 -- the deep tail is shown (total_value_musd) but does not set the order. A view over mlb.prospect_values, so it cannot
--- drift from the prospect board and is refreshed by that table's site_revalidate trigger.
-CREATE OR REPLACE VIEW mlb.farm_systems WITH (security_invoker = true) AS
+-- drift from the prospect board and is refreshed by that table's site_revalidate trigger. The best prospect is the
+-- highest peak grade, ties to trade value.
+DROP VIEW IF EXISTS mlb.farm_systems;
+CREATE VIEW mlb.farm_systems WITH (security_invoker = true) AS
 WITH ranked AS (
   SELECT
     org,
@@ -21,7 +23,10 @@ WITH ranked AS (
     as_of,
     row_number() OVER (
       PARTITION BY org ORDER BY trade_value_musd DESC NULLS LAST, peak_grade DESC NULLS LAST, player_id
-    ) AS org_rank
+    ) AS org_rank,
+    row_number() OVER (
+      PARTITION BY org ORDER BY peak_grade DESC NULLS LAST, trade_value_musd DESC NULLS LAST, player_id
+    ) AS grade_rank
   FROM mlb.prospect_values
   WHERE org IS NOT NULL
 ),
@@ -54,11 +59,12 @@ SELECT
   b.player_name AS best_player_name,
   b.position_group AS best_position_group,
   b.headshot_url AS best_headshot_url,
+  b.peak_grade AS best_peak_grade,
   b.trade_value_musd AS best_value_musd,
   o.season,
   o.as_of
 FROM orgs o
-JOIN ranked b ON b.org = o.org AND b.org_rank = 1;
+JOIN ranked b ON b.org = o.org AND b.grade_rank = 1;
 
 GRANT SELECT ON mlb.farm_systems TO anon, authenticated, service_role;
 
