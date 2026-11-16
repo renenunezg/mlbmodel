@@ -96,15 +96,15 @@ def batting_only(pairs: list[dict]) -> list[dict]:
 
 
 def variant_suffix(*, tree: bool = False, expected_outcomes: bool = False, expected_blend: bool = False, components: bool = False,
-                   direct_batting: bool = False, reliever_inputs: bool = False) -> str:
+                   direct_batting: bool = False, reliever_inputs: bool = False, starter_velo: bool = False) -> str:
     return "".join(f"_{name}" for name, on in (("tree", tree), ("expected", expected_outcomes), ("blend", expected_blend),
                                                ("components", components), ("direct", direct_batting),
-                                               ("relief", reliever_inputs)) if on)
+                                               ("relief", reliever_inputs), ("velo", starter_velo)) if on)
 
 
 def grade_models(last_dev_season: int, *, tree: bool = False, expected_outcomes: bool = False, expected_blend: bool = False,
                  components: bool = False, direct_batting: bool = False, reliever_inputs: bool = False,
-                 cache_dir=CACHE_DIR) -> tuple[ValueModel, ValueModel]:
+                 starter_velo: bool = False, cache_dir=CACHE_DIR) -> tuple[ValueModel, ValueModel]:
     """(full, batting-only) grade models from pairs ending in ``last_dev_season + 1``, cached on disk.
 
     Both share window, shrink and trait weights; only the hitter grade weights differ.
@@ -113,7 +113,7 @@ def grade_models(last_dev_season: int, *, tree: bool = False, expected_outcomes:
     model's batting component is its own batting-only grade, so both paths share one file.
     """
     suffix = variant_suffix(tree=tree, expected_outcomes=expected_outcomes, expected_blend=expected_blend, components=components, direct_batting=direct_batting,
-                            reliever_inputs=reliever_inputs)
+                            reliever_inputs=reliever_inputs, starter_velo=starter_velo)
     path = cache_dir / f"forward_grade_model_{last_dev_season}{suffix}.json"
     batting_path = cache_dir / f"forward_grade_model_{last_dev_season}{suffix}_batting.json"
     if path.exists() and batting_path.exists():
@@ -128,6 +128,7 @@ def grade_models(last_dev_season: int, *, tree: bool = False, expected_outcomes:
     model.pa_per_ip = data.pa_per_ip[last_dev_season]
     model.evaluation = {"hitter_shrink": configure_hitter_shrink(data, dev_first, dev_seasons, model, tree=tree, expected_outcomes=expected_outcomes, expected_blend=expected_blend)}
     model.component_grades, model.direct_batting, model.reliever_inputs = components, direct_batting, reliever_inputs
+    model.starter_velo = starter_velo
     pairs = [build_pair(data, t, model) for t in dev_first]
     in_season = cut_pairs(data, dev_seasons, model)
     history = history_pairs(model)

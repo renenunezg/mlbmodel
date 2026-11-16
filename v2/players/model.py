@@ -68,6 +68,8 @@ class ValueModel:
     direct_batting: bool = False
     # The reliever grade also reads the oriented pitcher inputs beside the pitcher composites.
     reliever_inputs: bool = False
+    # The starter grade also reads fastball velocity beside the pitcher composites.
+    starter_velo: bool = False
     # One row per (pool, trait, input): weight within the trait, status.
     trait_weights: list[dict] = field(default_factory=list)
     # One row per (pool, feature): coefficient on the z-scored feature, plus the intercept rows.

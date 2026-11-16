@@ -177,11 +177,14 @@ def pitching_runs_for(rates: pd.DataFrame, model: ValueModel, role: pd.Series, l
 
 BATTING_INPUTS = tuple(name for name, spec in INPUTS.items() if spec.role == "bat")
 PITCHER_INPUTS = tuple(name for name, spec in INPUTS.items() if spec.role == "pit")
+# What the starter grade reads directly when ``starter_velo`` is on.
+STARTER_INPUTS = ("stuff.velo",)
 
 
 def direct_inputs(model: ValueModel) -> tuple[str, ...]:
     """The inputs a model's grade reads directly beside the composites."""
-    return (BATTING_INPUTS if model.direct_batting else ()) + (PITCHER_INPUTS if model.reliever_inputs else ())
+    pitcher = PITCHER_INPUTS if model.reliever_inputs else STARTER_INPUTS if model.starter_velo else ()
+    return (BATTING_INPUTS if model.direct_batting else ()) + pitcher
 
 
 def in_grade(trait: str, catcher: bool) -> bool:
