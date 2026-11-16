@@ -31,11 +31,15 @@ def build(seasons: list[int]) -> dict[str, pd.DataFrame]:
     expected = batted.expected_values(frame, table, raw, contact)
     fitted = context.fit(frame, expected)
     neutral_value = neutral.neutral_values(frame, table, raw, contact)
+    # Home runs against the contact model's expectation, park removed and each season centred (the season's own scale).
+    home_runs = batted.home_runs(frame, contact)
+    home_runs["home_run_gap"] = context.park_centred(
+        frame.loc[home_runs.index], (home_runs["home_run"] - home_runs["expected_home_run"]).rename("home_run_gap"))
     values = pd.DataFrame({
         "raw": raw, "expected": expected,
         "adjusted": context.adjust(frame, expected, fitted),
         "neutral": context.adjust(frame, neutral_value, context.fit(frame, neutral_value)),
-    })
+    }).join(home_runs.reindex(frame.index, fill_value=0.0))
     log.info(f"{len(frame):,} pitches over {len(seasons)} seasons")
     return {
         "re288": table,

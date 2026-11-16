@@ -99,6 +99,15 @@ def expected_after(balls: pd.DataFrame, state: np.ndarray, contact: Contact) -> 
     return expected
 
 
+def home_runs(pitches: pd.DataFrame, contact: Contact) -> pd.DataFrame:
+    """Per tracked ball in play: whether it left the park, and the contact model's probability that a ball hit
+    that hard at that angle would, in the state it was hit in."""
+    balls = pitches[tracked(pitches)]
+    probs = contact.model.predict_proba(_features(balls, balls["state"].to_numpy(), contact.seasons))
+    return pd.DataFrame({"home_run": balls["events"].eq("home_run").astype(float),
+                         "expected_home_run": probs[:, CLASSES.index("home_run")]}, index=balls.index)
+
+
 def expected_values(pitches: pd.DataFrame, table: pd.DataFrame, value: pd.Series, contact: Contact) -> pd.Series:
     """``value`` with every tracked ball in play replaced by its expected value."""
     hit = tracked(pitches).to_numpy()

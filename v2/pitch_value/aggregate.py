@@ -2,7 +2,8 @@
 
 ``values`` holds one column per valuation of the same pitches: ``raw`` (what happened), ``expected`` (expected
 contact), ``adjusted`` (expected contact with park, hitter and season removed) and ``neutral`` (the same
-adjustments on the context-neutral value).
+adjustments on the context-neutral value). ``home_run``, ``expected_home_run`` and ``home_run_gap`` (their difference
+with the park removed and the season centred) are set on tracked balls in play and summed per pitcher-season only.
 """
 from __future__ import annotations
 
@@ -38,8 +39,9 @@ def pitcher_seasons(pitches: pd.DataFrame, values: pd.DataFrame) -> pd.DataFrame
     """One row per pitcher and season, best context-neutral total first."""
     frame = _frame(pitches, values)
     out = _totals(frame, ["season", "pitcher"])
-    who = frame.groupby(["season", "pitcher"]).agg(name=("pitcher_name", "first")).join(
-        final_team(frame, ["season", "pitcher"], "team")).reset_index()
+    who = frame.groupby(["season", "pitcher"]).agg(
+        name=("pitcher_name", "first"), home_runs=("home_run", "sum"), expected_home_runs=("expected_home_run", "sum"),
+        home_run_gap=("home_run_gap", "sum")).join(final_team(frame, ["season", "pitcher"], "team")).reset_index()
     return who.merge(out, on=["season", "pitcher"]).sort_values(["season", "neutral_runs"]).reset_index(drop=True)
 
 
