@@ -4,7 +4,7 @@ Usage:
     python -m v2.batting_value.run [--seasons 2021 2022 2023 2024 2025 2026] [--fit-through 2025 | --frozen]
 
 Reads the local Statcast caches (and the cached Savant boards for names). Writes under cache/batting_value/:
-hitter_seasons.parquet, pitch_groups.parquet, pitch_types.parquet, zones.parquet, sides.parquet, heights.parquet, situations.parquet,
+hitter_seasons.parquet (with each hitter-season's realized gap on contact, ``gap_runs`` over ``tracked_balls``), pitch_groups.parquet, pitch_types.parquet, zones.parquet, sides.parquet, heights.parquet, situations.parquet,
 calibration_{zone,count,pitch_group}.csv and checks.json. Stops if the components do not sum.
 
 Fitting the hitter contact and pitch difficulty models is nearly all of the run, so a fit also writes them to
@@ -25,7 +25,7 @@ import pandas as pd
 from backend.log import setup_logging
 from v2.batting_value import aggregate, components, contact, difficulty, pitches, values
 from v2.batting_value.components import COMPONENTS, SUM_TOLERANCE
-from v2.pitch_value import batted
+from v2.pitch_value import batted, context
 
 log = logging.getLogger(__name__)
 
@@ -73,6 +73,12 @@ def build(seasons: list[int], models: dict | None = None, through: int | None = 
     # the adjusted neutral value is the sum of the adjusted parts. Adjusting the neutral value in one piece
     # shrinks one park effect instead of five and differs a little; the gap is reported, not used.
     scores["neutral"] = scores[[*domain, "faced"]].sum(axis=1)
+    # What each tracked ball in play did against what the contact model expected of it, park removed and each
+    # season centred, on the season's own run scale (xWAR sets it against that season's WAR).
+    hit = batted.tracked(frame) & seen
+    gap = (contact.actual_in_play(frame, built.table, built.contact) - neutral[batted.tracked(frame)]).rename("gap")
+    scores["gap"] = context.park_centred(frame[hit], gap[hit]).reindex(frame.index, fill_value=0.0)
+    scores["tracked"] = hit
     one_piece = values.adjusted(frame, neutral, seen, scale) - scores["neutral"]
     one_piece_gap = one_piece[seen].groupby([frame.loc[seen, "season"], frame.loc[seen, "batter"]]).sum()
     calibration = {by: difficulty.calibration(frame, league, neutral, by) for by in CALIBRATION_BY}

@@ -6,10 +6,13 @@ hard the ball is hit there).
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+
+log = logging.getLogger(__name__)
 
 N_PARKS = 30
 # Hitter and pitcher effects are fitted in turn. The largest change in any hitter's effect is 0.22 runs per 100 pitches
@@ -72,6 +75,18 @@ def park_effects(pitches: pd.DataFrame, value: pd.Series) -> pd.DataFrame:
     keep = between / (between + noise / seasons)
     return pd.DataFrame({"seasons": seasons, "pitches": by_park["size"].sum(), "raw": raw, "effect": raw * keep,
                          "kept": keep}).sort_values("effect").reset_index()
+
+
+def park_centred(pitches: pd.DataFrame, value: pd.Series) -> pd.Series:
+    """``value`` with the park removed and each season centred on its league average, on the season's own run
+    scale. No park effect is removed when the parks cannot be told apart from noise."""
+    try:
+        effect = park(pitches).map(park_effects(pitches, value).set_index("park")["effect"]).to_numpy()
+    except ValueError as error:
+        log.info(f"{value.name}: no park effect removed ({error})")
+        effect = 0.0
+    out = value - effect
+    return (out - out.groupby(pitches["season"]).transform("mean")).rename(value.name)
 
 
 def batter_effects(pitches: pd.DataFrame, value: pd.Series) -> pd.Series:

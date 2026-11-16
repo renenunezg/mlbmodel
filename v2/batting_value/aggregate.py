@@ -3,7 +3,9 @@
 ``scores`` holds one column per valuation of the same pitches: ``raw`` (what happened), ``expected`` (expected
 contact), ``context`` (expected contact with park and season removed), ``neutral`` (context-neutral, park and
 season removed), the components ``decision``, ``contact`` and ``quality``, ``call`` (called-strike luck on
-takes, not credited) and ``faced`` (the league-average value of the pitches he saw).
+takes, not credited) and ``faced`` (the league-average value of the pitches he saw). ``gap`` is what a tracked ball
+in play did against what the contact model expected of it (``tracked`` marks those balls); it is summed per
+hitter-season only, as ``gap_runs`` over ``tracked_balls``.
 """
 from __future__ import annotations
 
@@ -46,8 +48,8 @@ def hitter_seasons(pitches: pd.DataFrame, scores: pd.DataFrame) -> pd.DataFrame:
     """One row per hitter and season, best total first, with the plate-appearance outcomes the validation needs."""
     frame = _frame(pitches, scores)
     out = _totals(frame, KEYS)
-    who = frame.groupby(KEYS).agg(pa=("outcome", "count"), woba_value=("woba_value", "sum"),
-                                  woba_denom=("woba_denom", "sum")).join(final_team(frame, KEYS, "bat_team")).reset_index()
+    who = frame.groupby(KEYS).agg(pa=("outcome", "count"), woba_value=("woba_value", "sum"), woba_denom=("woba_denom", "sum"),
+                                  gap_runs=("gap", "sum"), tracked_balls=("tracked", "sum")).join(final_team(frame, KEYS, "bat_team")).reset_index()
     outcomes = pd.crosstab([frame["season"], frame["batter"]], frame["outcome"]).reindex(columns=list(OUTCOMES), fill_value=0)
     out = who.merge(out, on=KEYS).join(outcomes, on=KEYS)
     out[list(OUTCOMES)] = out[list(OUTCOMES)].fillna(0).astype(int)

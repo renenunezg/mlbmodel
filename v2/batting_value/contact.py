@@ -126,6 +126,23 @@ def neutral_in_play(pitches: pd.DataFrame, table: pd.DataFrame, contact: batted.
     return pd.Series(value, index=balls.index, name="value")
 
 
+def actual_in_play(pitches: pd.DataFrame, table: pd.DataFrame, contact: batted.Contact) -> pd.Series:
+    """Context-neutral value of what every tracked ball in play did, priced as ``neutral_in_play`` prices what
+    was expected of it: the outcome's worth in each of the 24 base-out states, weighted by how often the
+    league's balls in play come in each. The two differ only by the outcome, so their gap is the ball's result
+    against its exit velocity, launch angle and the hitter's speed."""
+    balls = pitches[batted.tracked(pitches)]
+    state = balls["state"].to_numpy()
+    row = _row(_outcome(balls["events"]), _trajectory(balls["launch_angle"]))
+    share = np.bincount(state % N_BASE_OUT, minlength=N_BASE_OUT) / len(balls)
+    worth, lookup = contact.runs + contact.after, expectancy.lookup(table)
+    count = state // N_BASE_OUT
+    value = np.zeros(len(balls))
+    for base_out in np.flatnonzero(share):
+        value += share[base_out] * (worth[row, base_out] - lookup[count * N_BASE_OUT + base_out])
+    return pd.Series(value, index=balls.index, name="value")
+
+
 def hitter_seasons(pitches: pd.DataFrame, in_play: dict[str, pd.Series]) -> pd.DataFrame:
     """Per hitter-season: tracked balls in play, wOBA on contact, and each variant's expected value per ball."""
     balls = pitches.loc[batted.tracked(pitches), ["season", "batter", "woba_value", "woba_denom"]].join(pd.DataFrame(in_play))
