@@ -52,7 +52,12 @@ jobs:
 
       # The state this job owns and nothing else saves: the players and prospects skip-write fingerprints
       # (last_scored.json), the prospect feed chunks the time-boxed refresh resumes from, rosters and bios.
-      # It overlays the stale copy inside the train job's Statcast cache.
+      # It overlays the stale copy inside the train job's Statcast cache. That copy's prospect feed chunks are
+      # removed first: a restore only adds files, so its chunks survived beside a rebuilt level-season and
+      # cached the same games twice (prospect scoring failed from 2026-11-09).
+      - name: Drop the Statcast cache's stale prospect state
+        run: rm -rf cache/prospects
+
       - name: Restore player and prospect state
         id: state
         uses: actions/cache/restore@v4

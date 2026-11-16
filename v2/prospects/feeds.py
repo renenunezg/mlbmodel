@@ -253,12 +253,26 @@ def _lacks_stuff_columns(sport_id: int, season: int) -> bool:
     return bool(files) and "spin_axis" not in pq.read_schema(files[0]).names
 
 
+def _has_duplicate_games(sport_id: int, season: int) -> bool:
+    """Whether a game is cached in more than one chunk of a level-season.
+
+    A run never writes a cached game again, so a duplicate means chunks from two copies of the cache were merged
+    (an older copy's chunks left beside a rebuilt level-season, 2026-11-05).
+    """
+    games = read_kind(sport_id, season, "games")
+    return not games.empty and bool(games["game_pk"].duplicated().any())
+
+
 def build(sport_id: int, season: int, deadline: float | None = None, workers: int = WORKERS) -> int:
     """Fetch and cache every final regular-season game of a level-season not yet cached; returns games added."""
     kinds = KINDS
     marker = "games"
     if sport_id in STUFF_SPORT_IDS and _lacks_stuff_columns(sport_id, season):
         log.info(f"feeds[{sport_id}/{season}]: pitch rows predate the stuff columns; rebuilding the level-season")
+        for f in level_dir(sport_id, season).iterdir():
+            f.unlink()
+    elif _has_duplicate_games(sport_id, season):
+        log.info(f"feeds[{sport_id}/{season}]: games cached in more than one chunk; rebuilding the level-season")
         for f in level_dir(sport_id, season).iterdir():
             f.unlink()
     complete = level_dir(sport_id, season) / COMPLETE_MARKER

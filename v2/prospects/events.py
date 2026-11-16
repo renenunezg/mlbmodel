@@ -72,6 +72,11 @@ def load_games(seasons: list[int]) -> pd.DataFrame:
     if not frames:
         return pd.DataFrame()
     games = pd.concat(frames, ignore_index=True)
+    dup = games[games["game_pk"].duplicated(keep=False)]
+    if not dup.empty:
+        where = sorted(set(zip(dup["sport_id"].astype(int), dup["season"].astype(int))))
+        raise ValueError(f"{dup['game_pk'].nunique()} games are cached more than once (sport, season: {where}); "
+                         "run python -m v2.prospects.feeds for those seasons to rebuild them")
     games = games[games["n_plays"].fillna(0) > 0].copy()
     games["level"] = level_of(games)
     games = games[games["level"].notna()]
