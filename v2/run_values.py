@@ -1,4 +1,4 @@
-"""Refresh pitch and batting run value for the current season, on the player grades' schedule (players.yml).
+"""Refresh pitch and batting run value and xWAR for the current season, on the player grades' schedule (players.yml).
 
 Usage:
     python -m v2.run_values [--dry-run]
@@ -9,6 +9,7 @@ whole (about a minute). Batting value reuses the hitter contact and pitch diffic
 last completed season, so an in-season run applies models fitted through the previous season and the first run
 after a season ends refits them through it. Both tables are checked as a full run checks them (the batting parts
 must sum and the league rates must match their zone, count and pitch-group averages), so a bad run stops here.
+xWAR is then rebuilt from the two season files and the season's fWAR feed, which is fetched again every run.
 
 Nothing is published when the inputs are unchanged since the last publish (the offseason), or while the current
 season is below a publisher's row floor (early in a season; the previous season stays up). The study rows keep
@@ -34,7 +35,9 @@ from v2.pitch_value import publish as pitch_publish
 from v2.pitch_value import run as pitch_run
 from v2.pitch_value.pitches import STATCAST_DIR
 from v2.pitch_value.validate import LINES_FINAL
-from v2.players import savant
+from v2.players import production, savant
+from v2.xwar import build as xwar_build
+from v2.xwar import publish as xwar_publish
 
 log = logging.getLogger(__name__)
 
@@ -42,8 +45,8 @@ FIRST_SEASON = pitch_run.DEFAULT_SEASONS[0]
 STATE = STATCAST_DIR / "run_values_state.json"
 # The current season's Savant boards the batting tables read (names and sprint speed); refreshed every run.
 BOARDS = ("expected_statistics_batter", "sprint_speed")
-SOURCES = [Path(__file__), *sorted((Path(__file__).parent / "pitch_value").glob("*.py")),
-           *sorted((Path(__file__).parent / "batting_value").glob("*.py"))]
+SOURCES = [Path(__file__), *(path for package in ("pitch_value", "batting_value", "xwar")
+                             for path in sorted((Path(__file__).parent / package).glob("*.py")))]
 
 
 def current_season(today: date) -> int:
@@ -64,6 +67,8 @@ def fingerprint(season: int, models: dict) -> str:
     paths = [STATCAST_DIR / f"statcast_{season}.parquet", *(savant.CACHE_DIR / f"savant_{b}_{season}.csv" for b in BOARDS), *SOURCES]
     for path in paths:
         digest.update(path.read_bytes())
+    # The feed's numbers, not its response bytes: fetching an unchanged feed again must not look like a change.
+    digest.update(production.actual_war(season).sort_index().round(2).to_csv().encode())
     return digest.hexdigest()
 
 
@@ -88,6 +93,15 @@ def publish_batting_value() -> None:
     batting_publish.publish(batting_publish.coverage(seasons), hitters, splits, keep_study=True)
 
 
+def publish_xwar() -> None:
+    seasons = pd.read_parquet(xwar_build.OUT_DIR / "player_seasons.parquet")
+    players = xwar_publish.rows(seasons)
+    if len(players) < xwar_publish.MIN_ROWS:
+        log.info(f"xwar: {len(players)} players so far, under {xwar_publish.MIN_ROWS}; not published yet")
+        return
+    xwar_publish.publish(xwar_publish.coverage(seasons), players, keep_study=True)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true", help="write the local outputs and publish nothing")
@@ -99,6 +113,7 @@ def main() -> None:
     seasons = list(range(FIRST_SEASON, season + 1))
     for board in BOARDS:
         savant.load_board(board, season, refresh=True)
+    production.load_war(season, refresh=True)
 
     path = batting_run.OUT_DIR / batting_run.MODELS_FILE
     models = batting_run.load_models() if path.exists() else None
@@ -114,12 +129,14 @@ def main() -> None:
     pitch_run.write(pitch_run.build(seasons))
     outputs = batting_run.build(seasons, models, through=completed)
     batting_run.write(outputs)
+    xwar_build.write(xwar_build.build(season))
     models = outputs["models"] or models
     if args.dry_run:
         log.info(f"dry run: {season} refreshed locally (batting models through {models['through']}), nothing published")
         return
     publish_pitch_value()
     publish_batting_value()
+    publish_xwar()
     STATE.write_text(json.dumps({"fingerprint": fingerprint(season, models), "published": str(today), "season": season}))
 
 
