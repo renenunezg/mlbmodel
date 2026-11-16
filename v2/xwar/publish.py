@@ -34,8 +34,11 @@ INSERT_SLICE = 2000
 COUNTS = ["balls", "balls_allowed"]
 MEASURES = ["war", "xwar", "realized_gap_runs", "earned_gap_runs", "home_runs_allowed", "expected_home_runs", "home_run_gap",
             "earned_home_runs"]
+# wOBA is quoted to three places.
+RATES = ["woba_contact", "expected_woba_contact"]
 COLUMNS = ["player_id", "season", "player_name", "team", "war", "xwar", "balls", "realized_gap_runs", "earned_gap_runs",
-           "balls_allowed", "home_runs_allowed", "expected_home_runs", "home_run_gap", "earned_home_runs"]
+           "woba_contact", "expected_woba_contact", "balls_allowed", "home_runs_allowed", "expected_home_runs", "home_run_gap",
+           "earned_home_runs"]
 
 
 def rows(frame: pd.DataFrame) -> pd.DataFrame:
@@ -47,13 +50,15 @@ def rows(frame: pd.DataFrame) -> pd.DataFrame:
         raise ValueError(f"xwar rows carry unknown team codes: {unknown}")
     # Whole numbers must reach Postgres as integers or null, never as 412.0.
     return kept.assign(player_name=display_name(kept["player_name"]), team=team,
-                       **{c: kept[c].astype("Int64") for c in COUNTS}, **{c: kept[c].round(2) for c in MEASURES})[COLUMNS]
+                       **{c: kept[c].astype("Int64") for c in COUNTS}, **{c: kept[c].round(2) for c in MEASURES},
+                       **{c: kept[c].round(3) for c in RATES})[COLUMNS]
 
 
 def coverage(frame: pd.DataFrame) -> dict:
-    """The seasons behind the shrink and the players in the latest one."""
+    """The seasons behind the shrink, and the players and the runs per win of the latest one."""
     seasons = sorted(int(s) for s in frame["season"].unique())
-    return {"seasons": seasons, "players": int((frame["season"] == seasons[-1]).sum())}
+    latest = frame[frame["season"] == seasons[-1]]
+    return {"seasons": seasons, "players": len(latest), "runs_per_win": round(float(latest["runs_per_win"].iloc[0]), 3)}
 
 
 def _triple(block: dict) -> list[float]:

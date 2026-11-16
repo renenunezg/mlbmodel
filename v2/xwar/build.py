@@ -44,10 +44,12 @@ KEYS = ["player_id", "season"]
 
 
 def hitter_side(hitters: pd.DataFrame, shrink: gap.Shrink | None) -> pd.DataFrame:
-    """Per hitter-season: the realized gap on contact and the part of it he keeps."""
+    """Per hitter-season: the realized gap on contact and the part of it he keeps, with the wOBA on contact he
+    had and the one his contact called for (shown beside the gap; the gap in runs is what moves his WAR)."""
     out = pd.DataFrame({
         "player_id": hitters["batter"], "season": hitters["season"], "player_name": hitters["name"], "team": hitters["team"],
         "pa": hitters["pa"], "balls": hitters["tracked_balls"], "realized_gap_runs": hitters["gap_runs"],
+        "woba_contact": hitters["woba_contact"], "expected_woba_contact": hitters["expected_woba_contact"],
     })
     return out.assign(earned_gap_runs=gap.earned(out, "player_id", "realized_gap_runs", "balls", shrink))
 

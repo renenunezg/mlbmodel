@@ -4,7 +4,8 @@ Usage:
     python -m v2.batting_value.run [--seasons 2021 2022 2023 2024 2025 2026] [--fit-through 2025 | --frozen]
 
 Reads the local Statcast caches (and the cached Savant boards for names). Writes under cache/batting_value/:
-hitter_seasons.parquet (with each hitter-season's realized gap on contact, ``gap_runs`` over ``tracked_balls``), pitch_groups.parquet, pitch_types.parquet, zones.parquet, sides.parquet, heights.parquet, situations.parquet,
+hitter_seasons.parquet (with each hitter-season's realized gap on contact, ``gap_runs`` over ``tracked_balls``, and
+``woba_contact`` beside ``expected_woba_contact`` on the same balls), pitch_groups.parquet, pitch_types.parquet, zones.parquet, sides.parquet, heights.parquet, situations.parquet,
 calibration_{zone,count,pitch_group}.csv and checks.json. Stops if the components do not sum.
 
 Fitting the hitter contact and pitch difficulty models is nearly all of the run, so a fit also writes them to
@@ -79,6 +80,11 @@ def build(seasons: list[int], models: dict | None = None, through: int | None = 
     gap = (contact.actual_in_play(frame, built.table, built.contact) - neutral[batted.tracked(frame)]).rename("gap")
     scores["gap"] = context.park_centred(frame[hit], gap[hit]).reindex(frame.index, fill_value=0.0)
     scores["tracked"] = hit
+    # The same balls in wOBA terms, as hit and as the hitter contact model expected them, with nothing removed:
+    # the pair a reader knows as wOBA and xwOBA on contact.
+    woba = (contact.woba_on_contact(frame, models["contact"]) if models["contact"] is not None
+            else pd.DataFrame(columns=["woba", "expected_woba"], dtype=float))
+    scores[["woba", "expected_woba"]] = woba.reindex(frame.index)
     one_piece = values.adjusted(frame, neutral, seen, scale) - scores["neutral"]
     one_piece_gap = one_piece[seen].groupby([frame.loc[seen, "season"], frame.loc[seen, "batter"]]).sum()
     calibration = {by: difficulty.calibration(frame, league, neutral, by) for by in CALIBRATION_BY}

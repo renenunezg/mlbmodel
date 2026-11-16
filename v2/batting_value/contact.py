@@ -143,6 +143,25 @@ def actual_in_play(pitches: pd.DataFrame, table: pd.DataFrame, contact: batted.C
     return pd.Series(value, index=balls.index, name="value")
 
 
+def woba_on_contact(pitches: pd.DataFrame, hitter: HitterContact) -> pd.DataFrame:
+    """Per tracked ball in play: the wOBA value of what it did, and of what the hitter contact model (which never
+    saw him) expected of it in the state it was hit in. An outcome class is worth its average wOBA value among
+    the season's tracked balls, so the two columns have the same league mean wherever the model is calibrated."""
+    balls = pitches[batted.tracked(pitches)]
+    actual = balls["woba_value"].fillna(0.0).to_numpy(float)
+    outcome, season = _outcome(balls["events"]), balls["season"].to_numpy()
+    weight = pd.Series(actual).groupby([season, outcome]).mean().unstack().reindex(columns=range(len(CLASSES)))
+    # A season still too young to have every outcome class borrows the class's average over the other seasons.
+    worth = weight.fillna(weight.mean()).reindex(season).to_numpy()
+    features = _features(balls, balls["state"].to_numpy(), hitter.seasons, [EXTRAS[name](balls) for name in hitter.extras])
+    fold = fold_of(balls["batter"], hitter.folds)
+    expected = np.zeros(len(balls))
+    for k, model in enumerate(hitter.models):
+        held = fold == k
+        expected[held] = (model.predict_proba(features[held]) * worth[held]).sum(axis=1)
+    return pd.DataFrame({"woba": actual, "expected_woba": expected}, index=balls.index)
+
+
 def hitter_seasons(pitches: pd.DataFrame, in_play: dict[str, pd.Series]) -> pd.DataFrame:
     """Per hitter-season: tracked balls in play, wOBA on contact, and each variant's expected value per ball."""
     balls = pitches.loc[batted.tracked(pitches), ["season", "batter", "woba_value", "woba_denom"]].join(pd.DataFrame(in_play))
