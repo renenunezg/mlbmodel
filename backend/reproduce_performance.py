@@ -43,11 +43,12 @@ def main():
     args = parser.parse_args()
     forecasts, ledger, excluded, rewritten_days, closing = load(args.directory)
     eval_date = args.eval_date or forecasts["game_date"].max().date()
-    results, season_calibration = evaluate(forecasts, ledger, excluded, rewritten_days, eval_date, closing)
+    results, calibration = evaluate(forecasts, ledger, excluded, rewritten_days, eval_date, closing)
     for window, (base_row, metrics, buckets) in results.items():
         print(json.dumps({"window": window, **clean_row({**base_row, **metrics}), "edge_buckets": buckets},
                          default=str, sort_keys=True))
-    print(json.dumps({"window": "season", "model_calibration": season_calibration}, sort_keys=True))
+    for window, bins in calibration.items():
+        print(json.dumps({"window": window, "model_calibration": bins}, sort_keys=True))
 
 
 if __name__ == "__main__":

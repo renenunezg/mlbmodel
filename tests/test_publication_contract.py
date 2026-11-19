@@ -38,7 +38,8 @@ def test_publication_and_evaluation_recovery(monkeypatch):
                      root / "backend/sql/20261029120000_mlb_evaluation_integrity.sql",
                      root / "backend/sql/20261029130000_mlb_forecast_history.sql",
                      root / "backend/sql/20261029160000_mlb_drop_calibration_bins.sql",
-                     root / "backend/sql/20261030120000_mlb_closing_lines.sql"):
+                     root / "backend/sql/20261030120000_mlb_closing_lines.sql",
+                     root / "backend/sql/20261119120000_mlb_evaluation_v2_calibration.sql"):
             subprocess.run(["psql", "-X", local_url.render_as_string(hide_password=False),
                             "-v", "ON_ERROR_STOP=1", "-f", str(path)],
                            check=True, capture_output=True)
@@ -197,8 +198,8 @@ def test_publication_and_evaluation_recovery(monkeypatch):
             assert conn.execute(text("SELECT roi FROM model_evaluation WHERE eval_window='day'")).scalar_one() is None
         with db.connect() as conn:
             assert conn.execute(text("SELECT ml_accuracy FROM model_evaluation WHERE eval_window='day'")).scalar_one() is None
-        evaluate_model._write_calibration(day, [{"bin_mid": .5, "predicted_mean": .5, "observed_rate": .5, "count": 10}])
-        evaluate_model._write_calibration(day, [])
+        evaluate_model._write_calibration(day, "season", [{"bin_mid": .5, "predicted_mean": .5, "observed_rate": .5, "count": 10}])
+        evaluate_model._write_calibration(day, "season", [])
         with db.connect() as conn:
             assert conn.execute(text("SELECT count(*) FROM model_calibration")).scalar_one() == 0
         fixture = json.loads((root / "tests/fixtures/contracts/v1/mlb-evaluation.json").read_text())
@@ -221,6 +222,9 @@ def test_publication_and_evaluation_recovery(monkeypatch):
             # with every fixture game after the v1 cutover, equals the season window.
             assert {k: counts[k] for k in fixture["window_counts"]} == fixture["window_counts"]
             assert counts["season_v2"] == counts["season"]
+            calibration = dict(conn.execute(text("""SELECT eval_window, sum(count) FROM model_calibration
+                WHERE date = :date GROUP BY eval_window"""), {"date": fixture["date"]}).all())
+            assert calibration["season_v2"] == calibration["season"] > 0
         # Lateness fails closed: only v1, which stored no publish time, may leave it unknown.
         from backend.evaluation import written_after_start
         unknown = pd.DataFrame({"prediction_updated_at": [pd.NaT, pd.NaT], "game_start_time": [now, now],
@@ -234,6 +238,12 @@ def test_publication_and_evaluation_recovery(monkeypatch):
         second = probabilistic_summary([.5], [1], histograms=[wide], actual_runs=[6])
         assert first["interval_coverage_80"] == 0 and second["interval_coverage_80"] == 1
         assert second["interval_coverage_predictions"] == 1
+        # Outcomes drawn in proportion to a discrete PMF reach exactly the nominal PIT coverage,
+        # where the inclusive integer interval overshoots it.
+        from backend.metrics import pit_interval_coverage, prediction_interval_coverage
+        pmf = [.25, .5, .25] + [0.0]*18
+        assert pit_interval_coverage([pmf]*4, [0, 1, 1, 2], level=.5) == .5
+        assert prediction_interval_coverage([pmf]*4, [0, 1, 1, 2], level=.5) == .75
     finally:
         db.dispose()
         with admin.connect() as conn:

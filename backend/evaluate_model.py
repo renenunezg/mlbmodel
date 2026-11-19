@@ -4,13 +4,14 @@ Evaluate model predictions against actual game results.
 Computes accuracy metrics for moneyline, run line, and totals picks,
 plus regression, probabilistic, financial, market-baseline and interval
 metrics. Writes results to model_evaluation (one row per eval_window),
-model_calibration, and model_edge_buckets.
+model_calibration (season and season_v2), and model_edge_buckets.
 
 The computation lives in backend/evaluation.py; this module reads its inputs
 from the database and writes the rows.
 
 Usage:
-    python -m backend.evaluate_model [--as-of YYYY-MM-DD] [--dry-run]
+    python -m backend.evaluate_model [--as-of YYYY-MM-DD] [--backfill-from YYYY-MM-DD]
+                                     [--windows season_v2 ...] [--dry-run]
 """
 
 import argparse
@@ -26,6 +27,7 @@ from backend.db import engine
 from backend.evaluation import (
     CLOSING_LINE_COLUMNS,
     LEDGER_COLUMNS,
+    WINDOWS,
     classify_exclusions,
     clean_row,
     evaluate,
@@ -112,22 +114,23 @@ def _evaluation_update_values(row):
     }
 
 
-def _write_calibration(eval_date, cal_bins):
-    """Upsert calibration curve bins for a date."""
+def _write_calibration(eval_date, eval_window, cal_bins):
+    """Replace one window's calibration curve bins for a date."""
     if eval_date < V1_CUTOVER_DATE:
-        log.info(f"skip model_calibration write for {eval_date}; pre-cutover")
+        log.info(f"skip model_calibration write for {eval_date} ({eval_window}); pre-cutover")
         return
     with engine.begin() as conn:
-        conn.execute(text("DELETE FROM model_calibration WHERE date = :date"), {"date": eval_date})
+        conn.execute(text("DELETE FROM model_calibration WHERE date = :date AND eval_window = :window"),
+                     {"date": eval_date, "window": eval_window})
         for b in cal_bins:
             conn.execute(text("""
-                INSERT INTO model_calibration (date, bin_mid, predicted_mean, observed_rate, count)
-                VALUES (:date, :bin_mid, :predicted_mean, :observed_rate, :count)
-                ON CONFLICT (date, bin_mid) DO UPDATE SET
+                INSERT INTO model_calibration (date, eval_window, bin_mid, predicted_mean, observed_rate, count)
+                VALUES (:date, :eval_window, :bin_mid, :predicted_mean, :observed_rate, :count)
+                ON CONFLICT (date, eval_window, bin_mid) DO UPDATE SET
                     predicted_mean = EXCLUDED.predicted_mean,
                     observed_rate = EXCLUDED.observed_rate,
                     count = EXCLUDED.count
-            """), {"date": eval_date, **b})
+            """), {"date": eval_date, "eval_window": eval_window, **b})
 
 
 def _write_edge_buckets(eval_date, eval_window, buckets):
@@ -174,13 +177,18 @@ def load_inputs(today):
     return eval_df, exclusions, rewritten_days, closing_lines
 
 
-def main(as_of: datetime.date | None = None, dry_run: bool = False):
+def main(as_of: datetime.date | None = None, dry_run: bool = False,
+         backfill_from: datetime.date | None = None, windows: tuple[str, ...] = tuple(WINDOWS)):
     """Run full evaluation and write results to DB.
 
     Args:
-        as_of: pretend "today" is this date. eval_date = as_of - 1. Used by
-            the historical backfill script to replay eval rows for past days.
+        as_of: pretend "today" is this date. eval_date = as_of - 1. Used to
+            replay eval rows for past days.
         dry_run: compute every row and print it instead of writing.
+        backfill_from: evaluate every eval_date from this date through as_of - 1,
+            reading the inputs once. Each date sees only games and bets on or
+            before it, as a nightly run on the following morning would.
+        windows: the WINDOWS keys to compute and write; others are left as stored.
     """
     today = as_of if as_of is not None else datetime.date.today()
     check_grading_rules()
@@ -193,28 +201,38 @@ def main(as_of: datetime.date | None = None, dry_run: bool = False):
 
     # eval_date is always yesterday so the same date can never be re-targeted
     # from a different angle (e.g. a manual rerun during the day shifting max).
-    eval_date = today - datetime.timedelta(days=1)
-    results, cal_bins = evaluate(eval_df, ledger, exclusions, rewritten_days, eval_date, closing_lines)
-
-    if dry_run:
-        for window_name, (base_row, metrics, buckets) in results.items():
-            print(json.dumps({"window": window_name, **clean_row({**base_row, **metrics}), "edge_buckets": buckets},
-                             default=str, sort_keys=True))
-        return results
-
-    table = _evaluation_table()
-    for window_name, (base_row, metrics, buckets) in results.items():
-        _write_evaluation_row(eval_date, window_name, base_row, metrics, table)
-        _write_edge_buckets(eval_date, window_name, buckets)
-    _write_calibration(eval_date, cal_bins)
-
-    log.info(f"Evaluation written for {eval_date} ({len(results)} windows + calibration)")
+    last = today - datetime.timedelta(days=1)
+    first = backfill_from if backfill_from is not None else last
+    if first > last:
+        raise ValueError(f"--backfill-from {first} is after the last eval date {last}")
+    table = None if dry_run else _evaluation_table()
+    eval_date = first
+    while eval_date <= last:
+        results, calibration = evaluate(eval_df, ledger, exclusions, rewritten_days, eval_date, closing_lines,
+                                        windows)
+        if dry_run:
+            for window_name, (base_row, metrics, buckets) in results.items():
+                print(json.dumps({"date": eval_date, "window": window_name, **clean_row({**base_row, **metrics}),
+                                  "edge_buckets": buckets, "calibration": calibration.get(window_name)},
+                                 default=str, sort_keys=True))
+        else:
+            for window_name, (base_row, metrics, buckets) in results.items():
+                _write_evaluation_row(eval_date, window_name, base_row, metrics, table)
+                _write_edge_buckets(eval_date, window_name, buckets)
+            for window_name, cal_bins in calibration.items():
+                _write_calibration(eval_date, window_name, cal_bins)
+            log.info(f"Evaluation written for {eval_date} ({', '.join(results)} + calibration)")
+        eval_date += datetime.timedelta(days=1)
 
 
 if __name__ == "__main__":
     setup_logging()
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--as-of", type=datetime.date.fromisoformat, help="Evaluate as if today were this date")
+    parser.add_argument("--backfill-from", type=datetime.date.fromisoformat,
+                        help="Evaluate every date from this one through the day before --as-of")
+    parser.add_argument("--windows", nargs="+", choices=list(WINDOWS), default=list(WINDOWS),
+                        help="Windows to compute and write (default: all)")
     parser.add_argument("--dry-run", action="store_true", help="Print the rows instead of writing them")
     args = parser.parse_args()
-    main(as_of=args.as_of, dry_run=args.dry_run)
+    main(as_of=args.as_of, dry_run=args.dry_run, backfill_from=args.backfill_from, windows=tuple(args.windows))

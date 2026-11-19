@@ -38,6 +38,9 @@ WINDOWS = {
 }
 
 
+# Windows whose win-probability calibration is written to mlb.model_calibration.
+CALIBRATION_WINDOWS = ("season", "season_v2")
+
 EXCLUSION_REASONS = ("no_forecast", "v1_outage_hindsight_only", "forecast_dated_other_day")
 
 
@@ -341,17 +344,23 @@ def _window_slices(eval_df, ledger, exclusions, eval_date, days_back, model):
     return eval_df[in_frame], ledger[in_ledger], exclusions[in_excluded], ledger[in_population]
 
 
-def evaluate(eval_df, ledger, exclusions, rewritten_days, eval_date, closing_lines=None):
-    """Every model_evaluation row, edge bucket set and the season calibration for one eval_date.
+def evaluate(eval_df, ledger, exclusions, rewritten_days, eval_date, closing_lines=None, windows=tuple(WINDOWS)):
+    """Every model_evaluation row, edge bucket set and calibration for one eval_date.
 
     closing_lines holds mlb.closing_lines (CLOSING_LINE_COLUMNS); None means no close was captured.
-    Returns ({window: (base_row, metrics, buckets)}, season_calibration_bins).
+    windows limits the run to those WINDOWS keys (a backfill of one window leaves the others untouched).
+    Returns ({window: (base_row, metrics, buckets)}, {window: calibration_bins}) with calibration for
+    each window in CALIBRATION_WINDOWS that had graded rows.
     """
+    unknown = set(windows) - set(WINDOWS)
+    if unknown:
+        raise ValueError(f"Unknown evaluation windows {sorted(unknown)}")
     if closing_lines is None:
         closing_lines = pd.DataFrame(columns=CLOSING_LINE_COLUMNS)
     results = {}
-    cal_bins = []
-    for window_name, (days_back, model) in WINDOWS.items():
+    calibration = {}
+    for window_name in windows:
+        days_back, model = WINDOWS[window_name]
         window_df, window_ledger, window_excluded, population_ledger = _window_slices(
             eval_df, ledger, exclusions, eval_date, days_back, model)
         if window_df.empty:
@@ -402,6 +411,6 @@ def evaluate(eval_df, ledger, exclusions, rewritten_days, eval_date, closing_lin
 
         buckets = hit_rate_by_edge_bucket(window_ledger) if not window_ledger.empty else []
         results[window_name] = (base_row, metrics, buckets)
-        if window_name == "season":
-            cal_bins = calibration_curve(probs, outcomes)
-    return results, cal_bins
+        if window_name in CALIBRATION_WINDOWS:
+            calibration[window_name] = calibration_curve(probs, outcomes)
+    return results, calibration

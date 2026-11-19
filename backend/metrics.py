@@ -128,16 +128,11 @@ def calibration_curve(probs, outcomes, n_bins=10):
     return result
 
 
-def prediction_interval_coverage(histograms, actual_runs, level=0.80):
-    """Equal-tail coverage of the persisted PMF; its last bin is 20+ runs.
+def _frozen_pmfs(histograms, actual_runs):
+    """(cdf, runs) per team row with a recoverable frozen PMF; its last bin is 20+ runs.
 
-    One histogram is one team's runs, so coverage counts team rows, not games
-    or game totals. Runs are integers and both endpoints are inclusive, so the
-    interval holds at least the nominal mass and coverage runs above the
-    nominal level by construction (most visibly at 50%).
     Missing legacy PMFs are excluded explicitly, never approximated from means.
     """
-    covered = []
     for histogram, actual in zip(histograms, actual_runs, strict=True):
         if not isinstance(histogram, (list, tuple, np.ndarray)):
             continue
@@ -146,10 +141,43 @@ def prediction_interval_coverage(histograms, actual_runs, level=0.80):
             raise ValueError("Invalid frozen run distribution")
         if not np.isfinite(actual):
             continue
-        cdf = np.cumsum(mass / mass.sum())
+        yield np.cumsum(mass / mass.sum()), int(min(actual, 20))
+
+
+def prediction_interval_coverage(histograms, actual_runs, level=0.80):
+    """Equal-tail coverage of the persisted PMF.
+
+    One histogram is one team's runs, so coverage counts team rows, not games
+    or game totals. Runs are integers and both endpoints are inclusive, so the
+    interval holds at least the nominal mass and coverage runs above the
+    nominal level by construction (most visibly at 50%). Compare it with
+    pit_interval_coverage, not with the nominal level.
+    """
+    covered = []
+    for cdf, actual in _frozen_pmfs(histograms, actual_runs):
         alpha = (1 - level) / 2
         lo, hi = np.searchsorted(cdf, [alpha, 1 - alpha])
-        covered.append(lo <= min(actual, 20) <= hi)
+        covered.append(lo <= actual <= hi)
+    return round(float(np.mean(covered)), 4) if covered else np.nan
+
+
+def pit_interval_coverage(histograms, actual_runs, level=0.80):
+    """Expected share of randomized PIT values inside the central `level` band.
+
+    For integer runs the randomized PIT is uniform on [F(y - 1), F(y)]; a
+    calibrated forecast puts it inside [alpha, 1 - alpha] with probability
+    `level` exactly, so unlike prediction_interval_coverage this is comparable
+    with the nominal level. Each row contributes the covered fraction of its
+    PIT interval, so the value is deterministic.
+    """
+    alpha = (1 - level) / 2
+    covered = []
+    for cdf, actual in _frozen_pmfs(histograms, actual_runs):
+        low = cdf[actual - 1] if actual > 0 else 0.0
+        high = cdf[actual]
+        width = high - low
+        inside = max(0.0, min(high, 1 - alpha) - max(low, alpha))
+        covered.append(inside / width if width > 0 else float(alpha <= low <= 1 - alpha))
     return round(float(np.mean(covered)), 4) if covered else np.nan
 
 
@@ -166,9 +194,12 @@ def probabilistic_summary(probs, outcomes, *, histograms=None, actual_runs=None)
         ) if actual_runs is not None else 0,
     }
     for percent in (50, 80, 90):
+        level = percent / 100
         result[f"interval_coverage_{percent}"] = (
-            prediction_interval_coverage(histograms, actual_runs, level=percent / 100)
-            if actual_runs is not None else np.nan
+            prediction_interval_coverage(histograms, actual_runs, level=level) if actual_runs is not None else np.nan
+        )
+        result[f"pit_coverage_{percent}"] = (
+            pit_interval_coverage(histograms, actual_runs, level=level) if actual_runs is not None else np.nan
         )
     return result
 
