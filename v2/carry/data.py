@@ -83,7 +83,8 @@ def venues(season: int, level: str = "mlb") -> pd.DataFrame:
 
 def weather() -> pd.DataFrame:
     from backend.db import engine
-    return pd.read_sql(text("SELECT game_pk, temp_f FROM weather"), engine)
+    # Exclude sentinel temp_f = 0 rows on domed games; coldest real MLB regular-season games sit above 30 F.
+    return pd.read_sql(text("SELECT game_pk, temp_f FROM weather WHERE temp_f >= 30"), engine)
 
 
 def hitter_names(ids: list[int]) -> dict[int, str]:

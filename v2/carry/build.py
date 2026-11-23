@@ -19,7 +19,7 @@ from v2.carry import changers, data, expected, lab, minors, physics, study, swin
 
 log = logging.getLogger(__name__)
 
-MODEL_VERSION = "carry-v1"
+MODEL_VERSION = "carry-v2"
 FIRST_CARRY_SEASON = 2021
 FIRST_CHANGER_SEASON = 2023
 FIRST_PHYSICS_SEASON = 2024

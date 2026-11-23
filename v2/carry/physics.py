@@ -3,7 +3,7 @@
 Flight: drag and Magnus lift with Nathan's 2017 coefficients (Analysis of Baseball Trajectories, fitted on Trackman
 trajectories with measured spin), plus a drag rise below about 78 mph fitted on 2026 distances and validated on 2025.
 Collision: the Cross and Nathan (2006) oblique collision with the ball rolling off the bat (no grip, which fit best),
-the bat treated as a cylinder whose axis is tilted by a quarter of the swing path tilt. Air density comes from
+the bat treated as a cylinder lying in the swing plane (tilted by swing path tilt). Air density comes from
 elevation and game temperature at standard pressure.
 
 Frame: x toward first base, y toward center field, z up; meters and seconds.
@@ -28,8 +28,8 @@ CD_PER_KRPM = 0.0292
 SPIN_DECAY_S = 30.0
 
 ROLL = 5 / 7                     # tangential speed kept and spin produced by a ball rolling off the bat
-BAT_AXIS_TILT_SHARE = 0.25       # bat axis tilt as a share of swing path tilt; larger shares bias direction to the opposite field
-TILT_ATTACK_CORRECTION = 0.6     # degrees of extra rise at contact per degree of tilt above the league at that pitch height
+BAT_AXIS_TILT_SHARE = 1.0        # bat barrel lies in the swing plane (full swing path tilt)
+TILT_ATTACK_CORRECTION = 0.3     # degrees of extra rise at contact per degree of tilt above the league at that pitch height
 SPIN_SCALE = 0.5                 # collision spin scaled to the joint fit with distance; absolute rpm is not identified
 
 

@@ -61,10 +61,17 @@ def examples(air: pd.DataFrame, season: int) -> dict:
 
 
 def repeatability(air: pd.DataFrame, hitters: pd.DataFrame, season: int) -> dict:
-    q = hitters[hitters.n_air >= QUALIFIED_AIR]
+    all_h = air.groupby(["batter", "season"]).agg(n_air=("carry", "size"), carry=("carry", "mean")).reset_index()
+    q_all = all_h[all_h.n_air >= QUALIFIED_AIR]
+    q_recent = hitters[hitters.n_air >= QUALIFIED_AIR]
+    nxt = q_all.assign(season=q_all.season - 1)
+    pairs = len(q_all.merge(nxt, on=["batter", "season"]))
     r = split_half(air[air.season == season], "carry", QUALIFIED_AIR)
     return {"split_half": rounded(r), "full_season": rounded(full_season(r)),
-            "year_to_year": rounded(year_to_year(q, "carry")), "hitters": int((q.season == season).sum())}
+            "year_to_year": rounded(year_to_year(q_all, "carry")),
+            "year_to_year_recent": rounded(year_to_year(q_recent, "carry")),
+            "pairs": int(pairs),
+            "hitters": int((q_recent.season == season).sum())}
 
 
 def air_and_parks(spun: pd.DataFrame, season: int) -> dict:
@@ -79,7 +86,12 @@ def air_and_parks(spun: pd.DataFrame, season: int) -> dict:
     at_own = spun.pred_distance.to_numpy()
     at_league = ph.fly(v0, spin, np.full(len(spun), league))[0]
     thinner = ph.fly(v0, spin, spun.air_density.to_numpy() + 0.05)[0]
-    model = float(np.nanmean((thinner - at_own) / 0.05))
+    per_ball_model = (thinner - at_own) / 0.05
+    model = float(np.nanmean(per_ball_model))
+    no_coors = (spun.venue_name != "Coors Field").to_numpy()
+    X_nc = np.column_stack([np.ones(int(no_coors.sum())), spun.air_density.to_numpy()[no_coors]])
+    measured_no_coors = np.linalg.lstsq(X_nc, spun.carry_raw.to_numpy()[no_coors], rcond=None)[0][1]
+    model_no_coors = float(np.nanmean(per_ball_model[no_coors]))
     bins = pd.cut(spun.air_density, np.arange(0.90, 1.32, 0.04))
     by_density = spun.groupby(bins, observed=True).carry_raw.agg(["mean", "size"])
     by_density = by_density[by_density["size"] >= 300]
@@ -89,7 +101,10 @@ def air_and_parks(spun: pd.DataFrame, season: int) -> dict:
     parks = parks[parks.n >= 150]
     parks["measured"] -= s.carry_raw.mean()
     parks["air"] -= s.air.mean()
-    return {"ft_per_density_measured": rounded(measured, 1), "ft_per_density_model": rounded(model, 1), "league_density": rounded(league, 3),
+    return {"ft_per_density_measured": rounded(measured, 1), "ft_per_density_model": rounded(model, 1),
+            "ft_per_density_measured_no_coors": rounded(measured_no_coors, 1),
+            "ft_per_density_model_no_coors": rounded(model_no_coors, 1),
+            "league_density": rounded(league, 3),
             "by_density": [[rounded(i.mid, 2), rounded(r["mean"], 1), int(r["size"])] for i, r in by_density.iterrows()],
             "parks": [{"venue": v.venue_name, "elevation": int(v.elevation), "measured": rounded(v.measured, 1), "air": rounded(v.air, 1),
                        "n": int(v.n)} for v in parks.sort_values("measured", ascending=False).itertuples()]}
